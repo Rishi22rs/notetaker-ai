@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <title>Privacy Overlay Demo</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; background: transparent; }
+    body { padding: 8px; font-family: "Segoe UI", sans-serif; color: #f5f5f5; user-select: none; }
+    .panel { height: 100%; padding: 18px; border: 1px solid #666; border-radius: 8px; background: rgba(24, 26, 29, 0.9); display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+    .label { margin: 0 0 12px; color: #86d6b0; font-size: 12px; font-weight: 600; }
+    h1 { margin: 0 0 8px; font-size: 21px; font-weight: 600; }
+    p { margin: 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+    h1 { margin: 0; }
+    #status { color: #86d6b0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #status[data-error="true"] { color: #ffaaaa; }
+    #device { color: #bdbdbd; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+    #transcript { min-height: 0; overflow-y: auto; white-space: pre-wrap; flex: 1; }
+    .resize-grip { position: fixed; bottom: 8px; right: 8px; width: 24px; height: 24px; opacity: 0.45; }
+    .resize-grip::after { content: ''; position: absolute; right: 6px; bottom: 6px; width: 9px; height: 9px; border-right: 2px solid #bdbdbd; border-bottom: 2px solid #bdbdbd; }
+    .interactive h1 { cursor: move; }
+    .interactive .resize-grip { cursor: nwse-resize; opacity: 1; }
+    .interactive .panel { border-color: #86d6b0; }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <h1>ChatGPT</h1>
+    <p id="status" role="status">Loading chatgpt.com...</p>
+  </main>
+  <div class="resize-grip" title="Resize" aria-hidden="true"></div>
+  <script src="renderer.js"></script>
+</body>
+</html>

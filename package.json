@@ -1,0 +1,48 @@
+{
+  "name": "privacy-overlay-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Windows native capture protection demonstration",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "setup:captions": "python -m venv .venv && .venv\\Scripts\\python.exe -m pip install -r requirements.txt && .venv\\Scripts\\python.exe transcribe.py --download",
+    "check:captions": ".venv\\Scripts\\python.exe transcribe.py --check",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:all": "electron-builder -mwl"
+  },
+  "devDependencies": {
+    "electron": "44.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "koffi": "3.2.1"
+  },
+  "build": {
+    "appId": "com.rishi.myapp",
+    "productName": "My App",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.utilities"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

@@ -1,0 +1,42 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Electron builds
+dist/
+out/
+build/
+release/
+*.exe
+*.blockmap
+*.dmg
+*.AppImage
+
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+
+# AI / downloaded models
+models/
+
+# VB-Cable / external binaries
+vendor-vbcable/
+VBCABLE_Driver_Pack45.zip
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
