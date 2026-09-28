@@ -21,14 +21,15 @@ test('hold-to-resize clamps size and release restores click-through', () => {
     webContents: { send() {} }
   };
   const context = {
-    __dirname, setInterval(fn) { tick = fn; }, clearInterval() {},
+    __dirname, process: { platform: 'win32' }, setInterval(fn) { tick = fn; }, clearInterval() {},
     require(name) {
       if (name === './captions') return () => ({});
       if (name === 'koffi') return { load: () => ({ func: () => (key) =>
         (key === 1 ? down : held) ? 0x8000 : 0 }) };
       if (name === 'electron') return {
         app: { whenReady: () => ({ then: () => ({ catch() {} }) }), on() {} },
-        screen: { getCursorScreenPoint: () => cursor }
+        screen: { getCursorScreenPoint: () => cursor },
+        ipcMain: { handle() {}, on() {} }
       };
       return require(name);
     }

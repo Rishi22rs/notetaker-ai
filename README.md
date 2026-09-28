@@ -1,74 +1,73 @@
-# ChatGPT overlay
+# Local Ollama overlay
 
-The current view embeds https://chatgpt.com using Electron's WebContentsView.
-ChatGPT blocks standard iframe embedding. Its normal login and access checks
-still apply; some login providers may not support embedded browsers.
+A native Windows and macOS chat overlay for local Ollama models. The window uses Electron's
+capture protection, stays on top, and no longer embeds ChatGPT, Claude, Grok, or
+another website. Prompts and responses go only to Ollama at `127.0.0.1:11434`.
+Conversation history is stored in the app's local browser storage.
 
-Run `npm install` then `npm start`. No Python setup is needed for this view.
-Live captions and Ctrl+Shift+S are disabled, and audio capture does not start.
-The transcription code and downloaded model remain available for later.
+The overlay remains available above every application window. On macOS it also
+appears across every desktop/Space and over full-screen applications.
 
-- Browser interaction starts enabled: click and type normally.
-- Ctrl+Shift+I toggles between browser interaction and click-through.
-- Hold Ctrl+Shift to temporarily interact, drag the header, or resize with the
-  bottom-right grip. Ctrl+Shift+wheel scrolls the page.
-- Ctrl+Shift+Q quits.
+## Setup
 
-The browser uses its own persistent login session and has no Node.js access.
-Microphone access is allowed only for ChatGPT, only while the system-audio bridge
-is ready. Camera and other device permissions remain disabled.
-
-## System audio as ChatGPT microphone
-
-Install VB-CABLE from its official vendor and restart Windows. In Windows Sound
-settings, keep your normal speakers/headphones as the output. In the classic
-Recording tab, set **CABLE Output** as both the default recording and default
-communications device. Then restart this app. This recording-device change also
-affects other apps that use Windows' default microphone.
-
-The local audio bridge copies the default playback device into **CABLE Input**.
-ChatGPT receives it through **CABLE Output** when you activate its microphone.
-If ChatGPT offers an input selector, select CABLE Output there too. The bridge
-does not open the physical microphone. The website must also use CABLE Output,
-not a previously selected physical microphone.
-
-This is online ChatGPT audio input, not local transcription: ChatGPT receives
-audio while its mic/voice session is active. The embedded page's audio output is
-muted while routing is ready to prevent ChatGPT from hearing its own responses.
-Closing the overlay stops the bridge. If routing changes, restart the app.
-Run `.venv\Scripts\python.exe system_audio.py --check` to check the devices.
-
-## Retained caption setup
-
-The instructions below apply to the retained, currently disabled caption code.
-
-Windows with Python 3.14 and Node.js installed (tested configuration):
+Install Ollama, pull at least one model, then run the app:
 
 ```powershell
+ollama pull llama3.2
 npm install
-npm run setup:captions
 npm start
 ```
 
-Setup downloads Python dependencies and the multilingual Whisper base model.
-After setup, recognition runs offline on the CPU. Audio and captions are held
-in memory, not saved or uploaded. No API key is needed.
+The same commands work in macOS Terminal. On macOS, drag the title area to move
+the overlay and drag a window edge or corner to resize it.
 
-- Ctrl+Shift+S: pause/resume capture (also retries after an error).
-- Hold Ctrl+Shift and drag the header to move the overlay.
-- Hold Ctrl+Shift and drag the bottom-right grip to resize (minimum 300 x 220).
-- Hold Ctrl+Shift and use the mouse wheel over the overlay to scroll captions.
-  Scroll to the bottom to resume following new captions automatically.
-- Ctrl+Shift+Q: quit and stop capture.
+Ollama normally runs in the background after installation. If the overlay says
+it is unavailable, run `ollama serve` and reopen the app.
 
-Captions start automatically and replace the sample discussion text. The
-listening indicator names the captured Windows default playback device. To
-switch outputs, pause, change the Windows default output, then resume.
-Audio routed to a different output device is not captured. The microphone is
-not captured unless it is being played back through the selected output.
+## Controls
 
-Recognition uses four-second audio chunks plus processing time. Words at chunk
-boundaries can be missed, and music/noise can produce errors. This is a basic
-caption demo, not a word-perfect streaming recognizer. Last 30 chunks stay in
-memory until the app closes. Use `npm run check:captions` to check the model and
-default loopback device without recording audio.
+- Choose any locally installed model from the model picker.
+- The model picker also lists recommended downloadable models with their sizes and vision support. Downloads show live byte and percentage progress, then become immediately selectable.
+- Use the fixed left activity bar to switch between local AI chat and Notepad.
+- Notepad saves automatically to `notes.md` inside the app's local user-data directory.
+- Context accepts pasted instructions, images, PDFs, DOCX, and common text/code files. It is saved locally and included automatically with Ollama chat requests.
+- Up to 20 context files can be selected together or accumulated across multiple selections.
+- New context uploads append to existing files; they do not replace earlier attachments.
+- Files that cannot be parsed remain visible as error cards when more files are added.
+- Context shows image thumbnails plus file-type cards, sizes, and text previews for uploaded reference files.
+- Prompt suggestion bubbles are generated locally by the selected Ollama model from the saved context and the current draft.
+- Press Enter to send and Shift+Enter for a new line.
+- Press Stop while a response is generating to cancel it.
+- New clears the locally stored conversation.
+- The overlay is click-through by default, so apps behind it remain fully usable.
+- Press Ctrl+Shift+I on Windows or Command+Shift+I on macOS to unlock the overlay.
+- While unlocked, use its controls or drag the title area to move it anywhere.
+- Press the same shortcut again to restore click-through mode.
+- Ctrl+Shift+Q on Windows or Command+Shift+Q on macOS quits.
+
+Windows capture exclusion is best-effort OS protection, not a complete DLP or anti-capture security boundary.
+
+## Tests
+
+```powershell
+npm test
+```
+
+## Live transcription
+
+The right-side activity button opens low-latency local transcription. It captures
+computer audio and microphone audio separately and labels caption bubbles as
+Computer and You. Install the fast local model once before first use:
+
+On Apple Silicon macOS, install CMake (`brew install cmake`) and build the
+Metal-accelerated `whisper.cpp` backend plus its `base.en` model:
+
+```bash
+npm run setup:transcription:mac
+```
+
+The macOS backend keeps the model loaded, uses three-second speech windows, and
+filters silence/repeated output to reduce hallucinations. On Windows use
+`npm run setup:transcription:win`. macOS will request Microphone
+and Screen & System Audio Recording permission the first time Start listening is
+used. After granting macOS permission, fully quit and reopen the app.

@@ -2,11 +2,15 @@
   "name": "privacy-overlay-demo",
   "version": "1.0.0",
   "private": true,
-  "description": "Windows native capture protection demonstration",
+  "description": "Screen-capture-protected local Ollama chat overlay",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "test": "node --test interaction.test.js ollama.test.js context-merge.test.js context-prompt.test.js",
     "setup:captions": "python -m venv .venv && .venv\\Scripts\\python.exe -m pip install -r requirements.txt && .venv\\Scripts\\python.exe transcribe.py --download",
+    "setup:transcription": "python3 -m venv .venv && .venv/bin/python -m pip install faster-whisper==1.2.1 numpy pyinstaller && .venv/bin/python transcribe_stream.py --download && .venv/bin/pyinstaller --noconfirm --onedir --distpath python-worker --workpath /tmp/notetaker-pyinstaller --specpath /tmp --name transcribe-worker --collect-all faster_whisper --collect-all ctranslate2 --collect-all tokenizers transcribe_stream.py",
+    "setup:transcription:mac": "test -d .whisper.cpp || git clone --depth 1 --branch v1.9.4 https://github.com/ggml-org/whisper.cpp.git .whisper.cpp; cmake -S .whisper.cpp -B .whisper.cpp/build -DGGML_METAL=ON -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON; cmake --build .whisper.cpp/build --config Release -j 8; bash .whisper.cpp/models/download-ggml-model.sh base.en",
+    "setup:transcription:win": "python -m venv .venv && .venv\\Scripts\\python.exe -m pip install faster-whisper==1.2.1 numpy pyinstaller && .venv\\Scripts\\python.exe transcribe_stream.py --download && .venv\\Scripts\\pyinstaller.exe --noconfirm --onedir --distpath python-worker --workpath %TEMP%\\notetaker-pyinstaller --specpath %TEMP% --name transcribe-worker --collect-all faster_whisper --collect-all ctranslate2 --collect-all tokenizers transcribe_stream.py",
     "check:captions": ".venv\\Scripts\\python.exe transcribe.py --check",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
@@ -17,7 +21,9 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
-    "koffi": "3.2.1"
+    "koffi": "3.2.1",
+    "mammoth": "^1.10.0",
+    "pdf-parse": "^1.1.1"
   },
   "build": {
     "appId": "com.rishi.myapp",
@@ -26,19 +32,34 @@
       "output": "dist"
     },
     "files": [
-      "**/*"
+      "**/*",
+      "!.venv/**/*",
+      "!python-worker/**/*",
+      "!models/**/*",
+      "!.whisper.cpp/**/*"
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.ico"
+      "extraResources": [
+        { "from": "python-worker", "to": "python-worker" },
+        { "from": "models/tiny.en", "to": "models/tiny.en" }
+      ]
     },
     "mac": {
       "target": [
         "dmg",
         "zip"
       ],
-      "icon": "assets/icon.icns",
-      "category": "public.app-category.utilities"
+      "category": "public.app-category.utilities",
+      "extraResources": [
+        { "from": ".whisper.cpp/build/bin/whisper-server", "to": "whisper-metal/bin/whisper-server" },
+        { "from": ".whisper.cpp/models/ggml-base.en.bin", "to": "whisper-metal/models/ggml-base.en.bin" }
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Local transcription labels speech from your microphone as You.",
+        "NSAudioCaptureUsageDescription": "Local transcription captures computer audio for on-device captions.",
+        "NSScreenCaptureUsageDescription": "Local transcription needs Screen and System Audio Recording access to caption computer audio."
+      }
     },
     "nsis": {
       "oneClick": false,
