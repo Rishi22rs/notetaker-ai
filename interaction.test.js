@@ -7,8 +7,8 @@ test('hold-to-resize clamps size and release restores click-through', () => {
   let tick;
   let held = false;
   let down = false;
-  let cursor = { x: 410, y: 290 };
-  let bounds = { x: 0, y: 0, width: 420, height: 300 };
+  let cursor = { x: 630, y: 290 };
+  let bounds = { x: 0, y: 0, width: 640, height: 300 };
   let ignored = true;
   const window = {
     isDestroyed: () => false,
@@ -43,20 +43,20 @@ test('hold-to-resize clamps size and release restores click-through', () => {
   assert.equal(ignored, false);
   down = true;
   tick();
-  cursor = { x: 510, y: 390 };
+  cursor = { x: 730, y: 390 };
   tick();
-  assert.equal(bounds.width, 520);
+  assert.equal(bounds.width, 740);
   assert.equal(bounds.height, 400);
   cursor = { x: -1000, y: -1000 };
   tick();
-  assert.equal(bounds.width, 300);
+  assert.equal(bounds.width, 620);
   assert.equal(bounds.height, 220);
   held = false;
   tick();
   assert.equal(ignored, true);
   cursor = { x: 900, y: 900 };
   tick();
-  assert.equal(bounds.width, 300);
+  assert.equal(bounds.width, 620);
 });
 
 test('embedded browser modifier wheel scrolls the page without zooming', () => {

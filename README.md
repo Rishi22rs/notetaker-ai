@@ -43,6 +43,7 @@ it is unavailable, run `ollama serve` and reopen the app.
 - Press Ctrl+Shift+I on Windows or Command+Shift+I on macOS to unlock the overlay.
 - While unlocked, use its controls or drag the title area to move it anywhere.
 - Press the same shortcut again to restore click-through mode.
+- Press Ctrl+Shift+H on Windows or Command+Shift+H on macOS to hide or show the app without stopping it.
 - Ctrl+Shift+Q on Windows or Command+Shift+Q on macOS quits.
 
 Windows capture exclusion is best-effort OS protection, not a complete DLP or anti-capture security boundary.
@@ -59,15 +60,17 @@ The right-side activity button opens low-latency local transcription. It capture
 computer audio and microphone audio separately and labels caption bubbles as
 Computer and You. Install the fast local model once before first use:
 
-On Apple Silicon macOS, install CMake (`brew install cmake`) and build the
-Metal-accelerated `whisper.cpp` backend plus its `base.en` model:
+On Apple Silicon macOS 14.2 or newer, install CMake (`brew install cmake`) and
+build the Metal-accelerated `whisper.cpp` backend, its low-latency `tiny.en` model, and the
+native system-audio helper:
 
 ```bash
 npm run setup:transcription:mac
 ```
 
-The macOS backend keeps the model loaded, uses three-second speech windows, and
-filters silence/repeated output to reduce hallucinations. On Windows use
-`npm run setup:transcription:win`. macOS will request Microphone
-and Screen & System Audio Recording permission the first time Start listening is
-used. After granting macOS permission, fully quit and reopen the app.
+The macOS backend keeps the model loaded and uses Silero voice-activity and
+confidence filtering so noise and silence are not decoded as speech. On Windows use
+`npm run setup:transcription:win`. On macOS, the in-app permission screen requests
+microphone and system-audio access separately. System audio is captured with a
+native Core Audio tap, so no screen/window picker or screen video capture is used.
+After granting macOS permission, fully quit and reopen the app if macOS requests it.

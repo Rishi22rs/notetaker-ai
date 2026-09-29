@@ -29,7 +29,7 @@ async function listModels() {
   return (result.models || []).map(({ name, size, modified_at: modifiedAt }) => ({ name, size, modifiedAt }));
 }
 
-function suggest({ model, draft, context }) {
+function suggest({ model, draft, context, transcript = '' }) {
   return new Promise((resolve, reject) => {
     const textFiles = (context.files || []).filter((file) => file.kind === 'text' && file.content);
     const images = (context.files || []).filter((file) => file.kind === 'image' && file.content).map((file) => file.content).slice(0, 4);
@@ -38,11 +38,16 @@ function suggest({ model, draft, context }) {
       ...textFiles.map((file) => `--- ${file.name} ---\n${file.content}`)
     ].filter(Boolean).join('\n\n').slice(0, 60_000);
     const content = [
-      'Generate exactly 3 useful autocomplete prompts for the user.',
-      'Each suggestion must naturally complete or expand the user draft and must use specific facts or topics from the supplied context.',
-      'Do not produce generic templates. Keep each suggestion under 100 characters.',
+      'Generate exactly 3 likely autocomplete QUESTIONS the user may want to ask next.',
+      'Return questions only. Never answer the question, provide facts, explanations, recommendations, or declarative statements.',
+      'Each suggestion must be a complete, natural question ending with a question mark.',
+      'Use the draft as the beginning or intent of the question. Use saved context and recent transcript only to infer the likely question.',
+      'When the draft is empty, predict useful follow-up questions from the recent transcript and saved context.',
+      'Do not produce generic templates. Keep each question under 100 characters.',
       'Return only JSON in this form: {"suggestions":["...","...","..."]}.',
-      '', '<context>', contextText, '</context>', '', '<draft>', draft, '</draft>'
+      '', '<saved_context>', contextText, '</saved_context>',
+      '', '<recent_transcript>', String(transcript).slice(-20_000), '</recent_transcript>',
+      '', '<draft>', draft, '</draft>'
     ].join('\n');
     const payload = JSON.stringify({
       model,
@@ -63,12 +68,63 @@ function suggest({ model, draft, context }) {
         try {
           const outer = JSON.parse(data);
           const parsed = JSON.parse(outer.message?.content || '{}');
-          const suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.map(String).filter(Boolean).slice(0, 3) : [];
+          const suggestions = Array.isArray(parsed.suggestions)
+            ? parsed.suggestions.map((value) => String(value).replace(/\s+/g, ' ').trim())
+              .filter((value) => /^(what|why|how|when|where|who|which|can|could|would|should|is|are|do|does|did|will|may|am|was|were|has|have|had)\b/i.test(value) && value.endsWith('?') && value.length <= 100)
+              .slice(0, 3)
+            : [];
           resolve(suggestions);
         } catch { reject(new Error('The model returned invalid suggestions.')); }
       });
     });
     req.on('timeout', () => req.destroy(new Error('Suggestion generation timed out.')));
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+function classifyInterviewTurn({ model, turn, recentTurns = [] }) {
+  return new Promise((resolve, reject) => {
+    const dialogue = recentTurns.slice(-6)
+      .map((item) => `${item.speaker === 'user' ? 'Candidate' : 'Interviewer'}: ${String(item.text || '').slice(0, 2000)}`)
+      .join('\n');
+    const content = [
+      'Classify whether the final interviewer utterance asks the candidate to respond.',
+      'Questions include implicit requests, prompts to elaborate, and interview tasks even without a question mark.',
+      'Do not treat greetings, acknowledgements, transitions, or the candidate speaking as questions.',
+      'Choose one type: behavioral, coding, system_design, technical, resume, follow_up, general.',
+      'Return only JSON: {"isQuestion":true,"confidence":0.0,"type":"general","reason":"short reason"}.',
+      '', '<recent_dialogue>', dialogue, '</recent_dialogue>',
+      '', '<interviewer_utterance>', String(turn?.text || '').slice(0, 5000), '</interviewer_utterance>'
+    ].join('\n');
+    const payload = JSON.stringify({
+      model,
+      stream: false,
+      format: 'json',
+      messages: [{ role: 'user', content }],
+      options: { temperature: 0 }
+    });
+    const req = http.request({
+      hostname: HOST, port: PORT, path: '/api/chat', method: 'POST', timeout: 20_000,
+      headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) }
+    }, (res) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        data += chunk;
+        if (data.length > MAX_RESPONSE_BYTES) req.destroy(new Error('Classifier response was too large.'));
+      });
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`Ollama returned ${res.statusCode}`));
+        try {
+          const outer = JSON.parse(data);
+          const parsed = JSON.parse(outer.message?.content || '{}');
+          resolve(parsed);
+        } catch { reject(new Error('The model returned an invalid classification.')); }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('Question classification timed out.')));
     req.on('error', reject);
     req.write(payload);
     req.end();
@@ -154,4 +210,4 @@ function chat({ model, messages, onChunk, onDone, onError }) {
   return () => { settled = true; req.destroy(); };
 }
 
-module.exports = { listModels, suggest, pullModel, chat };
+module.exports = { listModels, suggest, classifyInterviewTurn, pullModel, chat };

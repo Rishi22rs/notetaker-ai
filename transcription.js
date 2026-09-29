@@ -39,7 +39,7 @@ module.exports = function createTranscription(publish) {
 
   function audio(speaker, bytes) {
     if (!child?.stdin.writable) return;
-    child.stdin.write(`${JSON.stringify({ speaker, audio: Buffer.from(bytes).toString('base64') })}\n`);
+    child.stdin.write(`${JSON.stringify({ speaker, capturedAt: Date.now(), audio: Buffer.from(bytes).toString('base64') })}\n`);
   }
 
   function stop() {

@@ -11,15 +11,12 @@
     html, body { margin: 0; width: 100%; height: 100%; background: transparent; }
     body { padding: 8px; font: 14px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--text); }
     button, textarea, select { font: inherit; color: inherit; }
-    .panel { height: 100%; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); overflow: hidden; display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; box-shadow: 0 16px 50px #0008; }
+    .panel { height: 100%; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); overflow: hidden; display: grid; grid-template-columns: 48px minmax(0, 1fr) 220px; box-shadow: 0 16px 50px #0008; }
     .activity-bar { background: #181a1f; border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; }
     .activity { width: 48px; height: 44px; padding: 0; border: 0; border-left: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-size: 21px; display: grid; place-items: center; }
     .activity:hover { color: var(--text); border-color: transparent; }
     .activity.active { color: var(--text); border-left-color: var(--accent); }
-    .activity-bar.right { border-right: 0; border-left: 1px solid var(--line); }
-    .activity-bar.right .activity { border-left: 0; border-right: 2px solid transparent; }
-    .activity-bar.right .activity.active { border-right-color: var(--accent); }
-    .workspace { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto auto 1fr auto auto; }
+    .workspace { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
     header { min-width: 0; min-height: 64px; padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; overflow: hidden; }
     .brand { flex: 1 1 0; min-width: 0; overflow: hidden; }
     h1 { margin: 0; font-size: 16px; font-weight: 650; }
@@ -30,7 +27,7 @@
     header > button { flex: 0 0 auto; }
     button { cursor: pointer; }
     button:hover { border-color: #59616d; }
-    #messages { min-height: 0; padding: 18px; overflow-y: auto; user-select: text; }
+    #messages { min-height: 0; flex: 1 1 0; padding: 18px; overflow-y: auto; user-select: text; }
     .empty { height: 100%; display: grid; place-content: center; text-align: center; color: var(--muted); }
     .empty strong { color: var(--text); font-size: 18px; }
     .message { max-width: 92%; margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
@@ -43,9 +40,9 @@
     textarea:focus { border-color: var(--accent); }
     #send { width: 62px; height: 42px; min-width: 62px; padding: 0 10px; align-self: end; background: var(--accent); border-color: var(--accent); color: #10251b; font-weight: 650; }
     #send:disabled { opacity: .45; cursor: not-allowed; }
-    .prompt-suggestions { padding: 7px 12px 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+    .prompt-suggestions { height: 36px; min-height: 36px; flex: 0 0 36px; padding: 5px 12px 3px; display: flex; align-items: center; gap: 6px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
     .prompt-suggestions:empty, .prompt-suggestions[hidden] { display: none; }
-    .suggestion { max-width: 230px; padding: 6px 10px; border-radius: 999px; background: #252a30; color: #cbd1d8; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 0 auto; }
+    .suggestion { width: max-content; height: 28px; padding: 3px 10px; border-radius: 999px; background: #252a30; color: #cbd1d8; font-size: 11px; line-height: 20px; white-space: nowrap; overflow: visible; text-overflow: clip; flex: 0 0 auto; }
     .suggestion:hover { color: var(--text); border-color: var(--accent); }
     .model-download { padding: 8px 12px; border-bottom: 1px solid var(--line); background: #1b1e23; display: grid; grid-template-columns: 1fr auto; gap: 7px 10px; align-items: center; }
     .model-download[hidden] { display: none; }
@@ -54,11 +51,11 @@
     #download-detail { display: block; max-width: 100%; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .progress-track { grid-column: 1 / -1; height: 5px; border-radius: 99px; background: #30343b; overflow: hidden; }
     #download-progress { width: 0; height: 100%; background: var(--accent); transition: width .15s linear; }
-    .notes-view { min-height: 0; display: grid; grid-template-rows: auto 1fr; }
+    .notes-view { min-height: 0; flex: 1 1 0; display: grid; grid-template-rows: auto 1fr; }
     .notes-view[hidden], .context-view[hidden], .transcript-view[hidden], .chat-view[hidden], form[hidden] { display: none; }
     .notes-meta { padding: 10px 16px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
     #notepad { width: 100%; height: 100%; max-height: none; resize: none; border: 0; border-radius: 0; background: #15171b; padding: 18px; line-height: 1.6; }
-    .context-view { min-height: 0; overflow-y: auto; padding: 18px; }
+    .context-view { min-height: 0; flex: 1 1 0; overflow-y: auto; padding: 18px; }
     .context-view h2 { margin: 0 0 6px; font-size: 14px; }
     .context-view p { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
     #context-input { width: 100%; min-height: 150px; max-height: 300px; resize: vertical; margin-bottom: 14px; }
@@ -79,11 +76,32 @@
     .context-file .remove-file { align-self: start; padding: 3px 7px; border: 0; background: transparent; color: var(--muted); font-size: 17px; }
     .context-file.error { border-color: #7a4141; }
     .context-file.error .file-excerpt { color: var(--danger); }
-    .transcript-view { min-height: 0; display: grid; grid-template-rows: auto 1fr; }
-    .transcript-toolbar { min-width: 0; padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; overflow: hidden; }
+    .transcript-view { min-height: 0; flex: 1 1 0; display: grid; grid-template-rows: auto auto auto 1fr; }
+    .transcript-toolbar { min-width: 0; padding: 10px 12px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: start; gap: 8px; overflow: hidden; }
     .transcript-toolbar button { flex: 0 0 auto; }
-    #transcript-status { min-width: 0; margin-left: auto; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #transcript-feed { min-height: 0; overflow-y: auto; padding: 14px; }
+    #transcript-status { min-width: 0; margin-left: auto; color: var(--muted); font-size: 11px; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+    .audio-sources { padding: 9px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+    .audio-sources-label { color: var(--muted); font-size: 11px; margin-right: 2px; }
+    .audio-toggle { padding: 6px 10px; color: var(--muted); background: #181a1f; }
+    .audio-toggle[aria-pressed="true"] { color: #10251b; background: var(--accent); border-color: var(--accent); font-weight: 650; }
+    .audio-toggle:disabled { opacity: .55; cursor: not-allowed; }
+    .interview-answer { max-height: 46vh; padding: 12px; border-bottom: 1px solid var(--line); background: #18201d; overflow-y: auto; user-select: text; }
+    .interview-answer[hidden] { display: none; }
+    .interview-answer-header { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    #interview-answer-question { min-width: 0; flex: 1; color: var(--muted); font-weight: 500; text-transform: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #expand-interview-answer { flex: 0 0 auto; padding: 4px 7px; color: var(--accent); font-size: 10px; font-weight: 650; text-transform: none; }
+    #expand-interview-answer[hidden] { display: none; }
+    #interview-answer-text { margin: 0; color: var(--text); font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+    #interview-answer-text.pending::after { content: '▋'; color: var(--accent); animation: blink .8s infinite; }
+    .transcript-content { min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+    #transcript-feed { min-width: 0; min-height: 0; overflow-y: auto; padding: 14px; }
+    .interview-questions { min-width: 0; min-height: 0; height: 100%; overflow-y: auto; padding: 16px 12px; border-left: 1px solid var(--line); background: #181a1f; }
+    .interview-questions[hidden] { display: none; }
+    .interview-questions h3 { margin: 0 0 4px; color: var(--accent); font-size: 11px; text-transform: uppercase; }
+    .interview-questions-subtitle { margin-bottom: 10px; color: var(--muted); font-size: 10px; line-height: 1.35; }
+    #interview-questions-list { display: grid; gap: 8px; }
+    .interview-question-suggestion { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+    .interview-questions-empty { color: var(--muted); font-size: 11px; }
     .transcript-empty { color: var(--muted); text-align: center; margin-top: 30%; }
     .caption { max-width: 88%; min-width: 0; margin-bottom: 10px; padding: 8px 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; }
     .caption.user { margin-left: auto; background: #2d443a; }
@@ -96,27 +114,36 @@
     .platform-darwin.interactive header { cursor: move; }
     .platform-darwin select, .platform-darwin button, .platform-darwin textarea { -webkit-app-region: no-drag; }
     .platform-darwin .resize-grip { display: none; }
+    .permission-gate { position: fixed; inset: 8px; z-index: 1000; border: 1px solid var(--line); border-radius: 12px; background: #111317f5; display: grid; place-items: center; padding: 24px; }
+    .permission-gate[hidden] { display: none; }
+    .permission-card { width: min(400px, 100%); padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 20px 60px #0009; }
+    .permission-card h2 { margin: 0 0 8px; font-size: 18px; }
+    .permission-card p { margin: 0 0 16px; color: var(--muted); font-size: 12px; }
+    #grant-permissions { width: 100%; background: var(--accent); border-color: var(--accent); color: #10251b; font-weight: 700; }
+    #permission-status { min-height: 18px; margin-top: 10px; color: var(--muted); overflow-wrap: anywhere; }
+    #permission-status.error { color: var(--danger); }
   </style>
 </head>
 <body>
   <main class="panel">
     <nav class="activity-bar" aria-label="Views">
-      <button class="activity active" id="show-chat" type="button" title="Local AI chat" aria-label="Local AI chat">◈</button>
+      <button class="activity" id="show-chat" type="button" title="Local AI chat" aria-label="Local AI chat">◈</button>
       <button class="activity" id="show-notes" type="button" title="Local notepad" aria-label="Local notepad">▤</button>
       <button class="activity" id="show-context" type="button" title="Model context" aria-label="Model context">◎</button>
+      <button class="activity active" id="show-transcript" type="button" title="Live transcription" aria-label="Live transcription">◉</button>
     </nav>
     <div class="workspace">
       <header>
-        <div class="brand"><h1 id="view-title">Local AI</h1><span id="status">Connecting to Ollama…</span></div>
-        <select id="model" aria-label="Model"></select>
-        <button id="new-chat" type="button" title="Clear conversation">New</button>
+        <div class="brand"><h1 id="view-title">Live transcription</h1><span id="status">On-device speech recognition</span></div>
+        <select id="model" aria-label="Model" hidden></select>
+        <button id="new-chat" type="button" title="Clear conversation" hidden>New</button>
       </header>
       <section class="model-download" id="model-download" hidden>
         <div class="model-download-info"><span id="download-title"></span><span id="download-detail"></span></div>
         <button id="download-model" type="button">Download</button>
         <div class="progress-track"><div id="download-progress"></div></div>
       </section>
-      <section class="chat-view" id="messages" aria-live="polite"></section>
+      <section class="chat-view" id="messages" aria-live="polite" hidden></section>
       <section class="notes-view" id="notes-view" hidden>
         <div class="notes-meta" id="notes-status">Saved locally</div>
         <textarea id="notepad" spellcheck="true" placeholder="Write your notes here…" aria-label="Local notepad"></textarea>
@@ -133,24 +160,45 @@
         <p class="upload-hint">Select several files at once with Command/Shift on macOS or Ctrl/Shift on Windows. You can also add more files later.</p>
         <div id="context-files"></div>
       </section>
-      <section class="transcript-view" id="transcript-view" hidden>
+      <section class="transcript-view" id="transcript-view">
         <div class="transcript-toolbar">
           <button id="toggle-transcription" type="button">Start listening</button>
           <button id="clear-transcript" type="button">Clear</button>
           <span id="transcript-status">Stopped</span>
         </div>
-        <div id="transcript-feed"><div class="transcript-empty">Start listening for live local captions.</div></div>
+        <div class="audio-sources" aria-label="Audio sources">
+          <span class="audio-sources-label">Listen to</span>
+          <button class="audio-toggle" id="toggle-microphone" type="button" aria-pressed="true">Microphone</button>
+          <button class="audio-toggle" id="toggle-system-audio" type="button" aria-pressed="true">System audio</button>
+        </div>
+        <section class="interview-answer" id="interview-answer" aria-live="polite" hidden>
+          <div class="interview-answer-header"><span>Suggested answer</span><span id="interview-answer-question"></span><button id="expand-interview-answer" type="button" hidden>Expand answer</button></div>
+          <pre id="interview-answer-text"></pre>
+        </section>
+        <div class="transcript-content">
+          <div id="transcript-feed"><div class="transcript-empty">Start listening for live local captions.</div></div>
+        </div>
       </section>
-      <div class="prompt-suggestions" id="prompt-suggestions" aria-label="Prompt suggestions"></div>
-      <form id="composer">
+      <div class="prompt-suggestions" id="prompt-suggestions" aria-label="Prompt suggestions" hidden></div>
+      <form id="composer" hidden>
         <textarea id="prompt" rows="1" placeholder="Message your local model…" aria-label="Message"></textarea>
         <button id="send" type="submit">Send</button>
       </form>
     </div>
-    <nav class="activity-bar right" aria-label="Live tools">
-      <button class="activity" id="show-transcript" type="button" title="Live transcription" aria-label="Live transcription">◉</button>
-    </nav>
+    <aside class="interview-questions" id="interview-questions" aria-live="polite">
+      <h3>Questions to ask</h3>
+      <div class="interview-questions-subtitle">Possible follow-ups based on the current discussion</div>
+      <div id="interview-questions-list"><div class="interview-questions-empty">Suggestions appear after an interviewer question is detected.</div></div>
+    </aside>
   </main>
+  <section class="permission-gate" id="permission-gate" role="dialog" aria-modal="true" aria-labelledby="permission-title" hidden>
+    <div class="permission-card">
+      <h2 id="permission-title">Allow audio access</h2>
+      <p>My App needs system audio and microphone permission for local transcription. Clicking below opens the native permission prompts.</p>
+      <button id="grant-permissions" type="button">Allow permissions</button>
+      <div id="permission-status" aria-live="polite">Not requested</div>
+    </div>
+  </section>
   <div class="resize-grip" aria-hidden="true"></div>
   <script src="renderer.js"></script>
 </body>

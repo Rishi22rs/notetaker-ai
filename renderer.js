@@ -30,8 +30,21 @@ const transcriptFeed = document.getElementById('transcript-feed');
 const transcriptStatus = document.getElementById('transcript-status');
 const toggleTranscription = document.getElementById('toggle-transcription');
 const clearTranscript = document.getElementById('clear-transcript');
+const toggleMicrophone = document.getElementById('toggle-microphone');
+const toggleSystemAudio = document.getElementById('toggle-system-audio');
+const permissionGate = document.getElementById('permission-gate');
+const grantPermissions = document.getElementById('grant-permissions');
+const permissionStatus = document.getElementById('permission-status');
+const interviewAnswer = document.getElementById('interview-answer');
+const interviewAnswerQuestion = document.getElementById('interview-answer-question');
+const interviewAnswerText = document.getElementById('interview-answer-text');
+const expandInterviewAnswer = document.getElementById('expand-interview-answer');
+const interviewQuestions = document.getElementById('interview-questions');
+const interviewQuestionsList = document.getElementById('interview-questions-list');
 const STORAGE_KEY = 'local-ai-conversation-v1';
+const TRANSCRIPT_CONTEXT_KEY = 'local-ai-transcript-context-v1';
 let messages = loadMessages();
+let transcriptContext = loadTranscriptContext();
 let cancelGeneration = null;
 let noteSaveTimer = null;
 let contextSaveTimer = null;
@@ -46,6 +59,12 @@ let installedModels = new Map();
 let downloadingModel = null;
 let transcriptionRunning = false;
 let transcriptionCaptures = [];
+let transcriptionSources = { microphone: true, system: true };
+let permissionStreams = { computer: null, user: null };
+let cancelInterviewAnswer = null;
+let interviewPipelineRevision = 0;
+let activeInterviewAnswerTurnId = null;
+let lastInterviewAnswerRequest = null;
 const recommendedModels = [
   { name: 'gemma3:270m', size: 292_000_000, vision: false },
   { name: 'gemma3:1b', size: 815_000_000, vision: false },
@@ -60,6 +79,18 @@ function loadMessages() {
     const value = JSON.parse(localStorage.getItem(STORAGE_KEY));
     return Array.isArray(value) ? value.filter((item) => item && ['user', 'assistant'].includes(item.role) && typeof item.content === 'string') : [];
   } catch { return []; }
+}
+
+function loadTranscriptContext() {
+  try {
+    const value = JSON.parse(localStorage.getItem(TRANSCRIPT_CONTEXT_KEY));
+    return Array.isArray(value) ? value.filter((item) => item && ['user', 'computer'].includes(item.speaker) && typeof item.text === 'string').slice(-40) : [];
+  } catch { return []; }
+}
+
+function saveTranscriptContext() {
+  transcriptContext = transcriptContext.slice(-40);
+  localStorage.setItem(TRANSCRIPT_CONTEXT_KEY, JSON.stringify(transcriptContext));
 }
 
 function saveMessages() { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-80))); }
@@ -97,17 +128,91 @@ function renderPromptSuggestions() {
   clearTimeout(suggestionTimer);
   const revision = ++suggestionRevision;
   const draft = prompt.value.trim().replace(/\s+/g, ' ').slice(0, 500);
-  const hasContext = Boolean(contextState.text.trim() || contextState.files.length);
-  if (!draft || !hasContext || !modelSelect.value) { promptSuggestions.replaceChildren(); return; }
+  const recentTranscript = transcriptContext.map((item) => `${item.speaker === 'user' ? 'User' : 'Computer'}: ${item.text}`).join('\n').slice(-20_000);
+  if (!draft || !modelSelect.value) { promptSuggestions.replaceChildren(); return; }
   suggestionTimer = setTimeout(async () => {
     try {
-      const suggestions = await window.overlay.getSuggestions({ model: modelSelect.value, draft, context: contextState });
+      const suggestions = await window.overlay.getSuggestions({ model: modelSelect.value, draft, context: contextState, transcript: recentTranscript });
       if (revision === suggestionRevision && prompt.value.trim()) showSuggestionChips(suggestions);
     } catch {
       if (revision === suggestionRevision) promptSuggestions.replaceChildren();
     }
   }, 550);
 }
+
+async function renderInterviewQuestionSuggestions(turn, pipelineRevision) {
+  interviewQuestions.hidden = false;
+  interviewQuestionsList.replaceChildren();
+  const loading = document.createElement('div');
+  loading.className = 'interview-questions-empty';
+  loading.textContent = 'Thinking of useful follow-ups…';
+  interviewQuestionsList.append(loading);
+  try {
+    const transcript = transcriptContext.slice(-8)
+      .map((item) => `${item.speaker === 'user' ? 'Candidate' : 'Interviewer'}: ${item.text}`)
+      .join('\n');
+    const suggestions = await window.overlay.getSuggestions({
+      model: modelSelect.value,
+      draft: '',
+      context: contextState,
+      transcript: `${transcript}\nCurrent interviewer question: ${turn.text}`
+    });
+    if (pipelineRevision !== interviewPipelineRevision) return;
+    interviewQuestionsList.replaceChildren();
+    if (!suggestions.length) {
+      loading.textContent = 'No follow-up suggestions yet.';
+      interviewQuestionsList.append(loading);
+      return;
+    }
+    for (const suggestion of suggestions) {
+      const item = document.createElement('div');
+      item.className = 'interview-question-suggestion';
+      item.textContent = suggestion;
+      interviewQuestionsList.append(item);
+    }
+  } catch {
+    if (pipelineRevision !== interviewPipelineRevision) return;
+    loading.textContent = 'Follow-up suggestions unavailable.';
+  }
+}
+
+function generateInterviewAnswer(request, label, turnId, verbosity = 'concise') {
+  cancelInterviewAnswer?.();
+  activeInterviewAnswerTurnId = turnId;
+  lastInterviewAnswerRequest = { request, label, turnId };
+  interviewAnswer.hidden = false;
+  interviewAnswerQuestion.textContent = request.question;
+  interviewAnswerText.textContent = '';
+  interviewAnswerText.classList.add('pending');
+  expandInterviewAnswer.hidden = true;
+  transcriptStatus.textContent = verbosity === 'detailed' ? `Expanding answer · ${label}` : `Answering · ${label}`;
+  cancelInterviewAnswer = window.overlay.generateInterviewAnswer({ ...request, verbosity }, {
+    onChunk(chunk) {
+      if (activeInterviewAnswerTurnId !== turnId) return;
+      interviewAnswerText.textContent += chunk;
+    },
+    onDone() {
+      if (activeInterviewAnswerTurnId !== turnId) return;
+      cancelInterviewAnswer = null;
+      interviewAnswerText.classList.remove('pending');
+      expandInterviewAnswer.hidden = verbosity === 'detailed';
+      transcriptStatus.textContent = `${verbosity === 'detailed' ? 'Expanded answer' : 'Answer'} ready · ${label}`;
+    },
+    onError(error) {
+      if (activeInterviewAnswerTurnId !== turnId) return;
+      cancelInterviewAnswer = null;
+      interviewAnswerText.classList.remove('pending');
+      interviewAnswerText.textContent = `Could not generate an answer: ${error}`;
+      transcriptStatus.textContent = 'Answer generation failed';
+    }
+  });
+}
+
+expandInterviewAnswer.addEventListener('click', () => {
+  if (!lastInterviewAnswerRequest) return;
+  const { request, label, turnId } = lastInterviewAnswerRequest;
+  generateInterviewAnswer(request, label, turnId, 'detailed');
+});
 
 function render() {
   messagesElement.replaceChildren();
@@ -314,6 +419,25 @@ showNotes.addEventListener('click', () => setView('notes'));
 showContext.addEventListener('click', () => setView('context'));
 showTranscript.addEventListener('click', () => setView('transcript'));
 
+function updateAudioSourceButtons() {
+  toggleMicrophone.setAttribute('aria-pressed', String(transcriptionSources.microphone));
+  toggleSystemAudio.setAttribute('aria-pressed', String(transcriptionSources.system));
+  toggleMicrophone.disabled = transcriptionRunning;
+  toggleSystemAudio.disabled = transcriptionRunning;
+}
+
+toggleMicrophone.addEventListener('click', () => {
+  transcriptionSources.microphone = !transcriptionSources.microphone;
+  updateAudioSourceButtons();
+});
+
+toggleSystemAudio.addEventListener('click', () => {
+  transcriptionSources.system = !transcriptionSources.system;
+  updateAudioSourceButtons();
+});
+
+updateAudioSourceButtons();
+
 function beginAudioCapture(stream, speaker) {
   const audioTrack = stream.getAudioTracks()[0];
   if (!audioTrack) { stream.getTracks().forEach((track) => track.stop()); throw new Error(`${speaker === 'user' ? 'Microphone' : 'Computer'} audio was not shared.`); }
@@ -331,14 +455,16 @@ function beginAudioCapture(stream, speaker) {
     const copy = new Float32Array(input);
     chunks.push(copy);
     sampleCount += copy.length;
-    // Longer windows give Whisper enough phonetic context and sharply reduce
-    // short, silence-driven hallucinations while remaining caption-like.
+    // Three-second windows with overlap preserve words that straddle
+    // chunk boundaries; the backend's VAD removes non-speech inside them.
     if (sampleCount < context.sampleRate * 3) return;
     const merged = new Float32Array(sampleCount);
     let offset = 0;
     for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length; }
     chunks.length = 0;
-    sampleCount = 0;
+    const overlap = merged.slice(Math.max(0, merged.length - Math.round(context.sampleRate * 0.75)));
+    chunks.push(overlap);
+    sampleCount = overlap.length;
     let output = merged;
     if (context.sampleRate !== 16000) {
       const length = Math.max(1, Math.round(merged.length * 16000 / context.sampleRate));
@@ -364,32 +490,99 @@ function beginAudioCapture(stream, speaker) {
   };
 }
 
+function streamIsLive(stream) {
+  return Boolean(stream?.getAudioTracks().some((track) => track.readyState === 'live'));
+}
+
+grantPermissions.addEventListener('click', async () => {
+  grantPermissions.disabled = true;
+  permissionStatus.classList.remove('error');
+  try {
+    permissionStatus.textContent = 'Allow system audio access…';
+    if (window.overlay.platform === 'darwin') {
+      await window.overlay.requestSystemAudio();
+    } else {
+    permissionStreams.computer = await navigator.mediaDevices.getDisplayMedia({
+      video: true, audio: true, systemAudio: 'include'
+    });
+    if (!streamIsLive(permissionStreams.computer)) {
+      permissionStreams.computer.getTracks().forEach((track) => track.stop());
+      permissionStreams.computer = null;
+      throw new Error('System audio was not selected in the native picker.');
+    }
+    }
+    permissionStatus.textContent = 'Allow microphone access…';
+    permissionStreams.user = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true }, video: false
+    });
+    permissionStatus.textContent = 'Permissions allowed';
+    permissionGate.hidden = true;
+    window.overlay.completePermissionGate();
+  } catch (error) {
+    permissionStatus.classList.add('error');
+    permissionStatus.textContent = error?.name === 'NotAllowedError'
+      ? 'Permission was denied. Enable My App in Privacy & Security, then try again.'
+      : (error?.message || 'Could not request audio permissions.');
+  } finally {
+    grantPermissions.disabled = false;
+  }
+});
+
 async function startLiveTranscription() {
+  if (!transcriptionSources.microphone && !transcriptionSources.system) {
+    transcriptStatus.textContent = 'Turn on Microphone or System audio.';
+    return;
+  }
   transcriptStatus.textContent = 'Requesting audio access…';
-  const [computerResult, micResult] = await Promise.allSettled([
-    navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }),
-    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false })
-  ]);
+  const requested = [];
+  if (transcriptionSources.system && window.overlay.platform !== 'darwin') {
+    if (!streamIsLive(permissionStreams.computer)) {
+      permissionGate.hidden = false;
+      permissionStatus.textContent = 'System audio permission needs to be renewed.';
+      return;
+    }
+    requested.push(['computer', Promise.resolve(permissionStreams.computer.clone())]);
+  }
+  if (transcriptionSources.microphone) {
+    if (!streamIsLive(permissionStreams.user)) {
+      permissionGate.hidden = false;
+      permissionStatus.textContent = 'Microphone permission needs to be renewed.';
+      return;
+    }
+    requested.push(['user', Promise.resolve(permissionStreams.user.clone())]);
+  }
+  const results = await Promise.allSettled(requested.map(([, capture]) => capture));
   transcriptionRunning = true;
+  updateAudioSourceButtons();
   const errors = [];
-  for (const [result, speaker] of [[computerResult, 'computer'], [micResult, 'user']]) {
+  for (let index = 0; index < results.length; index += 1) {
+    const result = results[index];
+    const speaker = requested[index][0];
     if (result.status === 'fulfilled') {
       try { transcriptionCaptures.push(beginAudioCapture(result.value, speaker)); }
       catch (error) { errors.push(error.message); }
-    } else errors.push(`${speaker === 'user' ? 'Microphone' : 'Computer audio'}: ${result.reason?.message || 'permission denied'}`);
+    } else {
+      const denied = result.reason?.name === 'NotAllowedError' || /permission denied/i.test(result.reason?.message || '');
+      const message = speaker === 'computer' && denied
+        ? `Computer audio was rejected by macOS (${result.reason?.name || 'NotAllowedError'}). Restart My App, then select a screen and enable audio in Apple's sharing picker.`
+        : `${speaker === 'user' ? 'Microphone' : 'Computer audio'}: ${result.reason?.message || 'permission denied'}`;
+      errors.push(message);
+    }
   }
-  if (!transcriptionCaptures.length) {
+  if (!transcriptionCaptures.length && !(transcriptionSources.system && window.overlay.platform === 'darwin')) {
     transcriptionRunning = false;
+    updateAudioSourceButtons();
     transcriptStatus.textContent = errors.join(' · ');
     return;
   }
-  window.overlay.startTranscription();
+  window.overlay.startTranscription(transcriptionSources);
   toggleTranscription.textContent = 'Stop listening';
   transcriptStatus.textContent = errors.length ? `Partial capture · ${errors.join(' · ')}` : 'Loading local model…';
 }
 
 async function stopLiveTranscription() {
   transcriptionRunning = false;
+  updateAudioSourceButtons();
   const stops = transcriptionCaptures;
   transcriptionCaptures = [];
   await Promise.allSettled(stops.map((stop) => stop()));
@@ -408,19 +601,121 @@ toggleTranscription.addEventListener('click', async () => {
 });
 
 clearTranscript.addEventListener('click', () => {
+  interviewPipelineRevision += 1;
+  cancelInterviewAnswer?.();
+  cancelInterviewAnswer = null;
+  activeInterviewAnswerTurnId = null;
+  lastInterviewAnswerRequest = null;
+  interviewAnswer.hidden = true;
+  interviewAnswerQuestion.textContent = '';
+  interviewAnswerText.textContent = '';
+  expandInterviewAnswer.hidden = true;
+  interviewQuestionsList.replaceChildren();
+  const questionsEmpty = document.createElement('div');
+  questionsEmpty.className = 'interview-questions-empty';
+  questionsEmpty.textContent = 'Suggestions appear after an interviewer question is detected.';
+  interviewQuestionsList.append(questionsEmpty);
+  window.overlay.clearTranscription();
   transcriptFeed.replaceChildren();
+  lastCaption = null;
+  transcriptContext = [];
+  localStorage.removeItem(TRANSCRIPT_CONTEXT_KEY);
+  renderPromptSuggestions();
   const empty = document.createElement('div');
   empty.className = 'transcript-empty';
   empty.textContent = transcriptionRunning ? 'Listening…' : 'Start listening for live local captions.';
   transcriptFeed.append(empty);
 });
 
+const CAPTION_PAUSE_MS = 4000;
+let lastCaption = null;
+
+function mergeCaptionText(previous, incoming) {
+  const left = String(previous || '').trim();
+  const right = String(incoming || '').trim();
+  if (!left) return right;
+  if (!right || left.toLowerCase().endsWith(right.toLowerCase())) return left;
+  const leftWords = left.split(/\s+/);
+  const rightWords = right.split(/\s+/);
+  const normalize = (word) => word.toLowerCase().replace(/[^a-z0-9']/g, '');
+  const maximum = Math.min(12, leftWords.length, rightWords.length);
+  let overlap = 0;
+  for (let count = maximum; count > 0; count -= 1) {
+    const tail = leftWords.slice(-count).map(normalize).join(' ');
+    const head = rightWords.slice(0, count).map(normalize).join(' ');
+    if (tail && tail === head) { overlap = count; break; }
+  }
+  return `${left} ${rightWords.slice(overlap).join(' ')}`.trim();
+}
+
 window.overlay.onTranscription((event) => {
   if (event.type === 'status' || event.type === 'ready' || event.type === 'warning' || event.type === 'error') {
     transcriptStatus.textContent = event.text;
   }
+  if (event.type === 'interview-turn') {
+    transcriptContext.push(event.turn);
+    saveTranscriptContext();
+    renderPromptSuggestions();
+    if (event.turn.speaker === 'computer') {
+      const turn = event.turn;
+      const pipelineRevision = ++interviewPipelineRevision;
+      interviewQuestionsList.replaceChildren();
+      const detecting = document.createElement('div');
+      detecting.className = 'interview-questions-empty';
+      detecting.textContent = 'Checking for a question…';
+      interviewQuestionsList.append(detecting);
+      transcriptStatus.textContent = 'Understanding interviewer…';
+      window.overlay.detectInterviewQuestion({
+        model: modelSelect.value,
+        turn,
+        recentTurns: transcriptContext.slice(-6)
+      }).then(async (detection) => {
+        if (pipelineRevision !== interviewPipelineRevision) return;
+        const savedTurn = transcriptContext.find((item) => item.id === turn.id);
+        if (!savedTurn) return;
+        savedTurn.detection = detection;
+        saveTranscriptContext();
+        if (detection.isQuestion) {
+          const label = detection.type.replace('_', ' ');
+          cancelInterviewAnswer?.();
+          cancelInterviewAnswer = null;
+          activeInterviewAnswerTurnId = turn.id;
+          renderInterviewQuestionSuggestions(turn, pipelineRevision);
+          transcriptStatus.textContent = `Question detected · finding ${label} context…`;
+          const retrievedContext = await window.overlay.retrieveInterviewContext({
+            question: turn.text,
+            context: contextState,
+            recentTurns: transcriptContext.slice(-8)
+          });
+          if (pipelineRevision !== interviewPipelineRevision) return;
+          const currentTurn = transcriptContext.find((item) => item.id === turn.id);
+          if (!currentTurn) return;
+          currentTurn.retrievedContext = retrievedContext;
+          saveTranscriptContext();
+          generateInterviewAnswer({
+            model: modelSelect.value,
+            question: turn.text,
+            type: detection.type,
+            retrievedContext
+          }, label, turn.id);
+        } else {
+          transcriptStatus.textContent = 'Listening · no question detected';
+        }
+      }).catch(() => { transcriptStatus.textContent = 'Listening · question detection unavailable'; });
+    }
+    return;
+  }
   if (event.type !== 'transcript') return;
+  const capturedAt = Number(event.capturedAt) || Date.now();
   transcriptFeed.querySelector('.transcript-empty')?.remove();
+  if (lastCaption && lastCaption.speaker === event.speaker &&
+      capturedAt - lastCaption.capturedAt <= CAPTION_PAUSE_MS &&
+      lastCaption.bubble.isConnected) {
+    lastCaption.text.textContent = mergeCaptionText(lastCaption.text.textContent, event.text);
+    lastCaption.capturedAt = capturedAt;
+    transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
+    return;
+  }
   const bubble = document.createElement('div');
   bubble.className = `caption ${event.speaker === 'user' ? 'user' : 'computer'}`;
   const label = document.createElement('span');
@@ -430,6 +725,7 @@ window.overlay.onTranscription((event) => {
   text.textContent = event.text;
   bubble.append(label, text);
   transcriptFeed.append(bubble);
+  lastCaption = { speaker: event.speaker, capturedAt, bubble, text };
   transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
 });
 notepad.addEventListener('input', () => {
@@ -539,6 +835,9 @@ uploadContext.addEventListener('click', async () => {
 });
 clearContextFiles.addEventListener('click', () => { contextState.files = []; contextUploadErrors = []; renderContextFiles(); saveContextSoon(); });
 window.overlay.onInteraction((enabled) => document.body.classList.toggle('interactive', enabled));
+window.addEventListener('beforeunload', () => {
+  for (const stream of Object.values(permissionStreams)) stream?.getTracks().forEach((track) => track.stop());
+});
 
 render();
 refreshModels();

@@ -50,7 +50,8 @@ def main():
                                             vad_filter=False, condition_on_previous_text=False)
             text = " ".join(s.text.strip() for s in segments if s.no_speech_prob < 0.55).strip()
             if text:
-                emit("transcript", speaker=message.get("speaker", "computer"), text=text)
+                emit("transcript", speaker=message.get("speaker", "computer"), text=text,
+                     capturedAt=message.get("capturedAt"))
         except Exception as error:
             emit("warning", text=str(error))
 
