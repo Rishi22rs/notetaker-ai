@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('overlay', {
   platform: process.platform,
+  getUserName: () => ipcRenderer.invoke('profile:name'),
   completePermissionGate: () => ipcRenderer.send('permissions:complete'),
   requestSystemAudio: () => ipcRenderer.invoke('audio:permission'),
   startTranscription: (sources) => ipcRenderer.send('transcription:start', sources),
@@ -17,8 +18,8 @@ contextBridge.exposeInMainWorld('overlay', {
   onInteraction(callback) {
     ipcRenderer.on('overlay:interactive', (_event, enabled) => callback(enabled));
   },
-  listModels: () => ipcRenderer.invoke('ollama:models'),
-  getSuggestions: (request) => ipcRenderer.invoke('ollama:suggestions', request),
+  listModels: () => ipcRenderer.invoke('local-ai:models'),
+  getSuggestions: (request) => ipcRenderer.invoke('local-ai:suggestions', request),
   detectInterviewQuestion: (request) => ipcRenderer.invoke('interview:detect-question', request),
   retrieveInterviewContext: (request) => ipcRenderer.invoke('interview:retrieve-context', request),
   generateInterviewAnswer(request, callbacks) {
@@ -40,32 +41,32 @@ contextBridge.exposeInMainWorld('overlay', {
   pullModel(model, callbacks) {
     const id = crypto.randomUUID();
     const cleanup = () => {
-      ipcRenderer.removeListener('ollama:pull-progress', onProgress);
-      ipcRenderer.removeListener('ollama:pull-done', onDone);
-      ipcRenderer.removeListener('ollama:pull-error', onError);
+      ipcRenderer.removeListener('local-ai:download-progress', onProgress);
+      ipcRenderer.removeListener('local-ai:download-done', onDone);
+      ipcRenderer.removeListener('local-ai:download-error', onError);
     };
     const onProgress = (_event, data) => { if (data.id === id) callbacks.onProgress(data); };
     const onDone = (_event, data) => { if (data.id === id) { cleanup(); callbacks.onDone(); } };
     const onError = (_event, data) => { if (data.id === id) { cleanup(); callbacks.onError(data.message); } };
-    ipcRenderer.on('ollama:pull-progress', onProgress);
-    ipcRenderer.on('ollama:pull-done', onDone);
-    ipcRenderer.on('ollama:pull-error', onError);
-    ipcRenderer.send('ollama:pull', { id, model });
+    ipcRenderer.on('local-ai:download-progress', onProgress);
+    ipcRenderer.on('local-ai:download-done', onDone);
+    ipcRenderer.on('local-ai:download-error', onError);
+    ipcRenderer.send('local-ai:download', { id, model });
   },
   chat(request, callbacks) {
     const id = crypto.randomUUID();
     const cleanup = () => {
-      ipcRenderer.removeListener('ollama:chunk', onChunk);
-      ipcRenderer.removeListener('ollama:done', onDone);
-      ipcRenderer.removeListener('ollama:error', onError);
+      ipcRenderer.removeListener('local-ai:chunk', onChunk);
+      ipcRenderer.removeListener('local-ai:done', onDone);
+      ipcRenderer.removeListener('local-ai:error', onError);
     };
     const onChunk = (_event, data) => { if (data.id === id) callbacks.onChunk(data.content); };
     const onDone = (_event, data) => { if (data.id === id) { cleanup(); callbacks.onDone(); } };
     const onError = (_event, data) => { if (data.id === id) { cleanup(); callbacks.onError(data.message); } };
-    ipcRenderer.on('ollama:chunk', onChunk);
-    ipcRenderer.on('ollama:done', onDone);
-    ipcRenderer.on('ollama:error', onError);
-    ipcRenderer.send('ollama:chat', { ...request, id });
-    return () => { cleanup(); ipcRenderer.send('ollama:cancel', id); };
+    ipcRenderer.on('local-ai:chunk', onChunk);
+    ipcRenderer.on('local-ai:done', onDone);
+    ipcRenderer.on('local-ai:error', onError);
+    ipcRenderer.send('local-ai:chat', { ...request, id });
+    return () => { cleanup(); ipcRenderer.send('local-ai:cancel', id); };
   }
 });

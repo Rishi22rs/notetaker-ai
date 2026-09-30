@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { chunkText, retrieveInterviewContext } = require('./context-retriever');
+const { chunkText, inferContextLanguages, retrieveInterviewContext } = require('./context-retriever');
 
 test('chunks long documents with overlap', () => {
   const text = Array.from({ length: 1000 }, (_, index) => `word${index}`).join(' ');
@@ -46,4 +46,14 @@ test('returns no arbitrary document chunks when nothing matches', () => {
     context: { files: [{ name: 'cooking.txt', kind: 'text', content: 'Sourdough flour hydration recipe.' }] }
   });
   assert.deepEqual(result.chunks, []);
+});
+
+test('detects programming languages from saved context filenames', () => {
+  const context = { files: [
+    { name: 'service.ts', kind: 'text', content: 'export function serve() {}' },
+    { name: 'worker.py', kind: 'text', content: 'def work(): pass' },
+    { name: 'notes.txt', kind: 'text', content: 'General notes' }
+  ] };
+  assert.deepEqual(inferContextLanguages(context), ['TypeScript', 'Python']);
+  assert.deepEqual(retrieveInterviewContext({ question: 'Implement the service', context }).contextLanguages, ['TypeScript', 'Python']);
 });

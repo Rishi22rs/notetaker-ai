@@ -6,6 +6,26 @@ const STOP_WORDS = new Set([
   'will', 'with', 'would', 'you', 'your'
 ]);
 
+const LANGUAGE_BY_EXTENSION = new Map([
+  ['.js', 'JavaScript'], ['.jsx', 'JavaScript'], ['.mjs', 'JavaScript'], ['.cjs', 'JavaScript'],
+  ['.ts', 'TypeScript'], ['.tsx', 'TypeScript'], ['.py', 'Python'], ['.java', 'Java'],
+  ['.c', 'C'], ['.h', 'C'], ['.cpp', 'C++'], ['.cc', 'C++'], ['.cxx', 'C++'], ['.hpp', 'C++'],
+  ['.cs', 'C#'], ['.go', 'Go'], ['.rs', 'Rust'], ['.rb', 'Ruby'], ['.php', 'PHP'],
+  ['.swift', 'Swift'], ['.kt', 'Kotlin'], ['.kts', 'Kotlin'], ['.sql', 'SQL'],
+  ['.sh', 'Shell'], ['.zsh', 'Shell'], ['.ps1', 'PowerShell'], ['.dart', 'Dart'], ['.scala', 'Scala']
+]);
+
+function inferContextLanguages(context = {}) {
+  const languages = [];
+  for (const file of Array.isArray(context.files) ? context.files : []) {
+    if (file?.kind !== 'text') continue;
+    const extension = String(file.name || '').toLowerCase().match(/\.[a-z0-9]+$/)?.[0];
+    const language = LANGUAGE_BY_EXTENSION.get(extension);
+    if (language && !languages.includes(language)) languages.push(language);
+  }
+  return languages.slice(0, 5);
+}
+
 function tokenize(value) {
   return String(value || '').toLowerCase().match(/[a-z0-9][a-z0-9+#._-]{1,}/g)?.filter((word) => !STOP_WORDS.has(word)) || [];
 }
@@ -91,9 +111,10 @@ function retrieveInterviewContext({ question, context = {}, recentTurns = [], ma
     question: String(question || '').trim().slice(0, 5000),
     profile,
     chunks: selected,
+    contextLanguages: inferContextLanguages(context),
     recentTurns: dialogue,
     stats: { availableChunks: ranked.length, selectedChunks: selected.length, selectedChars: usedChars }
   };
 }
 
-module.exports = { buildChunks, chunkText, rankChunks, retrieveInterviewContext, tokenize };
+module.exports = { buildChunks, chunkText, inferContextLanguages, rankChunks, retrieveInterviewContext, tokenize };

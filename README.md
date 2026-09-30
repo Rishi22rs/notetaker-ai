@@ -1,19 +1,53 @@
-# Local Ollama overlay
+# Standalone local AI overlay
 
-A native Windows and macOS chat overlay for local Ollama models. The window uses Electron's
-capture protection, stays on top, and no longer embeds ChatGPT, Claude, Grok, or
-another website. Prompts and responses go only to Ollama at `127.0.0.1:11434`.
-Conversation history is stored in the app's local browser storage.
+A native Windows and macOS chat overlay with a bundled `llama.cpp` inference runtime.
+Users do not need Ollama, Python, or a separately installed AI service. On first use,
+the app offers an in-app download of its GGUF language model. After that download,
+prompts and responses remain on the computer and inference works offline. Conversation
+history is stored in the app's local browser storage.
 
 The overlay remains available above every application window. On macOS it also
 appears across every desktop/Space and over full-screen applications.
 
 ## Setup
 
-Install Ollama, pull at least one model, then run the app:
+Prepare the development runtime once, then run the app:
 
-```powershell
-ollama pull llama3.2
+```bash
+npm install
+npm run setup:llama
+npm start
+```
+
+`setup:llama` downloads the pinned official `llama.cpp` build for the developer's
+current OS and CPU into `vendor/llama/<platform>-<arch>`. The runtime is packaged
+with release builds; the language model is deliberately not packaged. A release can
+then be created normally:
+
+```bash
+npm run build:mac
+# or: npm run build:win
+```
+
+The installed app offers three optional text models and downloads selected models
+into its Electron user-data directory:
+
+- Qwen 2.5 0.5B Q4 (~491 MB): fastest, for basic suggestions and answers.
+- Qwen 2.5 1.5B Q4 (~1.12 GB): balanced and recommended for most users.
+- Qwen 2.5 3B Q4 (~2.1 GB): better answer quality, recommended with at least 8 GB RAM.
+
+For example:
+
+```text
+<userData>/models/qwen2.5-1.5b-instruct-q4_k_m.gguf
+```
+
+The app launches the packaged runtime as a hidden child process bound only to a
+random `127.0.0.1` port. It starts on demand and is stopped when the app exits.
+
+For a normal development launch:
+
+```bash
 npm install
 npm start
 ```
@@ -21,21 +55,17 @@ npm start
 The same commands work in macOS Terminal. On macOS, drag the title area to move
 the overlay and drag a window edge or corner to resize it.
 
-Ollama normally runs in the background after installation. If the overlay says
-it is unavailable, run `ollama serve` and reopen the app.
-
 ## Controls
 
-- Choose any locally installed model from the model picker.
-- The model picker also lists recommended downloadable models with their sizes and vision support. Downloads show live byte and percentage progress, then become immediately selectable.
+- Download the recommended model from the model picker on first use. Download progress is shown in the app and the model becomes immediately selectable.
 - Use the fixed left activity bar to switch between local AI chat and Notepad.
 - Notepad saves automatically to `notes.md` inside the app's local user-data directory.
-- Context accepts pasted instructions, images, PDFs, DOCX, and common text/code files. It is saved locally and included automatically with Ollama chat requests.
+- Context accepts pasted instructions, images, PDFs, DOCX, and common text/code files. It is saved locally and included automatically with local model requests. The current bundled model is text-only.
 - Up to 20 context files can be selected together or accumulated across multiple selections.
 - New context uploads append to existing files; they do not replace earlier attachments.
 - Files that cannot be parsed remain visible as error cards when more files are added.
 - Context shows image thumbnails plus file-type cards, sizes, and text previews for uploaded reference files.
-- Prompt suggestion bubbles are generated locally by the selected Ollama model from the saved context and the current draft.
+- Prompt suggestion bubbles are generated locally by the downloaded model from the saved context and current draft.
 - Press Enter to send and Shift+Enter for a new line.
 - Press Stop while a response is generating to cancel it.
 - New clears the locally stored conversation.

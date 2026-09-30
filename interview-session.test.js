@@ -57,6 +57,12 @@ test('question punctuation uses the shorter endpoint delay', () => {
   assert.equal([...f.timers.values()][0].delay, 650);
 });
 
+test('default pause spans overlapping speech-recognition windows', () => {
+  const f = fixture();
+  f.session.ingest({ speaker: 'computer', text: 'Tell me about your project', capturedAt: 1000 });
+  assert.equal([...f.timers.values()][0].delay, 2800);
+});
+
 test('clear drops an unfinished turn', () => {
   const f = fixture();
   f.session.ingest({ speaker: 'computer', text: 'unfinished', capturedAt: 1000 });

@@ -20,6 +20,46 @@ test('detects interview commands as questions', () => {
   assert.equal(result.type, 'resume');
 });
 
+test('detects imperative requests for code as coding questions', () => {
+  const requests = [
+    'Give me a code for shortest path using dynamic programming.',
+    'Give me the implementation of binary search.',
+    'Write a function to reverse a linked list.'
+  ];
+  for (const text of requests) {
+    const result = ruleDecision(text);
+    assert.equal(result.decision, true, text);
+    assert.equal(result.type, 'coding', text);
+    assert.equal(result.reason, 'interview-command', text);
+  }
+});
+
+test('detects questions with conversational preambles without model latency', async () => {
+  let calls = 0;
+  const result = await detectQuestion({
+    turn: { speaker: 'computer', text: 'Okay, so can you explain the tradeoff here' },
+    classify: async () => { calls += 1; }
+  });
+  assert.equal(result.isQuestion, true);
+  assert.equal(result.source, 'rules');
+  assert.equal(calls, 0);
+});
+
+test('detects a question clause after a hypothetical preamble and noisy transcription', async () => {
+  let calls = 0;
+  const result = await detectQuestion({
+    turn: {
+      speaker: 'computer',
+      text: 'Imagine if we hire you for the your you for the job. What is the first thing? you are planning to do in this role.'
+    },
+    classify: async () => { calls += 1; }
+  });
+  assert.equal(result.isQuestion, true);
+  assert.equal(result.source, 'rules');
+  assert.equal(result.reason, 'embedded-question');
+  assert.equal(calls, 0);
+});
+
 test('ignores candidate speech and acknowledgements', async () => {
   assert.equal((await detectQuestion({ turn: { speaker: 'user', text: 'How does it work?' } })).isQuestion, false);
   assert.equal(ruleDecision('Okay.').decision, false);
@@ -44,5 +84,6 @@ test('uses the model only for ambiguous interviewer statements', async () => {
 test('categorizes common interview question types', () => {
   assert.equal(inferType('Tell me about a time you resolved conflict'), 'behavioral');
   assert.equal(inferType('Implement a graph traversal'), 'coding');
+  assert.equal(inferType('Can you write a function in Python to reverse a string?'), 'coding');
   assert.equal(inferType('Explain HTTP request handling'), 'technical');
 });

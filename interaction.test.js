@@ -59,6 +59,12 @@ test('hold-to-resize clamps size and release restores click-through', () => {
   assert.equal(bounds.width, 620);
 });
 
+test('window opens at 65 percent of the usable display', () => {
+  const source = fs.readFileSync(require.resolve('./main'), 'utf8');
+  assert.match(source, /area\.width \* 0\.65/);
+  assert.match(source, /area\.height \* 0\.65/);
+});
+
 test('embedded browser modifier wheel scrolls the page without zooming', () => {
   let interaction;
   let wheel;
@@ -78,4 +84,32 @@ test('embedded browser modifier wheel scrolls the page without zooming', () => {
   prevented = false;
   wheel({ deltaY: 50, preventDefault() { prevented = true; } });
   assert.equal(prevented, false);
+});
+
+test('computer transcript bubbles expose a manual answer fallback', () => {
+  const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  assert.match(rendererSource, /function addManualAnswerButton/);
+  assert.match(rendererSource, /Answer this manually/);
+  assert.match(rendererSource, /answerTranscriptTurnManually/);
+  assert.match(rendererSource, /retrieveInterviewContext/);
+  assert.match(rendererSource, /generateInterviewAnswer/);
+});
+
+test('account menu exposes locally persisted independent appearance controls', () => {
+  const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const htmlSource = fs.readFileSync(require.resolve('./index.html'), 'utf8');
+  assert.match(htmlSource, /id="show-account"/);
+  assert.match(htmlSource, /Privacy Policy/);
+  assert.match(htmlSource, /Terms &amp; Conditions/);
+  assert.match(htmlSource, /class="logout"/);
+  assert.match(htmlSource, /id="app-opacity"/);
+  assert.match(htmlSource, /id="text-opacity"/);
+  assert.match(rendererSource, /local-ai-appearance-v1/);
+  assert.match(rendererSource, /--app-opacity/);
+  assert.match(rendererSource, /--text-opacity/);
+  assert.match(htmlSource, /\.interview-questions[^}]+var\(--app-opacity\)/s);
+  assert.match(htmlSource, /\.question-suggestion-group[^}]+var\(--app-opacity\)/s);
+  assert.match(htmlSource, /\.interview-question-suggestion[^}]+var\(--app-opacity\)/s);
+  assert.match(htmlSource, /#send[^}]+var\(--accent-bg\)/s);
+  assert.match(htmlSource, /\.audio-toggle\[aria-pressed="true"\][^}]+var\(--accent-bg\)/s);
 });

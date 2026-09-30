@@ -24,10 +24,26 @@ test('builds a bounded structured interview prompt', () => {
 test('supports an explicitly requested expanded answer', () => {
   const messages = buildInterviewAnswerMessages({ question: 'Explain the design', verbosity: 'detailed' });
   assert.match(messages[0].content, /under 500 words/);
-  assert.match(messages[1].content, /<answer_length>detailed<\/answer_length>/);
+  assert.match(messages[1].content, /Answer length: detailed/);
 });
 
 test('does not allow an unknown question type into the prompt', () => {
   const messages = buildInterviewAnswerMessages({ question: 'Question', type: 'malicious-type' });
-  assert.match(messages[1].content, /<question_type>general<\/question_type>/);
+  assert.match(messages[1].content, /Question type: general/);
+});
+
+test('coding answers always include complete code in the requested or contextual language', () => {
+  const messages = buildInterviewAnswerMessages({
+    question: 'Implement binary search',
+    type: 'coding',
+    retrievedContext: {
+      contextLanguages: ['TypeScript'],
+      chunks: [{ source: 'search.ts', text: 'export function search(values: number[], target: number): number' }]
+    }
+  });
+  assert.match(messages[0].content, /always provide a complete code solution/);
+  assert.match(messages[0].content, /APPROACH, CODE, COMPLEXITY, EDGE CASES/);
+  assert.match(messages[0].content, /runnable or interview-ready code/);
+  assert.match(messages[1].content, /Languages found in context files:\nTypeScript/);
+  assert.match(messages[1].content, /search\.ts/);
 });

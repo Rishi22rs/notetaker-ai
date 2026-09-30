@@ -27,8 +27,8 @@ function mergeTranscriptText(previous, incoming) {
 
 function createInterviewSession({
   onTurn,
-  pauseMs = 1200,
-  questionPauseMs = 650,
+  pauseMs = 2800,
+  questionPauseMs = 2400,
   maxTurnMs = 20_000,
   now = Date.now,
   schedule = setTimeout,

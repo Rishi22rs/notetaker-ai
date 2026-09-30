@@ -2,12 +2,13 @@
   "name": "privacy-overlay-demo",
   "version": "1.0.0",
   "private": true,
-  "description": "Screen-capture-protected local Ollama chat overlay",
+  "description": "Screen-capture-protected standalone local AI chat overlay",
   "main": "main.js",
   "scripts": {
     "build:audio:mac": "node scripts/build-audio-mac.js",
+    "setup:llama": "node scripts/prepare-llama-runtime.js",
     "start": "electron .",
-    "test": "node --test interaction.test.js ollama.test.js context-merge.test.js context-prompt.test.js interview-session.test.js question-detector.test.js context-retriever.test.js interview-answer-prompt.test.js",
+    "test": "node --test interaction.test.js local-ai.test.js context-merge.test.js context-prompt.test.js interview-session.test.js question-detector.test.js context-retriever.test.js interview-answer-prompt.test.js",
     "setup:captions": "python -m venv .venv && .venv\\Scripts\\python.exe -m pip install -r requirements.txt && .venv\\Scripts\\python.exe transcribe.py --download",
     "setup:transcription": "python3 -m venv .venv && .venv/bin/python -m pip install faster-whisper==1.2.1 numpy pyinstaller && .venv/bin/python transcribe_stream.py --download && .venv/bin/pyinstaller --noconfirm --onedir --distpath python-worker --workpath /tmp/notetaker-pyinstaller --specpath /tmp --name transcribe-worker --collect-all faster_whisper --collect-all ctranslate2 --collect-all tokenizers transcribe_stream.py",
     "setup:transcription:mac": "test -d .whisper.cpp || git clone --depth 1 --branch v1.9.4 https://github.com/ggml-org/whisper.cpp.git .whisper.cpp; cmake -S .whisper.cpp -B .whisper.cpp/build -DGGML_METAL=ON -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON; cmake --build .whisper.cpp/build --config Release -j 8; bash .whisper.cpp/models/download-ggml-model.sh tiny.en; bash .whisper.cpp/models/download-vad-model.sh silero-v6.2.0; npm run build:audio:mac",
@@ -38,12 +39,14 @@
       "!.venv/**/*",
       "!python-worker/**/*",
       "!models/**/*",
+      "!vendor/**/*",
       "!.whisper.cpp/**/*",
       "!native-audiotee/**/*"
     ],
     "win": {
       "target": "nsis",
       "extraResources": [
+        { "from": "vendor/llama/win32-${arch}", "to": "llama/win32-${arch}" },
         { "from": "python-worker", "to": "python-worker" },
         { "from": "models/tiny.en", "to": "models/tiny.en" }
       ]
@@ -55,6 +58,7 @@
       ],
       "category": "public.app-category.utilities",
       "extraResources": [
+        { "from": "vendor/llama/darwin-${arch}", "to": "llama/darwin-${arch}" },
         { "from": "native-audiotee/.build/release/audiotee", "to": "audio-tap/audiotee" },
         { "from": "native-audiotee/.build/release/libAudioTeeCore.dylib", "to": "audio-tap/libAudioTeeCore.dylib" },
         { "from": ".whisper.cpp/build/bin/whisper-server", "to": "whisper-metal/bin/whisper-server" },

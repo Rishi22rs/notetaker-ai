@@ -35,14 +35,21 @@ const toggleSystemAudio = document.getElementById('toggle-system-audio');
 const permissionGate = document.getElementById('permission-gate');
 const grantPermissions = document.getElementById('grant-permissions');
 const permissionStatus = document.getElementById('permission-status');
-const interviewAnswer = document.getElementById('interview-answer');
-const interviewAnswerQuestion = document.getElementById('interview-answer-question');
-const interviewAnswerText = document.getElementById('interview-answer-text');
-const expandInterviewAnswer = document.getElementById('expand-interview-answer');
 const interviewQuestions = document.getElementById('interview-questions');
 const interviewQuestionsList = document.getElementById('interview-questions-list');
+const showAccount = document.getElementById('show-account');
+const accountMenu = document.getElementById('account-menu');
+const accountName = document.getElementById('account-name');
+const openSettings = document.getElementById('open-settings');
+const settingsView = document.getElementById('settings-view');
+const appOpacity = document.getElementById('app-opacity');
+const appOpacityValue = document.getElementById('app-opacity-value');
+const textOpacity = document.getElementById('text-opacity');
+const textOpacityValue = document.getElementById('text-opacity-value');
+const panel = document.querySelector('.panel');
 const STORAGE_KEY = 'local-ai-conversation-v1';
 const TRANSCRIPT_CONTEXT_KEY = 'local-ai-transcript-context-v1';
+const APPEARANCE_KEY = 'local-ai-appearance-v1';
 let messages = loadMessages();
 let transcriptContext = loadTranscriptContext();
 let cancelGeneration = null;
@@ -64,15 +71,35 @@ let permissionStreams = { computer: null, user: null };
 let cancelInterviewAnswer = null;
 let interviewPipelineRevision = 0;
 let activeInterviewAnswerTurnId = null;
-let lastInterviewAnswerRequest = null;
+let lastInterviewQuestion = null;
 const recommendedModels = [
-  { name: 'gemma3:270m', size: 292_000_000, vision: false },
-  { name: 'gemma3:1b', size: 815_000_000, vision: false },
-  { name: 'gemma3:4b', size: 3_300_000_000, vision: true },
-  { name: 'gemma3:12b', size: 8_100_000_000, vision: true },
-  { name: 'llama3.2-vision:11b', size: 7_800_000_000, vision: true }
+  { name: 'qwen2.5-1.5b-instruct-q4_k_m', label: 'Qwen 2.5 1.5B Instruct', description: 'Balanced · Recommended', size: 1_117_320_736, vision: false },
+  { name: 'qwen2.5-0.5b-instruct-q4_k_m', label: 'Qwen 2.5 0.5B Instruct', description: 'Fastest · Basic answers', size: 491_400_032, vision: false },
+  { name: 'qwen2.5-3b-instruct-q4_k_m', label: 'Qwen 2.5 3B Instruct', description: 'Higher quality · 8 GB+ RAM', size: 2_104_932_768, vision: false }
 ];
 document.body.classList.add(`platform-${window.overlay.platform}`);
+
+function loadAppearance() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(APPEARANCE_KEY));
+    return {
+      app: Math.max(20, Math.min(100, Number(stored?.app) || 94)),
+      text: Math.max(20, Math.min(100, Number(stored?.text) || 100))
+    };
+  } catch { return { app: 94, text: 100 }; }
+}
+
+function applyAppearance(values = loadAppearance()) {
+  appOpacity.value = String(values.app);
+  textOpacity.value = String(values.text);
+  appOpacityValue.textContent = `${values.app}%`;
+  textOpacityValue.textContent = `${values.text}%`;
+  document.documentElement.style.setProperty('--app-opacity', String(values.app / 100));
+  document.documentElement.style.setProperty('--text-opacity', String(values.text / 100));
+  localStorage.setItem(APPEARANCE_KEY, JSON.stringify(values));
+}
+
+applyAppearance();
 
 function loadMessages() {
   try {
@@ -140,13 +167,52 @@ function renderPromptSuggestions() {
   }, 550);
 }
 
+function questionSuggestionGroup(turn, suggestions = [], fresh = false) {
+  interviewQuestionsList.querySelector('.interview-questions-empty')?.remove();
+  for (const old of interviewQuestionsList.querySelectorAll('.question-suggestion-group.is-new')) {
+    old.classList.remove('is-new');
+    old.querySelector('.question-new-badge')?.remove();
+  }
+  let group = [...interviewQuestionsList.querySelectorAll('.question-suggestion-group')]
+    .find((item) => item.dataset.turnId === turn.id);
+  if (!group) {
+    group = document.createElement('section');
+    group.className = 'question-suggestion-group';
+    group.dataset.turnId = turn.id;
+    const heading = document.createElement('div');
+    heading.className = 'question-suggestion-heading';
+    const question = document.createElement('span');
+    question.textContent = turn.text;
+    heading.append(question);
+    const items = document.createElement('div');
+    items.className = 'question-suggestion-items';
+    group.append(heading, items);
+    interviewQuestionsList.prepend(group);
+  }
+  if (fresh) {
+    group.classList.add('is-new');
+    const badge = document.createElement('span');
+    badge.className = 'question-new-badge';
+    badge.textContent = 'NEW';
+    group.querySelector('.question-suggestion-heading').append(badge);
+  }
+  const items = group.querySelector('.question-suggestion-items');
+  items.replaceChildren();
+  for (const suggestion of suggestions) {
+    const item = document.createElement('div');
+    item.className = 'interview-question-suggestion';
+    item.textContent = suggestion;
+    items.append(item);
+  }
+  return { group, items };
+}
+
 async function renderInterviewQuestionSuggestions(turn, pipelineRevision) {
-  interviewQuestions.hidden = false;
-  interviewQuestionsList.replaceChildren();
+  const { items } = questionSuggestionGroup(turn, [], true);
   const loading = document.createElement('div');
   loading.className = 'interview-questions-empty';
   loading.textContent = 'Thinking of useful follow-ups…';
-  interviewQuestionsList.append(loading);
+  items.append(loading);
   try {
     const transcript = transcriptContext.slice(-8)
       .map((item) => `${item.speaker === 'user' ? 'Candidate' : 'Interviewer'}: ${item.text}`)
@@ -158,61 +224,191 @@ async function renderInterviewQuestionSuggestions(turn, pipelineRevision) {
       transcript: `${transcript}\nCurrent interviewer question: ${turn.text}`
     });
     if (pipelineRevision !== interviewPipelineRevision) return;
-    interviewQuestionsList.replaceChildren();
     if (!suggestions.length) {
       loading.textContent = 'No follow-up suggestions yet.';
-      interviewQuestionsList.append(loading);
       return;
     }
-    for (const suggestion of suggestions) {
-      const item = document.createElement('div');
-      item.className = 'interview-question-suggestion';
-      item.textContent = suggestion;
-      interviewQuestionsList.append(item);
-    }
+    questionSuggestionGroup(turn, suggestions, true);
+    const savedTurn = transcriptContext.find((item) => item.id === turn.id);
+    if (savedTurn) { savedTurn.suggestedQuestions = suggestions; saveTranscriptContext(); }
   } catch {
     if (pipelineRevision !== interviewPipelineRevision) return;
     loading.textContent = 'Follow-up suggestions unavailable.';
   }
 }
 
+function answerCardFor(turnId, question, request, label) {
+  let card = [...transcriptFeed.querySelectorAll('.interview-answer')].find((item) => item.dataset.turnId === turnId);
+  if (card) {
+    card.querySelector('.interview-answer-question').textContent = question;
+    return card;
+  }
+  transcriptFeed.querySelector('.transcript-empty')?.remove();
+  card = document.createElement('section');
+  card.className = 'interview-answer';
+  card.dataset.turnId = turnId;
+  const header = document.createElement('div');
+  header.className = 'interview-answer-header';
+  const title = document.createElement('span');
+  title.textContent = 'Suggested answer';
+  const questionText = document.createElement('span');
+  questionText.className = 'interview-answer-question';
+  questionText.textContent = question;
+  const expand = document.createElement('button');
+  expand.className = 'expand-interview-answer';
+  expand.type = 'button';
+  expand.textContent = 'Expand answer';
+  expand.hidden = true;
+  expand.addEventListener('click', () => generateInterviewAnswer({ ...request, model: modelSelect.value }, label, turnId, 'detailed'));
+  const text = document.createElement('pre');
+  text.className = 'interview-answer-text';
+  header.append(title, questionText, expand);
+  card.append(header, text);
+  transcriptFeed.append(card);
+  return card;
+}
+
 function generateInterviewAnswer(request, label, turnId, verbosity = 'concise') {
   cancelInterviewAnswer?.();
   activeInterviewAnswerTurnId = turnId;
-  lastInterviewAnswerRequest = { request, label, turnId };
-  interviewAnswer.hidden = false;
-  interviewAnswerQuestion.textContent = request.question;
-  interviewAnswerText.textContent = '';
-  interviewAnswerText.classList.add('pending');
-  expandInterviewAnswer.hidden = true;
+  const card = answerCardFor(turnId, request.question, request, label);
+  const text = card.querySelector('.interview-answer-text');
+  const expand = card.querySelector('.expand-interview-answer');
+  text.textContent = '';
+  text.classList.add('pending');
+  expand.hidden = true;
+  // Bring the answer into view once, then leave scrolling under user control
+  // while the response continues streaming.
+  requestAnimationFrame(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  let rawAnswer = '';
+  const cleanAnswer = () => rawAnswer
+    .replace(/<\/?[a-z_][^>]*>/gi, '')
+    .replace(/<[a-z_][^>]*$/i, '')
+    .replace(/^\s*(question type|answer length|candidate profile|relevant references|recent dialogue|current interviewer question)\s*:\s*.*$/gim, '')
+    .trimStart();
   transcriptStatus.textContent = verbosity === 'detailed' ? `Expanding answer · ${label}` : `Answering · ${label}`;
   cancelInterviewAnswer = window.overlay.generateInterviewAnswer({ ...request, verbosity }, {
     onChunk(chunk) {
       if (activeInterviewAnswerTurnId !== turnId) return;
-      interviewAnswerText.textContent += chunk;
+      rawAnswer += chunk;
+      text.textContent = cleanAnswer();
     },
     onDone() {
       if (activeInterviewAnswerTurnId !== turnId) return;
       cancelInterviewAnswer = null;
-      interviewAnswerText.classList.remove('pending');
-      expandInterviewAnswer.hidden = verbosity === 'detailed';
+      text.classList.remove('pending');
+      expand.hidden = verbosity === 'detailed';
+      const turn = transcriptContext.find((item) => item.id === turnId);
+      if (turn) {
+        turn.answer = { text: text.textContent, verbosity, label };
+        saveTranscriptContext();
+      }
       transcriptStatus.textContent = `${verbosity === 'detailed' ? 'Expanded answer' : 'Answer'} ready · ${label}`;
     },
     onError(error) {
       if (activeInterviewAnswerTurnId !== turnId) return;
       cancelInterviewAnswer = null;
-      interviewAnswerText.classList.remove('pending');
-      interviewAnswerText.textContent = `Could not generate an answer: ${error}`;
+      text.classList.remove('pending');
+      text.textContent = `Could not generate an answer: ${error}`;
       transcriptStatus.textContent = 'Answer generation failed';
     }
   });
 }
 
-expandInterviewAnswer.addEventListener('click', () => {
-  if (!lastInterviewAnswerRequest) return;
-  const { request, label, turnId } = lastInterviewAnswerRequest;
-  generateInterviewAnswer(request, label, turnId, 'detailed');
-});
+async function answerTranscriptTurnManually(bubble, textElement, button) {
+  const question = textElement.textContent.trim();
+  if (!question || button.disabled) return;
+  const selectedModel = modelSelect.selectedOptions[0];
+  if (!modelSelect.value || selectedModel?.dataset.installed !== 'true') {
+    transcriptStatus.textContent = 'Download and select a local model before requesting an answer.';
+    return;
+  }
+  button.disabled = true;
+  button.textContent = '…';
+  button.title = 'Preparing answer…';
+  const pipelineRevision = ++interviewPipelineRevision;
+  let turn = transcriptContext.find((item) => item.id === bubble.dataset.turnId);
+  if (!turn) {
+    turn = { id: `manual-${Date.now()}-${Math.random().toString(16).slice(2)}`, speaker: 'computer', text: question, final: true, reason: 'manual-answer' };
+    transcriptContext.push(turn);
+    bubble.dataset.turnId = turn.id;
+  }
+  try {
+    transcriptStatus.textContent = 'Finding context for manual answer…';
+    let detection = turn.detection;
+    if (!detection) {
+      detection = await window.overlay.detectInterviewQuestion({
+        model: modelSelect.value,
+        turn: { ...turn, text: question },
+        recentTurns: transcriptContext.slice(-6)
+      }).catch(() => ({ type: 'general' }));
+      turn.detection = detection;
+    }
+    const type = detection?.type || 'general';
+    const retrievedContext = await window.overlay.retrieveInterviewContext({
+      question,
+      context: contextState,
+      recentTurns: transcriptContext.slice(-8)
+    });
+    if (pipelineRevision !== interviewPipelineRevision) return;
+    turn.text = question;
+    turn.retrievedContext = retrievedContext;
+    saveTranscriptContext();
+    generateInterviewAnswer({ model: modelSelect.value, question, type, retrievedContext }, type.replace('_', ' '), turn.id);
+    button.textContent = '↻';
+    button.title = 'Generate this answer again';
+  } catch (error) {
+    transcriptStatus.textContent = `Could not prepare answer: ${error.message}`;
+    button.textContent = '↗';
+    button.title = 'Answer this manually';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function addManualAnswerButton(bubble, textElement, turnId = '') {
+  if (!bubble.classList.contains('computer')) return;
+  if (turnId) bubble.dataset.turnId = turnId;
+  let button = bubble.querySelector('.caption-answer-button');
+  if (button) return button;
+  button = document.createElement('button');
+  button.className = 'caption-answer-button';
+  button.type = 'button';
+  button.textContent = '↗';
+  button.title = 'Answer this manually';
+  button.setAttribute('aria-label', 'Generate an answer for this interviewer message');
+  button.addEventListener('click', () => answerTranscriptTurnManually(bubble, textElement, button));
+  bubble.append(button);
+  return button;
+}
+
+function appendStoredTurn(turn) {
+  const bubble = document.createElement('div');
+  bubble.className = `caption ${turn.speaker === 'user' ? 'user' : 'computer'}`;
+  const label = document.createElement('span');
+  label.className = 'caption-label';
+  label.textContent = turn.speaker === 'user' ? 'You' : 'Computer';
+  const text = document.createElement('span');
+  text.textContent = turn.text;
+  bubble.append(label, text);
+  addManualAnswerButton(bubble, text, turn.id);
+  transcriptFeed.append(bubble);
+  if (turn.answer?.text) {
+    const request = { model: modelSelect.value, question: turn.text, type: turn.detection?.type || 'general', retrievedContext: turn.retrievedContext || {} };
+    const card = answerCardFor(turn.id, turn.text, request, turn.answer.label || 'general');
+    card.querySelector('.interview-answer-text').textContent = turn.answer.text;
+    card.querySelector('.expand-interview-answer').hidden = turn.answer.verbosity === 'detailed';
+  }
+  if (Array.isArray(turn.suggestedQuestions) && turn.suggestedQuestions.length) {
+    questionSuggestionGroup(turn, turn.suggestedQuestions, false);
+  }
+}
+
+function renderStoredTranscript() {
+  if (!transcriptContext.length) return;
+  transcriptFeed.replaceChildren();
+  for (const turn of transcriptContext) appendStoredTurn(turn);
+}
 
 function render() {
   messagesElement.replaceChildren();
@@ -246,7 +442,7 @@ async function refreshModels() {
     for (const item of models) {
       const option = document.createElement('option');
       option.value = item.name;
-      option.textContent = `${item.name} · ${formatBytes(item.size)}`;
+      option.textContent = `${item.displayName || item.name} · ${formatBytes(item.size)}`;
       option.dataset.installed = 'true';
       installedGroup.append(option);
     }
@@ -258,7 +454,7 @@ async function refreshModels() {
       for (const item of available) {
         const option = document.createElement('option');
         option.value = item.name;
-        option.textContent = `${item.name} · ${formatBytes(item.size)} · Download`;
+        option.textContent = `${item.label || item.name} · ${item.description} · ${formatBytes(item.size)}`;
         option.dataset.installed = 'false';
         availableGroup.append(option);
       }
@@ -266,16 +462,16 @@ async function refreshModels() {
     }
     const previous = localStorage.getItem('local-ai-model');
     if (previous && models.some((item) => item.name === previous)) modelSelect.value = previous;
-    if (!models.length) setStatus('No models installed — run: ollama pull llama3.2', true);
-    else setStatus('Ollama connected · local only');
+    if (!models.length) setStatus('Download the local model to get started');
+    else setStatus('Local AI ready · offline');
     updateModelSelection();
   } catch {
     modelSelect.replaceChildren();
     const option = document.createElement('option');
-    option.textContent = 'Ollama unavailable';
+    option.textContent = 'Local AI unavailable';
     modelSelect.append(option);
     send.disabled = true;
-    setStatus('Start Ollama, then reopen this app', true);
+    setStatus('The bundled local AI runtime could not be loaded', true);
   }
 }
 
@@ -296,8 +492,8 @@ function updateModelSelection() {
   }
   const info = recommendedModels.find((item) => item.name === modelSelect.value);
   modelDownload.hidden = false;
-  downloadTitle.textContent = modelSelect.value;
-  downloadDetail.textContent = `${formatBytes(info?.size)}${info?.vision ? ' · Supports images' : ' · Text only'}`;
+  downloadTitle.textContent = info?.label || modelSelect.value;
+  downloadDetail.textContent = `${info?.description ? `${info.description} · ` : ''}${formatBytes(info?.size)}${info?.vision ? ' · Supports images' : ' · Text only'}`;
   downloadProgress.style.width = '0%';
   downloadModel.disabled = Boolean(downloadingModel);
   downloadModel.textContent = downloadingModel ? 'Downloading…' : 'Download';
@@ -310,7 +506,7 @@ function finishGeneration(error) {
   send.textContent = 'Send';
   saveMessages();
   render();
-  setStatus(error || 'Ollama connected · local only', Boolean(error));
+  setStatus(error || 'Local AI ready · offline', Boolean(error));
 }
 
 form.addEventListener('submit', (event) => {
@@ -380,35 +576,56 @@ downloadModel.addEventListener('click', () => {
     }
   });
 });
-newChat.addEventListener('click', () => {
+newChat.addEventListener('click', async () => {
   cancelGeneration?.();
   cancelGeneration = null;
   messages = [];
   saveMessages();
   send.textContent = 'Send';
   render();
+  resetTranscriptHistory();
+  contextState = { text: '', files: [] };
+  contextUploadErrors = [];
+  contextInput.value = '';
+  renderContextFiles();
+  contextSaveStatus.textContent = 'Clearing…';
+  try {
+    await window.overlay.saveContext(contextState);
+    contextSaveStatus.textContent = 'Saved locally';
+  } catch {
+    contextSaveStatus.textContent = 'Could not clear context';
+  }
+  prompt.value = '';
+  promptSuggestions.replaceChildren();
+  setView('transcript');
+  transcriptStatus.textContent = transcriptionRunning ? 'Listening · new session' : 'New session ready';
 });
 
 function setView(view) {
   const notesOpen = view === 'notes';
   const contextOpen = view === 'context';
   const transcriptOpen = view === 'transcript';
-  messagesElement.hidden = notesOpen || contextOpen || transcriptOpen;
+  const settingsOpen = view === 'settings';
+  messagesElement.hidden = notesOpen || contextOpen || transcriptOpen || settingsOpen;
   notesView.hidden = !notesOpen;
   contextView.hidden = !contextOpen;
   transcriptView.hidden = !transcriptOpen;
-  form.hidden = notesOpen || contextOpen || transcriptOpen;
-  promptSuggestions.hidden = notesOpen || contextOpen || transcriptOpen;
-  modelSelect.hidden = notesOpen || contextOpen || transcriptOpen;
-  newChat.hidden = notesOpen || contextOpen || transcriptOpen;
-  if (notesOpen || contextOpen || transcriptOpen) modelDownload.hidden = true;
+  settingsView.hidden = !settingsOpen;
+  form.hidden = notesOpen || contextOpen || transcriptOpen || settingsOpen;
+  promptSuggestions.hidden = notesOpen || contextOpen || transcriptOpen || settingsOpen;
+  modelSelect.hidden = notesOpen || contextOpen || transcriptOpen || settingsOpen;
+  newChat.hidden = settingsOpen;
+  if (notesOpen || contextOpen || transcriptOpen || settingsOpen) modelDownload.hidden = true;
   else updateModelSelection();
   showChat.classList.toggle('active', !notesOpen && !contextOpen && !transcriptOpen);
   showNotes.classList.toggle('active', notesOpen);
   showContext.classList.toggle('active', contextOpen);
   showTranscript.classList.toggle('active', transcriptOpen);
-  viewTitle.textContent = notesOpen ? 'Notepad' : contextOpen ? 'Context' : transcriptOpen ? 'Live transcription' : 'Local AI';
-  status.textContent = notesOpen || contextOpen ? 'Stored only on this computer' : transcriptOpen ? 'On-device speech recognition' : 'Ollama connected · local only';
+  showAccount.classList.toggle('active', settingsOpen);
+  panel.classList.toggle('settings-mode', settingsOpen);
+  interviewQuestions.hidden = settingsOpen;
+  viewTitle.textContent = settingsOpen ? 'Settings' : notesOpen ? 'Notepad' : contextOpen ? 'Context' : transcriptOpen ? 'Live transcription' : 'Local AI';
+  status.textContent = settingsOpen ? 'Appearance is saved locally' : notesOpen || contextOpen ? 'Stored only on this computer' : transcriptOpen ? 'On-device speech recognition' : 'Local AI ready · offline';
   if (notesOpen) notepad.focus();
   if (contextOpen) contextInput.focus();
   else if (!notesOpen) renderPromptSuggestions();
@@ -418,6 +635,30 @@ showChat.addEventListener('click', () => setView('chat'));
 showNotes.addEventListener('click', () => setView('notes'));
 showContext.addEventListener('click', () => setView('context'));
 showTranscript.addEventListener('click', () => setView('transcript'));
+showAccount.addEventListener('click', (event) => {
+  event.stopPropagation();
+  const open = accountMenu.hidden;
+  accountMenu.hidden = !open;
+  showAccount.setAttribute('aria-expanded', String(open));
+});
+accountMenu.addEventListener('click', (event) => event.stopPropagation());
+openSettings.addEventListener('click', () => {
+  accountMenu.hidden = true;
+  showAccount.setAttribute('aria-expanded', 'false');
+  setView('settings');
+});
+document.addEventListener('click', () => {
+  accountMenu.hidden = true;
+  showAccount.setAttribute('aria-expanded', 'false');
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    accountMenu.hidden = true;
+    showAccount.setAttribute('aria-expanded', 'false');
+  }
+});
+appOpacity.addEventListener('input', () => applyAppearance({ app: Number(appOpacity.value), text: Number(textOpacity.value) }));
+textOpacity.addEventListener('input', () => applyAppearance({ app: Number(appOpacity.value), text: Number(textOpacity.value) }));
 
 function updateAudioSourceButtons() {
   toggleMicrophone.setAttribute('aria-pressed', String(transcriptionSources.microphone));
@@ -600,16 +841,12 @@ toggleTranscription.addEventListener('click', async () => {
   finally { toggleTranscription.disabled = false; }
 });
 
-clearTranscript.addEventListener('click', () => {
+function resetTranscriptHistory() {
   interviewPipelineRevision += 1;
   cancelInterviewAnswer?.();
   cancelInterviewAnswer = null;
   activeInterviewAnswerTurnId = null;
-  lastInterviewAnswerRequest = null;
-  interviewAnswer.hidden = true;
-  interviewAnswerQuestion.textContent = '';
-  interviewAnswerText.textContent = '';
-  expandInterviewAnswer.hidden = true;
+  lastInterviewQuestion = null;
   interviewQuestionsList.replaceChildren();
   const questionsEmpty = document.createElement('div');
   questionsEmpty.className = 'interview-questions-empty';
@@ -625,7 +862,9 @@ clearTranscript.addEventListener('click', () => {
   empty.className = 'transcript-empty';
   empty.textContent = transcriptionRunning ? 'Listening…' : 'Start listening for live local captions.';
   transcriptFeed.append(empty);
-});
+}
+
+clearTranscript.addEventListener('click', resetTranscriptHistory);
 
 const CAPTION_PAUSE_MS = 4000;
 let lastCaption = null;
@@ -648,22 +887,31 @@ function mergeCaptionText(previous, incoming) {
   return `${left} ${rightWords.slice(overlap).join(' ')}`.trim();
 }
 
+function isRepeatedQuestion(previous, incoming) {
+  const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const left = normalize(previous);
+  const right = normalize(incoming);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const shorter = left.length <= right.length ? left : right;
+  const longer = left.length > right.length ? left : right;
+  return shorter.length >= longer.length * 0.8 && longer.includes(shorter);
+}
+
 window.overlay.onTranscription((event) => {
   if (event.type === 'status' || event.type === 'ready' || event.type === 'warning' || event.type === 'error') {
     transcriptStatus.textContent = event.text;
   }
   if (event.type === 'interview-turn') {
     transcriptContext.push(event.turn);
+    if (lastCaption?.speaker === event.turn.speaker && lastCaption.bubble.isConnected) {
+      addManualAnswerButton(lastCaption.bubble, lastCaption.text, event.turn.id);
+    }
     saveTranscriptContext();
     renderPromptSuggestions();
     if (event.turn.speaker === 'computer') {
       const turn = event.turn;
       const pipelineRevision = ++interviewPipelineRevision;
-      interviewQuestionsList.replaceChildren();
-      const detecting = document.createElement('div');
-      detecting.className = 'interview-questions-empty';
-      detecting.textContent = 'Checking for a question…';
-      interviewQuestionsList.append(detecting);
       transcriptStatus.textContent = 'Understanding interviewer…';
       window.overlay.detectInterviewQuestion({
         model: modelSelect.value,
@@ -677,31 +925,45 @@ window.overlay.onTranscription((event) => {
         saveTranscriptContext();
         if (detection.isQuestion) {
           const label = detection.type.replace('_', ' ');
+          const now = Date.now();
+          // Only collapse near-identical Whisper repeats. A distinct follow-up
+          // must get its own answer even when microphone speech is unavailable.
+          const duplicate = lastInterviewQuestion && now - lastInterviewQuestion.at < 8_000 &&
+            isRepeatedQuestion(lastInterviewQuestion.text, turn.text);
+          const answerTurnId = duplicate ? lastInterviewQuestion.turnId : turn.id;
+          const answerQuestion = duplicate ? mergeCaptionText(lastInterviewQuestion.text, turn.text) : turn.text;
+          lastInterviewQuestion = { turnId: answerTurnId, text: answerQuestion, at: now };
           cancelInterviewAnswer?.();
           cancelInterviewAnswer = null;
-          activeInterviewAnswerTurnId = turn.id;
-          renderInterviewQuestionSuggestions(turn, pipelineRevision);
+          activeInterviewAnswerTurnId = answerTurnId;
+          const suggestionTurn = transcriptContext.find((item) => item.id === answerTurnId) || turn;
+          suggestionTurn.text = answerQuestion;
+          renderInterviewQuestionSuggestions(suggestionTurn, pipelineRevision);
           transcriptStatus.textContent = `Question detected · finding ${label} context…`;
           const retrievedContext = await window.overlay.retrieveInterviewContext({
-            question: turn.text,
+            question: answerQuestion,
             context: contextState,
             recentTurns: transcriptContext.slice(-8)
           });
           if (pipelineRevision !== interviewPipelineRevision) return;
-          const currentTurn = transcriptContext.find((item) => item.id === turn.id);
+          const currentTurn = transcriptContext.find((item) => item.id === answerTurnId);
           if (!currentTurn) return;
+          currentTurn.text = answerQuestion;
           currentTurn.retrievedContext = retrievedContext;
           saveTranscriptContext();
           generateInterviewAnswer({
             model: modelSelect.value,
-            question: turn.text,
+            question: answerQuestion,
             type: detection.type,
             retrievedContext
-          }, label, turn.id);
+          }, label, answerTurnId);
         } else {
           transcriptStatus.textContent = 'Listening · no question detected';
         }
       }).catch(() => { transcriptStatus.textContent = 'Listening · question detection unavailable'; });
+    } else {
+      // Candidate speech closes the current compound interviewer question.
+      lastInterviewQuestion = null;
     }
     return;
   }
@@ -724,6 +986,7 @@ window.overlay.onTranscription((event) => {
   const text = document.createElement('span');
   text.textContent = event.text;
   bubble.append(label, text);
+  addManualAnswerButton(bubble, text);
   transcriptFeed.append(bubble);
   lastCaption = { speaker: event.speaker, capturedAt, bubble, text };
   transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
@@ -840,7 +1103,9 @@ window.addEventListener('beforeunload', () => {
 });
 
 render();
+renderStoredTranscript();
 refreshModels();
+window.overlay.getUserName().then((name) => { accountName.textContent = name || 'Local User'; }).catch(() => {});
 window.overlay.loadNotes().then((content) => { notepad.value = content; }).catch(() => { notesStatus.textContent = 'Could not load notes'; });
 window.overlay.loadContext().then((value) => {
   if (!contextDirty) contextState = value && Array.isArray(value.files) ? value : { text: '', files: [] };

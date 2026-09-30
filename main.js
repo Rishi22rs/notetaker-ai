@@ -1,7 +1,8 @@
 const path = require('node:path');
+const os = require('node:os');
 const fs = require('node:fs/promises');
 const { app, BrowserWindow, globalShortcut, screen, dialog, ipcMain, desktopCapturer } = require('electron');
-const ollama = require('./ollama');
+const { createLocalAI } = require('./local-ai');
 const { buildContextMessages } = require('./context-prompt');
 const { createInterviewSession } = require('./interview-session');
 const { detectQuestion } = require('./question-detector');
@@ -12,6 +13,7 @@ let win;
 let dragTimer;
 let transcription;
 let interviewSession;
+let localAI;
 const nativeAudio = process.platform === 'darwin' ? require('./native-system-audio')((bytes) => transcription?.audio('computer', bytes)) : null;
 let browseMode = false;
 const activeChats = new Map();
@@ -120,8 +122,8 @@ async function createWindow() {
     throw new Error('Could not register the interaction shortcut. Free Command/Ctrl+Shift+I and retry.');
   }
   const area = screen.getPrimaryDisplay().workArea;
-  const width = Math.min(780, area.width);
-  const height = Math.min(640, area.height);
+  const width = Math.min(area.width, Math.max(620, Math.round(area.width * 0.65)));
+  const height = Math.min(area.height, Math.max(400, Math.round(area.height * 0.65)));
   win = new BrowserWindow({
     width,
     height,
@@ -206,7 +208,11 @@ async function createWindow() {
   win.show();
 }
 
-ipcMain.handle('ollama:models', () => ollama.listModels());
+ipcMain.handle('local-ai:models', () => localAI.listModels());
+ipcMain.handle('profile:name', () => {
+  try { return os.userInfo().username || 'Local User'; }
+  catch { return 'Local User'; }
+});
 ipcMain.on('permissions:complete', () => {
   browseMode = false;
   setInteractive(win, false);
@@ -227,7 +233,7 @@ ipcMain.on('transcription:clear', () => interviewSession?.clear());
 ipcMain.on('transcription:audio', (_event, { speaker, audio }) => {
   if (['user', 'computer'].includes(speaker) && audio instanceof Uint8Array) transcription?.audio(speaker, audio);
 });
-ipcMain.handle('ollama:suggestions', async (_event, request) => {
+ipcMain.handle('local-ai:suggestions', async (_event, request) => {
   const model = String(request?.model || '').slice(0, 200);
   const draft = String(request?.draft || '').trim().slice(0, 500);
   const transcript = String(request?.transcript || '').trim().slice(-20_000);
@@ -240,7 +246,7 @@ ipcMain.handle('ollama:suggestions', async (_event, request) => {
     })) : []
   };
   if (!model || (!draft && !transcript)) return [];
-  return ollama.suggest({ model, draft, context, transcript });
+  return localAI.suggest({ model, draft, context, transcript });
 });
 ipcMain.handle('interview:detect-question', async (_event, request) => {
   const model = String(request?.model || '').slice(0, 200);
@@ -256,7 +262,7 @@ ipcMain.handle('interview:detect-question', async (_event, request) => {
   return detectQuestion({
     turn,
     recentTurns,
-    classify: model ? (input) => ollama.classifyInterviewTurn({ model, ...input }) : undefined
+    classify: model ? (input) => localAI.classifyInterviewTurn({ model, ...input }) : undefined
   });
 });
 ipcMain.handle('interview:retrieve-context', (_event, request) => {
@@ -284,6 +290,9 @@ ipcMain.on('interview:answer', (event, request) => {
   if (!id || !model) return;
   const retrievedContext = {
     profile: String(request?.retrievedContext?.profile || '').slice(0, 4000),
+    contextLanguages: Array.isArray(request?.retrievedContext?.contextLanguages)
+      ? request.retrievedContext.contextLanguages.slice(0, 5).map((language) => String(language).slice(0, 40))
+      : [],
     chunks: Array.isArray(request?.retrievedContext?.chunks) ? request.retrievedContext.chunks.slice(0, 6).map((chunk) => ({
       source: String(chunk?.source || 'Reference').slice(0, 240),
       text: String(chunk?.text || '').slice(0, 5000)
@@ -310,7 +319,7 @@ ipcMain.on('interview:answer', (event, request) => {
     activeInterviewAnswers.delete(id);
     send(channel, value);
   };
-  const cancel = ollama.chat({
+  const cancel = localAI.chat({
     model,
     messages,
     onChunk: (content) => send('interview:answer-chunk', { content }),
@@ -323,17 +332,17 @@ ipcMain.on('interview:cancel-answer', (_event, id) => {
   activeInterviewAnswers.get(id)?.();
   activeInterviewAnswers.delete(id);
 });
-ipcMain.on('ollama:pull', (event, request) => {
+ipcMain.on('local-ai:download', (event, request) => {
   const id = String(request?.id || '');
   const model = String(request?.model || '');
   if (!id || !/^[a-zA-Z0-9._/-]+(?::[a-zA-Z0-9._-]+)?$/.test(model)) return;
   activePulls.get(id)?.();
   const send = (channel, value = {}) => { if (!event.sender.isDestroyed()) event.sender.send(channel, { id, ...value }); };
-  const cancel = ollama.pullModel({
+  const cancel = localAI.pullModel({
     model,
-    onProgress: (progress) => send('ollama:pull-progress', progress),
-    onDone: () => { activePulls.delete(id); send('ollama:pull-done'); },
-    onError: (error) => { activePulls.delete(id); send('ollama:pull-error', { message: error.message }); }
+    onProgress: (progress) => send('local-ai:download-progress', progress),
+    onDone: () => { activePulls.delete(id); send('local-ai:download-done'); },
+    onError: (error) => { activePulls.delete(id); send('local-ai:download-error', { message: error.message }); }
   });
   activePulls.set(id, cancel);
 });
@@ -400,7 +409,7 @@ ipcMain.handle('context:pick-files', async () => {
   }
   return extracted;
 });
-ipcMain.on('ollama:chat', (event, request) => {
+ipcMain.on('local-ai:chat', (event, request) => {
   const { id, model, messages, context } = request || {};
   if (typeof id !== 'string' || typeof model !== 'string' || !Array.isArray(messages)) return;
   const safeMessages = messages.slice(-80).map(({ role, content, images }) => ({
@@ -428,20 +437,28 @@ ipcMain.on('ollama:chat', (event, request) => {
     activeChats.delete(id);
     send(channel, value);
   };
-  const cancel = ollama.chat({
+  const cancel = localAI.chat({
     model, messages: contextualMessages,
-    onChunk: (content) => send('ollama:chunk', { content }),
-    onDone: () => finish('ollama:done'),
-    onError: (error) => finish('ollama:error', { message: error.message })
+    onChunk: (content) => send('local-ai:chunk', { content }),
+    onDone: () => finish('local-ai:done'),
+    onError: (error) => finish('local-ai:error', { message: error.message })
   });
   activeChats.set(id, cancel);
 });
-ipcMain.on('ollama:cancel', (_event, id) => {
+ipcMain.on('local-ai:cancel', (_event, id) => {
   activeChats.get(id)?.();
   activeChats.delete(id);
 });
 
-app.whenReady().then(createWindow).catch((error) => {
+app.whenReady().then(() => {
+  localAI = createLocalAI({
+    userDataPath: app.getPath('userData'),
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+    isPackaged: app.isPackaged
+  });
+  return createWindow();
+}).catch((error) => {
   dialog.showErrorBox('Privacy Overlay Demo', error.message);
   app.quit();
 });
@@ -451,6 +468,7 @@ app.on('will-quit', () => {
   nativeAudio?.stop();
   transcription?.dispose();
   interviewSession?.dispose();
+  localAI?.stop();
   for (const cancel of activeChats.values()) cancel();
   for (const cancel of activeInterviewAnswers.values()) cancel();
   for (const cancel of activePulls.values()) cancel();

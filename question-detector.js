@@ -1,11 +1,13 @@
 const QUESTION_START = /^(what|why|how|when|where|who|which|whose|can|could|would|should|is|are|am|do|does|did|will|may|was|were|has|have|had)\b/i;
-const INTERVIEW_COMMAND = /^(please\s+)?(explain|describe|discuss|compare|define|design|implement|code|solve|outline|demonstrate|tell me|talk (?:to me )?about|walk me through|give me (?:an example|a summary|your thoughts)|share (?:an example|a time))\b/i;
+const INTERVIEW_COMMAND = /^(please\s+)?(explain|describe|discuss|compare|define|design|implement|code|solve|outline|demonstrate|tell me|talk (?:to me )?about|walk me through|give me (?:an example|a summary|your thoughts|(?:the |a )?(?:code|solution|implementation|function|method|program|algorithm|query))|write (?:the |a )?(?:code|solution|implementation|function|method|program|algorithm|query)|share (?:an example|a time))\b/i;
+const CONVERSATIONAL_QUESTION = /\b(can you|could you|would you|will you|tell me|walk me through|help me understand)\b|^(?:(?:okay|right)[, ]+)?(?:so\s+)?(what|why|how|when|where|who|which)\b/i;
+const EMBEDDED_QUESTION = /(?:^|[.!]\s+)(?:so\s+)?(?:what|why|how|when|where|who|which|can|could|would|should|is|are|do|does|did|will|has|have)\b/i;
 const NON_QUESTION = /^(hello|hi|hey|okay|ok|great|good|right|sure|thanks|thank you|welcome|nice to meet you|let(?:'s| us) (?:begin|start|move on))[.!]?$/i;
 
 function inferType(text) {
   if (/\b(tell me about a time|give me an example|conflict|challenge|failure|strength|weakness|leadership|team|stakeholder)\b/i.test(text)) return 'behavioral';
   if (/\b(system design|design (?:a|an|the)|scale|availability|distributed|database|cache|queue|load balanc|architecture)\b/i.test(text)) return 'system_design';
-  if (/\b(code|implement|algorithm|data structure|complexity|big[- ]?o|array|linked list|tree|graph|dynamic programming)\b/i.test(text)) return 'coding';
+  if (/\b(code|coding|implement|implementation|algorithm|data structure|complexity|big[- ]?o|array|linked list|tree|graph|dynamic programming|write (?:a |the )?(?:function|method|program|query)|debug|refactor|leetcode|hackerrank)\b/i.test(text)) return 'coding';
   if (/\b(resume|résumé|project|experience|background|previous role|current role)\b/i.test(text)) return 'resume';
   if (/^(why|can you elaborate|could you clarify|what about|and how|and why)\b/i.test(text)) return 'follow_up';
   if (/\b(api|javascript|typescript|python|java|react|node|sql|http|network|thread|process|memory|security|cloud)\b/i.test(text)) return 'technical';
@@ -19,6 +21,8 @@ function ruleDecision(value) {
   if (/[?]\s*$/.test(text)) return { decision: true, confidence: 0.99, type: inferType(text), reason: 'question-mark' };
   if (QUESTION_START.test(text)) return { decision: true, confidence: 0.96, type: inferType(text), reason: 'question-form' };
   if (INTERVIEW_COMMAND.test(text)) return { decision: true, confidence: 0.96, type: inferType(text), reason: 'interview-command' };
+  if (CONVERSATIONAL_QUESTION.test(text)) return { decision: true, confidence: 0.9, type: inferType(text), reason: 'conversational-question' };
+  if (EMBEDDED_QUESTION.test(text)) return { decision: true, confidence: 0.94, type: inferType(text), reason: 'embedded-question' };
   if (text.split(' ').length <= 2) return { decision: false, confidence: 0.9, type: 'general', reason: 'short-fragment' };
   return { decision: null, confidence: 0.5, type: inferType(text), reason: 'ambiguous' };
 }

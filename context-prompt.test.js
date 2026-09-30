@@ -31,3 +31,11 @@ test('context is supporting background rather than an answer restriction', () =>
   assert.match(result[0].content, /When the context does not contain the answer, answer normally/);
   assert.match(result[1].content, /What is the capital of Japan\?/);
 });
+
+test('coding requests require complete code even without saved context', () => {
+  const result = buildContextMessages([{ role: 'user', content: 'Implement binary search in Java' }]);
+  assert.equal(result[0].role, 'system');
+  assert.match(result[0].content, /complete runnable code/);
+  assert.match(result[0].content, /language explicitly requested/);
+  assert.equal(result[1].content, 'Implement binary search in Java');
+});
