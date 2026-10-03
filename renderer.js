@@ -66,7 +66,7 @@ let installedModels = new Map();
 let downloadingModel = null;
 let transcriptionRunning = false;
 let transcriptionCaptures = [];
-let transcriptionSources = { microphone: true, system: true };
+let transcriptionSources = { microphone: false, system: true };
 let permissionStreams = { computer: null, user: null };
 let cancelInterviewAnswer = null;
 let interviewPipelineRevision = 0;
@@ -355,12 +355,12 @@ async function answerTranscriptTurnManually(bubble, textElement, button) {
     turn.retrievedContext = retrievedContext;
     saveTranscriptContext();
     generateInterviewAnswer({ model: modelSelect.value, question, type, retrievedContext }, type.replace('_', ' '), turn.id);
-    button.textContent = '↻';
+    button.textContent = 'Answer anyway';
     button.title = 'Generate this answer again';
   } catch (error) {
     transcriptStatus.textContent = `Could not prepare answer: ${error.message}`;
-    button.textContent = '↗';
-    button.title = 'Answer this manually';
+    button.textContent = 'Answer anyway';
+    button.title = 'Answer this message anyway';
   } finally {
     button.disabled = false;
   }
@@ -374,9 +374,9 @@ function addManualAnswerButton(bubble, textElement, turnId = '') {
   button = document.createElement('button');
   button.className = 'caption-answer-button';
   button.type = 'button';
-  button.textContent = '↗';
-  button.title = 'Answer this manually';
-  button.setAttribute('aria-label', 'Generate an answer for this interviewer message');
+  button.textContent = 'Answer anyway';
+  button.title = 'Answer this message anyway';
+  button.setAttribute('aria-label', 'Answer this interviewer message anyway');
   button.addEventListener('click', () => answerTranscriptTurnManually(bubble, textElement, button));
   bubble.append(button);
   return button;
@@ -669,6 +669,9 @@ function updateAudioSourceButtons() {
 
 toggleMicrophone.addEventListener('click', () => {
   transcriptionSources.microphone = !transcriptionSources.microphone;
+  transcriptStatus.textContent = transcriptionSources.microphone
+    ? 'Microphone enabled · echo protection active'
+    : 'Microphone disabled';
   updateAudioSourceButtons();
 });
 
@@ -754,7 +757,7 @@ grantPermissions.addEventListener('click', async () => {
     }
     permissionStatus.textContent = 'Allow microphone access…';
     permissionStreams.user = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true }, video: false
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }, video: false
     });
     permissionStatus.textContent = 'Permissions allowed';
     permissionGate.hidden = true;

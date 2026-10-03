@@ -89,7 +89,8 @@ test('embedded browser modifier wheel scrolls the page without zooming', () => {
 test('computer transcript bubbles expose a manual answer fallback', () => {
   const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
   assert.match(rendererSource, /function addManualAnswerButton/);
-  assert.match(rendererSource, /Answer this manually/);
+  assert.match(rendererSource, /Answer anyway/);
+  assert.doesNotMatch(rendererSource, /button\.textContent = '[↗↻]'/);
   assert.match(rendererSource, /answerTranscriptTurnManually/);
   assert.match(rendererSource, /retrieveInterviewContext/);
   assert.match(rendererSource, /generateInterviewAnswer/);
@@ -112,4 +113,13 @@ test('account menu exposes locally persisted independent appearance controls', (
   assert.match(htmlSource, /\.interview-question-suggestion[^}]+var\(--app-opacity\)/s);
   assert.match(htmlSource, /#send[^}]+var\(--accent-bg\)/s);
   assert.match(htmlSource, /\.audio-toggle\[aria-pressed="true"\][^}]+var\(--accent-bg\)/s);
+});
+
+test('microphone can be enabled without a headphone check and keeps echo cancellation', () => {
+  const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const htmlSource = fs.readFileSync(require.resolve('./index.html'), 'utf8');
+  assert.match(rendererSource, /microphone: false/);
+  assert.doesNotMatch(rendererSource, /checkHeadphones|detectHeadphones|requestHeadphones|HEADPHONE_NAME/);
+  assert.doesNotMatch(htmlSource, /headphone-gate|Connect headphones first/);
+  assert.match(rendererSource, /echoCancellation: true/);
 });

@@ -47,3 +47,14 @@ test('coding answers always include complete code in the requested or contextual
   assert.match(messages[1].content, /Languages found in context files:\nTypeScript/);
   assert.match(messages[1].content, /search\.ts/);
 });
+
+test('coding wording overrides an incorrectly classified transcript type', () => {
+  const messages = buildInterviewAnswerMessages({
+    question: 'Shorted Shortest Pathcode in Java Script',
+    type: 'technical'
+  });
+  assert.match(messages[0].content, /APPROACH, CODE, COMPLEXITY, EDGE CASES/);
+  assert.match(messages[1].content, /Question type: coding/);
+  assert.match(messages[1].content, /Shortest Path code in JavaScript/);
+  assert.doesNotMatch(messages[0].content, /DIRECT ANSWER, TALKING POINTS/);
+});

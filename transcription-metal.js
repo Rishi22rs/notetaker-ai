@@ -3,6 +3,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const net = require('node:net');
 const { app } = require('electron');
+const { isLikelyAcousticEcho } = require('./audio-echo-filter');
 
 function wavFromFloat32(samples) {
   const pcm = Buffer.alloc(samples.length * 2);
@@ -68,6 +69,7 @@ module.exports = function createMetalTranscription(publish) {
   let backendName = 'Whisper Metal (tiny.en)';
   let queue = Promise.resolve();
   const lastText = new Map();
+  const computerAudioHistory = [];
 
   async function waitUntilReady(id, useGpu) {
     for (let attempt = 0; attempt < 150 && running && id === launchId; attempt += 1) {
@@ -178,6 +180,16 @@ module.exports = function createMetalTranscription(publish) {
 
   function audio(speaker, bytes) {
     const capturedAt = Date.now();
+    const raw = Buffer.from(bytes);
+    const samples = new Float32Array(raw.buffer, raw.byteOffset, Math.floor(raw.byteLength / 4));
+    if (speaker === 'computer') {
+      computerAudioHistory.push({ capturedAt, samples: new Float32Array(samples) });
+      while (computerAudioHistory[0]?.capturedAt < capturedAt - 8_000) computerAudioHistory.shift();
+    } else if (speaker === 'user') {
+      const isEcho = computerAudioHistory.some((item) =>
+        Math.abs(capturedAt - item.capturedAt) <= 5_000 && isLikelyAcousticEcho(samples, item.samples));
+      if (isEcho) return;
+    }
     queue = queue.then(() => transcribe(speaker, bytes, capturedAt));
   }
 
@@ -185,6 +197,7 @@ module.exports = function createMetalTranscription(publish) {
     running = false; ready = false;
     launchId += 1;
     child?.kill(); child = null;
+    computerAudioHistory.length = 0;
     publish({ type: 'status', text: 'Stopped' });
   }
 

@@ -24,14 +24,38 @@ test('detects imperative requests for code as coding questions', () => {
   const requests = [
     'Give me a code for shortest path using dynamic programming.',
     'Give me the implementation of binary search.',
-    'Write a function to reverse a linked list.'
+    'Write a function to reverse a linked list.',
+    'Write me a simple magic number code. for me in JavaScript.',
+    'Can you please create some code for this in TypeScript?',
+    'Show me the solution as a Python program.'
   ];
   for (const text of requests) {
     const result = ruleDecision(text);
     assert.equal(result.decision, true, text);
     assert.equal(result.type, 'coding', text);
-    assert.equal(result.reason, 'interview-command', text);
+    assert.match(result.reason, /^(coding-request|interview-command|question-mark)$/, text);
   }
+});
+
+test('exact transcribed magic number request triggers a coding answer without model classification', async () => {
+  let calls = 0;
+  const result = await detectQuestion({
+    turn: { speaker: 'computer', text: 'Write me a simple magic number code. for me in JavaScript.' },
+    classify: async () => { calls += 1; }
+  });
+  assert.equal(result.isQuestion, true);
+  assert.equal(result.type, 'coding');
+  assert.equal(result.reason, 'coding-request');
+  assert.equal(calls, 0);
+});
+
+test('repairs fused code words and detects terse algorithm requests', async () => {
+  const result = await detectQuestion({
+    turn: { speaker: 'computer', text: 'Shorted Shortest Pathcode in Java Script' }
+  });
+  assert.equal(result.isQuestion, true);
+  assert.equal(result.type, 'coding');
+  assert.equal(result.reason, 'coding-request');
 });
 
 test('detects questions with conversational preambles without model latency', async () => {

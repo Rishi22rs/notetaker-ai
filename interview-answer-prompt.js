@@ -1,7 +1,9 @@
 const TYPES = new Set(['behavioral', 'coding', 'system_design', 'technical', 'resume', 'follow_up', 'general']);
+const { hasCodingIntent, normalizeRuleText } = require('./question-detector');
 
 function buildInterviewAnswerMessages({ question, type = 'general', retrievedContext = {}, verbosity = 'concise' } = {}) {
-  const safeType = TYPES.has(type) ? type : 'general';
+  const originalQuestion = String(question || '').trim().slice(0, 5000);
+  const safeType = hasCodingIntent(originalQuestion) ? 'coding' : (TYPES.has(type) ? type : 'general');
   const detailed = verbosity === 'detailed';
   const profile = String(retrievedContext.profile || '').trim().slice(0, 4000);
   const chunks = (Array.isArray(retrievedContext.chunks) ? retrievedContext.chunks : []).slice(0, 6)
@@ -50,7 +52,7 @@ function buildInterviewAnswerMessages({ question, type = 'general', retrievedCon
     '', 'Relevant references:', chunks || 'No relevant reference chunks found.',
     '', 'Languages found in context files:', contextLanguages || 'None detected.',
     '', 'Recent dialogue:', dialogue || 'No earlier dialogue.',
-    '', 'Current interviewer question:', String(question || '').trim().slice(0, 5000)
+    '', 'Current interviewer question:', normalizeRuleText(originalQuestion)
   ].join('\n');
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }

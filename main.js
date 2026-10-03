@@ -8,12 +8,14 @@ const { createInterviewSession } = require('./interview-session');
 const { detectQuestion } = require('./question-detector');
 const { retrieveInterviewContext } = require('./context-retriever');
 const { buildInterviewAnswerMessages } = require('./interview-answer-prompt');
+const { createAudioEchoFilter } = require('./audio-echo-filter');
 
 let win;
 let dragTimer;
 let transcription;
 let interviewSession;
 let localAI;
+let audioEchoFilter;
 const nativeAudio = process.platform === 'darwin' ? require('./native-system-audio')((bytes) => transcription?.audio('computer', bytes)) : null;
 let browseMode = false;
 const activeChats = new Map();
@@ -191,12 +193,14 @@ async function createWindow() {
 
   await win.loadFile(path.join(__dirname, 'index.html'));
   const transcriptionBackend = process.platform === 'darwin' ? './transcription-metal' : './transcription';
-  transcription = require(transcriptionBackend)((event) => {
+  const publishTranscriptionEvent = (event) => {
     // Shutdown can emit a final transcription status after the BrowserWindow's
     // closed handler has already set `win` to null.
     if (event.type === 'transcript') interviewSession?.ingest(event);
     if (win && !win.isDestroyed()) win.webContents.send('transcription:event', event);
-  });
+  };
+  audioEchoFilter = createAudioEchoFilter({ onEvent: publishTranscriptionEvent });
+  transcription = require(transcriptionBackend)((event) => audioEchoFilter.push(event));
   interviewSession = createInterviewSession({
     onTurn: (turn) => {
       if (win && !win.isDestroyed()) win.webContents.send('transcription:event', { type: 'interview-turn', turn });
@@ -469,6 +473,7 @@ app.on('will-quit', () => {
   transcription?.dispose();
   interviewSession?.dispose();
   localAI?.stop();
+  audioEchoFilter?.dispose();
   for (const cancel of activeChats.values()) cancel();
   for (const cancel of activeInterviewAnswers.values()) cancel();
   for (const cancel of activePulls.values()) cancel();
