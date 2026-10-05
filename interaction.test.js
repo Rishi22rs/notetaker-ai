@@ -105,6 +105,13 @@ test('account menu exposes locally persisted independent appearance controls', (
   assert.match(htmlSource, /class="logout"/);
   assert.match(htmlSource, /id="app-opacity"/);
   assert.match(htmlSource, /id="text-opacity"/);
+  assert.match(htmlSource, /<section class="settings-view"[\s\S]*id="model"[\s\S]*id="model-download"/);
+  assert.match(htmlSource, /id="settings-tab-appearance"/);
+  assert.match(htmlSource, /id="settings-tab-ai"/);
+  assert.match(rendererSource, /function setSettingsTab/);
+  const headerMarkup = htmlSource.match(/<header>[\s\S]*?<\/header>/)?.[0] || '';
+  assert.doesNotMatch(headerMarkup, /id="model"/);
+  assert.match(rendererSource, /modelSelect\.hidden = !settingsOpen/);
   assert.match(rendererSource, /local-ai-appearance-v1/);
   assert.match(rendererSource, /--app-opacity/);
   assert.match(rendererSource, /--text-opacity/);
@@ -113,6 +120,53 @@ test('account menu exposes locally persisted independent appearance controls', (
   assert.match(htmlSource, /\.interview-question-suggestion[^}]+var\(--app-opacity\)/s);
   assert.match(htmlSource, /#send[^}]+var\(--accent-bg\)/s);
   assert.match(htmlSource, /\.audio-toggle\[aria-pressed="true"\][^}]+var\(--accent-bg\)/s);
+});
+
+test('logout clears user workspace data before ending the session', () => {
+  const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  assert.match(rendererSource, /async function clearLocalUserWorkspace/);
+  assert.match(rendererSource, /localStorage\.removeItem\(STORAGE_KEY\)/);
+  assert.match(rendererSource, /resetTranscriptHistory\(\)/);
+  assert.match(rendererSource, /window\.overlay\.saveNotes\(''\)/);
+  assert.match(rendererSource, /window\.overlay\.saveContext\(contextState\)/);
+  assert.match(rendererSource, /await clearLocalUserWorkspace\(\);\s*applyAuthState\(await window\.overlay\.logout\(\)\)/s);
+});
+
+test('account popover opens a dedicated recharge and offers screen', () => {
+  const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const htmlSource = fs.readFileSync(require.resolve('./index.html'), 'utf8');
+  const serverSource = fs.readFileSync(require.resolve('./server/auth-server'), 'utf8');
+  assert.match(htmlSource, /id="coupon-form"/);
+  assert.match(htmlSource, /id="coupon-code"/);
+  assert.match(htmlSource, /id="open-offers"/);
+  assert.match(htmlSource, /id="offers-view"/);
+  assert.match(htmlSource, /\.offers-view \.coupon-row, \.offers-view \.recharge-row \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto;/);
+  assert.match(htmlSource, /\.offers-view #coupon-code, \.offers-view #recharge-plan \{ display: block; width: 100%; min-width: 0; height: 42px;/);
+  assert.match(htmlSource, /#composer \{ width: 100%;[\s\S]*grid-template-columns: minmax\(0, 1fr\) 62px;/);
+  assert.doesNotMatch(htmlSource, /\n    form \{ width: 100%;/);
+  assert.match(rendererSource, /openOffers\.addEventListener\('click'/);
+  assert.match(rendererSource, /setView\('offers'\)/);
+  assert.match(rendererSource, /loadPaymentPlans\(\);/);
+  assert.match(rendererSource, /Payment server is unavailable\. Start it, then reopen this screen\./);
+  assert.match(rendererSource, /function couponErrorMessage/);
+  assert.match(rendererSource, /This coupon has already been redeemed on your account\./);
+  assert.match(rendererSource, /couponStatus\.textContent = couponErrorMessage\(error\)/);
+  assert.match(rendererSource, /form\.hidden = notesOpen \|\| contextOpen \|\| transcriptOpen \|\| settingsOpen \|\| offersOpen/);
+  assert.match(htmlSource, /\.panel\.offers-mode #composer, \.panel\.offers-mode #prompt-suggestions \{ display: none !important; \}/);
+  assert.match(rendererSource, /window\.overlay\.redeemCoupon\(code\)/);
+  assert.match(serverSource, /url\.pathname === '\/coupons\/redeem'/);
+  assert.match(serverSource, /benefitType === 'free_seconds'/);
+  assert.match(serverSource, /benefitType === 'percent_off'/);
+});
+
+test('dedicated offers screen provides server-defined recharge plans and wallet balance', () => {
+  const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const htmlSource = fs.readFileSync(require.resolve('./index.html'), 'utf8');
+  assert.match(htmlSource, /id="wallet-balance"/);
+  assert.match(htmlSource, /id="recharge-plan"/);
+  assert.match(rendererSource, /window\.overlay\.getPaymentPlans\(\)/);
+  assert.match(rendererSource, /window\.overlay\.startRecharge\(rechargePlan\.value\)/);
+  assert.match(rendererSource, /result\.status === 'credited'/);
 });
 
 test('microphone can be enabled without a headphone check and keeps echo cancellation', () => {

@@ -5,6 +5,10 @@ const form = document.getElementById('composer');
 const prompt = document.getElementById('prompt');
 const send = document.getElementById('send');
 const newChat = document.getElementById('new-chat');
+const sessionToggle = document.getElementById('session-toggle');
+const sessionClock = document.getElementById('session-clock');
+const sessionBlocker = document.getElementById('session-blocker');
+const sessionBlockerMessage = document.getElementById('session-blocker-message');
 const showChat = document.getElementById('show-chat');
 const showNotes = document.getElementById('show-notes');
 const notesView = document.getElementById('notes-view');
@@ -40,8 +44,27 @@ const interviewQuestionsList = document.getElementById('interview-questions-list
 const showAccount = document.getElementById('show-account');
 const accountMenu = document.getElementById('account-menu');
 const accountName = document.getElementById('account-name');
+const loginGate = document.getElementById('login-gate');
+const googleLogin = document.getElementById('google-login');
+const loginStatus = document.getElementById('login-status');
+const logout = document.getElementById('logout');
+const couponForm = document.getElementById('coupon-form');
+const couponCode = document.getElementById('coupon-code');
+const couponSubmit = document.getElementById('coupon-submit');
+const couponStatus = document.getElementById('coupon-status');
+const walletBalance = document.getElementById('wallet-balance');
+const rechargeForm = document.getElementById('recharge-form');
+const rechargePlan = document.getElementById('recharge-plan');
+const rechargeSubmit = document.getElementById('recharge-submit');
+const paymentStatus = document.getElementById('payment-status');
 const openSettings = document.getElementById('open-settings');
+const openOffers = document.getElementById('open-offers');
 const settingsView = document.getElementById('settings-view');
+const offersView = document.getElementById('offers-view');
+const settingsAppearanceTab = document.getElementById('settings-tab-appearance');
+const settingsAiTab = document.getElementById('settings-tab-ai');
+const settingsAppearancePanel = document.getElementById('settings-appearance');
+const settingsAiPanel = document.getElementById('settings-ai');
 const appOpacity = document.getElementById('app-opacity');
 const appOpacityValue = document.getElementById('app-opacity-value');
 const textOpacity = document.getElementById('text-opacity');
@@ -65,6 +88,10 @@ let suggestionRevision = 0;
 let installedModels = new Map();
 let downloadingModel = null;
 let transcriptionRunning = false;
+let sessionActive = false;
+let availableUsageSeconds = 0;
+let usageClockStartedAt = 0;
+let usageClockTimer = null;
 let transcriptionCaptures = [];
 let transcriptionSources = { microphone: false, system: true };
 let permissionStreams = { computer: null, user: null };
@@ -484,14 +511,15 @@ function formatBytes(bytes) {
 function updateModelSelection() {
   const option = modelSelect.selectedOptions[0];
   const installed = option?.dataset.installed === 'true';
-  send.disabled = !installed || Boolean(downloadingModel);
+  const settingsOpen = !settingsView.hidden;
+  send.disabled = !installed || Boolean(downloadingModel) || !sessionActive;
   if (installed) {
     modelDownload.hidden = true;
     localStorage.setItem('local-ai-model', modelSelect.value);
     return;
   }
   const info = recommendedModels.find((item) => item.name === modelSelect.value);
-  modelDownload.hidden = false;
+  modelDownload.hidden = !settingsOpen;
   downloadTitle.textContent = info?.label || modelSelect.value;
   downloadDetail.textContent = `${info?.description ? `${info.description} · ` : ''}${formatBytes(info?.size)}${info?.vision ? ' · Supports images' : ' · Text only'}`;
   downloadProgress.style.width = '0%';
@@ -606,30 +634,97 @@ function setView(view) {
   const contextOpen = view === 'context';
   const transcriptOpen = view === 'transcript';
   const settingsOpen = view === 'settings';
-  messagesElement.hidden = notesOpen || contextOpen || transcriptOpen || settingsOpen;
+  const offersOpen = view === 'offers';
+  messagesElement.hidden = notesOpen || contextOpen || transcriptOpen || settingsOpen || offersOpen || !sessionActive;
   notesView.hidden = !notesOpen;
   contextView.hidden = !contextOpen;
   transcriptView.hidden = !transcriptOpen;
   settingsView.hidden = !settingsOpen;
-  form.hidden = notesOpen || contextOpen || transcriptOpen || settingsOpen;
-  promptSuggestions.hidden = notesOpen || contextOpen || transcriptOpen || settingsOpen;
-  modelSelect.hidden = notesOpen || contextOpen || transcriptOpen || settingsOpen;
-  newChat.hidden = settingsOpen;
-  if (notesOpen || contextOpen || transcriptOpen || settingsOpen) modelDownload.hidden = true;
-  else updateModelSelection();
+  offersView.hidden = !offersOpen;
+  form.hidden = notesOpen || contextOpen || transcriptOpen || settingsOpen || offersOpen || !sessionActive;
+  promptSuggestions.hidden = notesOpen || contextOpen || transcriptOpen || settingsOpen || offersOpen;
+  modelSelect.hidden = !settingsOpen;
+  newChat.hidden = settingsOpen || offersOpen;
+  sessionToggle.hidden = settingsOpen || offersOpen;
+  sessionClock.hidden = settingsOpen || offersOpen;
+  const blockedScreen = !sessionActive && (transcriptOpen || (!notesOpen && !contextOpen && !settingsOpen && !offersOpen));
+  sessionBlocker.hidden = !blockedScreen;
+  sessionBlockerMessage.textContent = transcriptOpen
+    ? 'Start your session to use live transcription.'
+    : 'Start your session to use Local AI.';
+  updateModelSelection();
   showChat.classList.toggle('active', !notesOpen && !contextOpen && !transcriptOpen);
   showNotes.classList.toggle('active', notesOpen);
   showContext.classList.toggle('active', contextOpen);
   showTranscript.classList.toggle('active', transcriptOpen);
-  showAccount.classList.toggle('active', settingsOpen);
-  panel.classList.toggle('settings-mode', settingsOpen);
-  interviewQuestions.hidden = settingsOpen;
-  viewTitle.textContent = settingsOpen ? 'Settings' : notesOpen ? 'Notepad' : contextOpen ? 'Context' : transcriptOpen ? 'Live transcription' : 'Local AI';
-  status.textContent = settingsOpen ? 'Appearance is saved locally' : notesOpen || contextOpen ? 'Stored only on this computer' : transcriptOpen ? 'On-device speech recognition' : 'Local AI ready · offline';
+  showAccount.classList.toggle('active', settingsOpen || offersOpen);
+  panel.classList.toggle('settings-mode', settingsOpen || offersOpen);
+  panel.classList.toggle('offers-mode', offersOpen);
+  interviewQuestions.hidden = settingsOpen || offersOpen;
+  viewTitle.textContent = settingsOpen ? 'Settings' : offersOpen ? 'Recharge & Offers' : notesOpen ? 'Notepad' : contextOpen ? 'Context' : transcriptOpen ? 'Live transcription' : 'Local AI';
+  status.textContent = settingsOpen ? 'Appearance is saved locally' : offersOpen ? 'Manage your local account usage' : notesOpen || contextOpen ? 'Stored only on this computer' : transcriptOpen ? 'On-device speech recognition' : 'Local AI ready · offline';
   if (notesOpen) notepad.focus();
   if (contextOpen) contextInput.focus();
   else if (!notesOpen) renderPromptSuggestions();
 }
+
+function setSettingsTab(tab) {
+  const aiOpen = tab === 'ai';
+  settingsAppearanceTab.setAttribute('aria-selected', String(!aiOpen));
+  settingsAiTab.setAttribute('aria-selected', String(aiOpen));
+  settingsAppearancePanel.hidden = aiOpen;
+  settingsAiPanel.hidden = !aiOpen;
+  updateModelSelection();
+}
+
+function updateUsageState(value = {}) {
+  sessionActive = Boolean(value.active);
+  if (Number.isFinite(Number(value.balanceSeconds))) availableUsageSeconds = Math.max(0, Math.floor(Number(value.balanceSeconds)));
+  usageClockStartedAt = sessionActive ? Date.now() : 0;
+  clearInterval(usageClockTimer);
+  usageClockTimer = null;
+  const renderUsageClock = () => {
+    const elapsed = sessionActive ? Math.floor((Date.now() - usageClockStartedAt) / 1000) : 0;
+    sessionClock.textContent = formatUsage(Math.max(0, availableUsageSeconds - elapsed));
+  };
+  renderUsageClock();
+  if (sessionActive) usageClockTimer = setInterval(renderUsageClock, 1000);
+  sessionToggle.textContent = sessionActive ? 'Pause' : 'Start';
+  sessionToggle.classList.toggle('running', sessionActive);
+  sessionToggle.classList.toggle('paused', !sessionActive);
+  sessionToggle.title = sessionActive ? 'Pause your timed session' : 'Start your timed session';
+  walletBalance.textContent = formatUsage(availableUsageSeconds);
+  updateModelSelection();
+  const view = !offersView.hidden ? 'offers' : !settingsView.hidden ? 'settings' : !notesView.hidden ? 'notes' : !contextView.hidden ? 'context' : !transcriptView.hidden ? 'transcript' : 'chat';
+  setView(view);
+}
+
+async function openRechargeOffers() {
+  setView('offers');
+  paymentStatus.className = '';
+  paymentStatus.textContent = 'Recharge to continue your session.';
+  await Promise.allSettled([loadPaymentPlans(), refreshWallet()]);
+}
+
+sessionToggle.addEventListener('click', async () => {
+  sessionToggle.disabled = true;
+  try {
+    if (sessionActive) {
+      if (transcriptionRunning) await stopLiveTranscription();
+      const wallet = await window.overlay.stopUsage();
+      updateUsageState({ active: false, ...wallet });
+    } else {
+      const session = await window.overlay.startUsage();
+      updateUsageState({ active: true, ...session });
+    }
+  } catch (error) {
+    updateUsageState({ active: false });
+    setStatus(error.message || 'Recharge to continue.', true);
+    await openRechargeOffers();
+  } finally { sessionToggle.disabled = false; }
+});
+
+document.querySelectorAll('.open-recharge').forEach((button) => button.addEventListener('click', openRechargeOffers));
 
 showChat.addEventListener('click', () => setView('chat'));
 showNotes.addEventListener('click', () => setView('notes'));
@@ -642,11 +737,183 @@ showAccount.addEventListener('click', (event) => {
   showAccount.setAttribute('aria-expanded', String(open));
 });
 accountMenu.addEventListener('click', (event) => event.stopPropagation());
+function formatUsage(seconds) {
+  const whole = Math.max(0, Math.floor(Number(seconds) || 0));
+  const minutes = Math.floor(whole / 60);
+  const remainder = whole % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes} minutes`;
+}
+
+async function refreshWallet() {
+  try {
+    const wallet = await window.overlay.getWallet();
+    availableUsageSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0));
+    walletBalance.textContent = formatUsage(availableUsageSeconds);
+    return wallet;
+  } catch { walletBalance.textContent = 'Unavailable'; }
+}
+
+async function loadPaymentPlans() {
+  try {
+    const result = await window.overlay.getPaymentPlans();
+    rechargePlan.replaceChildren(...result.plans.map((plan) => {
+      const option = document.createElement('option');
+      option.value = plan.id;
+      option.textContent = `${formatUsage(plan.durationSeconds)} · ₹${(plan.amountPaise / 100).toFixed(0)}`;
+      return option;
+    }));
+    rechargeSubmit.disabled = !result.configured;
+    if (!result.configured) paymentStatus.textContent = 'Payment setup pending';
+  } catch (error) {
+    rechargeSubmit.disabled = true;
+    paymentStatus.className = 'error';
+    paymentStatus.textContent = error?.message === 'fetch failed'
+      ? 'Payment server is unavailable. Start it, then reopen this screen.'
+      : `Could not load plans: ${error?.message || 'Unknown error'}`;
+  }
+}
+
+function couponErrorMessage(error) {
+  const raw = String(error?.message || '').replace(/^Error invoking remote method '[^']+': Error:\s*/i, '').trim();
+  if (/already used this coupon/i.test(raw)) return 'This coupon has already been redeemed on your account.';
+  if (/invalid or expired/i.test(raw)) return 'This coupon is invalid or has expired.';
+  if (/redemption limit/i.test(raw)) return 'This coupon is no longer available.';
+  if (/sign in/i.test(raw)) return 'Sign in before redeeming a coupon.';
+  return raw || 'Could not redeem this coupon.';
+}
+
+async function watchPayment(id) {
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const result = await window.overlay.getPaymentStatus(id);
+    if (result.status === 'credited') return result;
+    if (result.status === 'failed') throw new Error('Payment failed.');
+  }
+  throw new Error('Payment confirmation is taking longer than expected.');
+}
+
+rechargeForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  rechargeSubmit.disabled = true;
+  paymentStatus.className = '';
+  paymentStatus.textContent = 'Opening secure checkout…';
+  try {
+    const payment = await window.overlay.startRecharge(rechargePlan.value);
+    paymentStatus.textContent = 'Complete payment in your browser…';
+    await watchPayment(payment.paymentId);
+    await refreshWallet();
+    paymentStatus.className = 'success';
+    paymentStatus.textContent = `${formatUsage(payment.durationSeconds)} added.`;
+  } catch (error) {
+    paymentStatus.className = 'error';
+    paymentStatus.textContent = error.message || 'Could not complete payment.';
+  } finally { rechargeSubmit.disabled = false; }
+});
+
+couponForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const code = couponCode.value.trim().toUpperCase();
+  if (!code) return;
+  couponSubmit.disabled = true;
+  couponStatus.className = '';
+  couponStatus.textContent = 'Checking…';
+  try {
+    const result = await window.overlay.redeemCoupon(code);
+    couponCode.value = '';
+    couponStatus.className = 'success';
+    couponStatus.textContent = result.message;
+    await refreshWallet();
+  } catch (error) {
+    couponStatus.className = 'error';
+    couponStatus.textContent = couponErrorMessage(error);
+  } finally { couponSubmit.disabled = false; }
+});
+function applyAuthState(result) {
+  const authenticated = Boolean(result?.authenticated);
+  loginGate.hidden = authenticated;
+  if (authenticated) {
+    accountName.textContent = result.user?.name || result.user?.email || 'Signed in';
+    refreshWallet();
+  }
+  return authenticated;
+}
+
+async function clearLocalUserWorkspace() {
+  cancelGeneration?.();
+  cancelGeneration = null;
+  cancelInterviewAnswer?.();
+  cancelInterviewAnswer = null;
+  clearTimeout(noteSaveTimer);
+  clearTimeout(contextSaveTimer);
+  clearTimeout(suggestionTimer);
+  suggestionRevision += 1;
+  if (transcriptionRunning) await stopLiveTranscription();
+
+  messages = [];
+  localStorage.removeItem(STORAGE_KEY);
+  resetTranscriptHistory();
+  contextState = { text: '', files: [] };
+  contextUploadErrors = [];
+  contextInput.value = '';
+  notepad.value = '';
+  prompt.value = '';
+  promptSuggestions.replaceChildren();
+  send.textContent = 'Send';
+  render();
+  renderContextFiles();
+
+  // Let an in-flight context save finish before replacing it with the empty state.
+  await contextSaveQueue.catch(() => {});
+  await Promise.allSettled([
+    window.overlay.saveNotes(''),
+    window.overlay.saveContext(contextState)
+  ]);
+  notesStatus.textContent = 'Saved locally';
+  contextSaveStatus.textContent = 'Saved locally';
+  setView('transcript');
+  transcriptStatus.textContent = 'New session ready';
+}
+
+googleLogin.addEventListener('click', async () => {
+  googleLogin.disabled = true;
+  loginStatus.classList.remove('error');
+  loginStatus.textContent = 'Complete sign-in in your browser…';
+  try {
+    const result = await window.overlay.loginWithGoogle();
+    applyAuthState(result);
+    loginStatus.textContent = '';
+  } catch (error) {
+    loginStatus.classList.add('error');
+    loginStatus.textContent = error.message || 'Could not sign in.';
+  } finally { googleLogin.disabled = false; }
+});
+
+logout.addEventListener('click', async () => {
+  logout.disabled = true;
+  try {
+    await clearLocalUserWorkspace();
+    applyAuthState(await window.overlay.logout());
+    loginStatus.textContent = 'Signed out';
+    accountMenu.hidden = true;
+  } finally { logout.disabled = false; }
+});
 openSettings.addEventListener('click', () => {
   accountMenu.hidden = true;
   showAccount.setAttribute('aria-expanded', 'false');
   setView('settings');
+  setSettingsTab('appearance');
 });
+openOffers.addEventListener('click', () => {
+  accountMenu.hidden = true;
+  showAccount.setAttribute('aria-expanded', 'false');
+  setView('offers');
+  paymentStatus.className = '';
+  paymentStatus.textContent = 'Loading plans…';
+  loadPaymentPlans();
+  refreshWallet();
+});
+settingsAppearanceTab.addEventListener('click', () => setSettingsTab('appearance'));
+settingsAiTab.addEventListener('click', () => setSettingsTab('ai'));
 document.addEventListener('click', () => {
   accountMenu.hidden = true;
   showAccount.setAttribute('aria-expanded', 'false');
@@ -994,6 +1261,10 @@ window.overlay.onTranscription((event) => {
   lastCaption = { speaker: event.speaker, capturedAt, bubble, text };
   transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
 });
+window.overlay.onUsageUpdate((update) => {
+  updateUsageState(update);
+  if (!update.active && transcriptionRunning) stopLiveTranscription();
+});
 notepad.addEventListener('input', () => {
   clearTimeout(noteSaveTimer);
   notesStatus.textContent = 'Saving…';
@@ -1108,7 +1379,16 @@ window.addEventListener('beforeunload', () => {
 render();
 renderStoredTranscript();
 refreshModels();
-window.overlay.getUserName().then((name) => { accountName.textContent = name || 'Local User'; }).catch(() => {});
+loadPaymentPlans();
+window.overlay.getAuthStatus().then((result) => {
+  applyAuthState(result);
+  if (result.authenticated) window.overlay.getUsageStatus().then(updateUsageState).catch(() => updateUsageState());
+  if (!result.authenticated) loginStatus.textContent = 'Sign in to continue';
+}).catch(() => {
+  loginGate.hidden = false;
+  loginStatus.classList.add('error');
+  loginStatus.textContent = 'Cannot reach the authentication server.';
+});
 window.overlay.loadNotes().then((content) => { notepad.value = content; }).catch(() => { notesStatus.textContent = 'Could not load notes'; });
 window.overlay.loadContext().then((value) => {
   if (!contextDirty) contextState = value && Array.isArray(value.files) ? value : { text: '', files: [] };

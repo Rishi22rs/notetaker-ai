@@ -6,3 +6,5 @@ node_modules/
 __pycache__/
 .whisper.cpp/
 native-audiotee/.build/
+.env
+auth-session.json

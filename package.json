@@ -8,7 +8,12 @@
     "build:audio:mac": "node scripts/build-audio-mac.js",
     "setup:llama": "node scripts/prepare-llama-runtime.js",
     "start": "electron .",
-    "test": "node --test interaction.test.js audio-echo-filter.test.js local-ai.test.js context-merge.test.js context-prompt.test.js interview-session.test.js question-detector.test.js context-retriever.test.js interview-answer-prompt.test.js",
+    "start:auth": "node server/index.js",
+    "coupon:create": "node server/create-coupon.js",
+    "plan:add": "node server/manage-plan.js add",
+    "plan:remove": "node server/manage-plan.js remove",
+    "plans:migrate-seconds": "node server/migrate-recharge-plans-to-seconds.js",
+    "test": "node --test interaction.test.js audio-echo-filter.test.js local-ai.test.js context-merge.test.js context-prompt.test.js interview-session.test.js question-detector.test.js context-retriever.test.js interview-answer-prompt.test.js auth-crypto.test.js server/payments.test.js server/usage-meter.test.js",
     "setup:captions": "python -m venv .venv && .venv\\Scripts\\python.exe -m pip install -r requirements.txt && .venv\\Scripts\\python.exe transcribe.py --download",
     "setup:transcription": "python3 -m venv .venv && .venv/bin/python -m pip install faster-whisper==1.2.1 numpy pyinstaller && .venv/bin/python transcribe_stream.py --download && .venv/bin/pyinstaller --noconfirm --onedir --distpath python-worker --workpath /tmp/notetaker-pyinstaller --specpath /tmp --name transcribe-worker --collect-all faster_whisper --collect-all ctranslate2 --collect-all tokenizers transcribe_stream.py",
     "setup:transcription:mac": "test -d .whisper.cpp || git clone --depth 1 --branch v1.9.4 https://github.com/ggml-org/whisper.cpp.git .whisper.cpp; cmake -S .whisper.cpp -B .whisper.cpp/build -DGGML_METAL=ON -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON; cmake --build .whisper.cpp/build --config Release -j 8; bash .whisper.cpp/models/download-ggml-model.sh tiny.en; bash .whisper.cpp/models/download-vad-model.sh silero-v6.2.0; npm run build:audio:mac",
@@ -23,8 +28,10 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
+    "dotenv": "^16.6.1",
     "koffi": "3.2.1",
     "mammoth": "^1.10.0",
+    "mongodb": "^6.21.0",
     "pdf-parse": "^1.1.1"
   },
   "build": {
@@ -36,6 +43,7 @@
     },
     "files": [
       "**/*",
+      "!.env",
       "!.venv/**/*",
       "!python-worker/**/*",
       "!models/**/*",

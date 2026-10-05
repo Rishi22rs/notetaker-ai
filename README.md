@@ -52,6 +52,73 @@ npm install
 npm start
 ```
 
+## Google sign-in and MongoDB
+
+Authentication uses Google OAuth in the system browser. The Node authentication
+server verifies the Google identity, creates or updates the user in MongoDB, and
+issues an opaque 30-day session. Only a hash of that session is stored in MongoDB;
+the desktop copy is stored in Electron's per-user data directory.
+
+1. In Google Cloud Console, create an OAuth 2.0 **Web application** client.
+2. Add `http://127.0.0.1:8787/auth/google/callback` as an authorized redirect URI.
+3. Copy `.env.example` to `.env` and fill in the MongoDB URI and Google credentials.
+4. Start the authentication server and Electron app in separate terminals:
+
+```bash
+npm run start:auth
+npm start
+```
+
+For a deployed backend, set `AUTH_PUBLIC_URL` to its HTTPS origin and add the exact
+`<origin>/auth/google/callback` URI in Google Cloud. Start Electron with
+`AUTH_SERVER_URL` set to the same origin. Never bundle `.env` or the Google client
+secret with the desktop app; the build explicitly excludes `.env`.
+
+The authentication collections are created automatically:
+
+- `users`: Google account identity and profile details.
+- `sessions`: hashed, revocable app sessions with automatic expiry.
+- `auth_exchanges`: single-use, two-minute desktop handoff codes.
+
+## Coupons
+
+Create coupons from the backend environment. A code can grant free usage minutes
+or save a percentage discount for the user's next recharge:
+
+```bash
+npm run coupon:create -- WELCOME30 --minutes 30 --max 100
+npm run coupon:create -- HALFPRICE --percent 50 --max 25
+```
+
+`--max` is optional; omit it for unlimited redemptions. Codes are stored as hashes,
+can be redeemed only once per user, and are applied idempotently. Free time is stored
+as integer seconds. Percentage discounts are stored as single-use entitlements for
+the future payment checkout flow.
+
+## Razorpay test payments
+
+Recharge plans are defined on the backend so the desktop client cannot choose its
+own amount: 10 minutes for ₹50, 30 minutes for ₹150, and 60 minutes for ₹300.
+Add Razorpay **Test Mode** credentials to `.env`:
+
+```dotenv
+RAZORPAY_KEY_ID=rzp_test_your_key_id
+RAZORPAY_KEY_SECRET=your_test_key_secret
+RAZORPAY_WEBHOOK_SECRET=choose_a_separate_webhook_secret
+```
+
+Configure the Razorpay `payment.captured` webhook to:
+
+```text
+https://your-public-backend.example/webhooks/razorpay
+```
+
+Razorpay cannot deliver webhooks to `127.0.0.1`; use a deployed HTTPS staging
+backend when testing webhook delivery. Checkout success is also verified against
+Razorpay's API for immediate confirmation. Wallet credits are idempotent, so a
+checkout callback and webhook cannot grant the same minutes twice. Keep all secret
+keys on the backend and use separate Test and Live Mode credentials.
+
 The same commands work in macOS Terminal. On macOS, drag the title area to move
 the overlay and drag a window edge or corner to resize it.
 

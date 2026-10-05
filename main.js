@@ -1,7 +1,8 @@
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs/promises');
-const { app, BrowserWindow, globalShortcut, screen, dialog, ipcMain, desktopCapturer } = require('electron');
+const { app, BrowserWindow, globalShortcut, screen, dialog, ipcMain, desktopCapturer, shell } = require('electron');
+const { createAuthClient } = require('./auth-client');
 const { createLocalAI } = require('./local-ai');
 const { buildContextMessages } = require('./context-prompt');
 const { createInterviewSession } = require('./interview-session');
@@ -16,6 +17,9 @@ let transcription;
 let interviewSession;
 let localAI;
 let audioEchoFilter;
+let authClient;
+let usageSession;
+let usageHeartbeatTimer;
 const nativeAudio = process.platform === 'darwin' ? require('./native-system-audio')((bytes) => transcription?.audio('computer', bytes)) : null;
 let browseMode = false;
 const activeChats = new Map();
@@ -185,6 +189,7 @@ async function createWindow() {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.on('closed', () => {
+    stopUsageMeter();
     for (const cancel of activeChats.values()) cancel();
     activeChats.clear();
     clearInterval(dragTimer);
@@ -217,27 +222,90 @@ ipcMain.handle('profile:name', () => {
   try { return os.userInfo().username || 'Local User'; }
   catch { return 'Local User'; }
 });
+ipcMain.handle('auth:status', () => authClient.status());
+ipcMain.handle('auth:login', () => authClient.login());
+ipcMain.handle('auth:logout', () => authClient.logout());
+ipcMain.handle('coupon:redeem', (_event, code) => authClient.redeemCoupon(String(code || '').slice(0, 32)));
+ipcMain.handle('payments:plans', () => authClient.paymentPlans());
+ipcMain.handle('payments:start', (_event, planId) => authClient.startRecharge(String(planId || '').slice(0, 40)));
+ipcMain.handle('payments:status', (_event, id) => authClient.paymentStatus(String(id || '').slice(0, 40)));
+ipcMain.handle('wallet:get', () => authClient.wallet());
+
+async function stopUsageMeter() {
+  if (usageHeartbeatTimer) clearInterval(usageHeartbeatTimer);
+  usageHeartbeatTimer = null;
+  const session = usageSession;
+  usageSession = null;
+  for (const cancel of activeChats.values()) cancel();
+  activeChats.clear();
+  for (const cancel of activeInterviewAnswers.values()) cancel();
+  activeInterviewAnswers.clear();
+  if (!session) return null;
+  try { return await authClient.stopUsage(session.token); }
+  catch (error) { console.warn('Could not stop usage meter:', error.message); return null; }
+}
+
+async function startUsageMeter() {
+  if (usageSession) return usageSession;
+  const session = await authClient.startUsage();
+  usageSession = session;
+  usageHeartbeatTimer = setInterval(async () => {
+    if (!usageSession) return;
+    try {
+      const update = await authClient.usageHeartbeat(usageSession.token);
+      if (win && !win.isDestroyed()) win.webContents.send('usage:update', update);
+      if (!update.active) {
+        clearInterval(usageHeartbeatTimer);
+        usageHeartbeatTimer = null;
+        usageSession = null;
+        transcription?.stop();
+        nativeAudio?.stop();
+        if (win && !win.isDestroyed()) win.webContents.send('transcription:event', { type: 'error', text: 'Your usage time has ended. Redeem a coupon or recharge to continue.' });
+      }
+    } catch (error) { console.warn('Could not sync usage meter:', error.message); }
+  }, 10_000);
+  usageHeartbeatTimer.unref?.();
+  return session;
+}
+
+function requireActiveUsage() {
+  if (usageSession) return;
+  const error = new Error('Session paused. Start your session to use Local AI and transcription.');
+  error.status = 402;
+  throw error;
+}
+
+ipcMain.handle('usage:start', () => startUsageMeter());
+ipcMain.handle('usage:stop', () => stopUsageMeter());
+ipcMain.handle('usage:status', async () => ({ active: Boolean(usageSession), ...(await authClient.wallet()) }));
 ipcMain.on('permissions:complete', () => {
   browseMode = false;
   setInteractive(win, false);
 });
 ipcMain.handle('audio:permission', () => nativeAudio?.start(true));
 ipcMain.on('transcription:start', (_event, sources) => {
-  transcription?.start();
-  if (nativeAudio && sources?.system) nativeAudio.start().catch((error) => {
+  try {
+    requireActiveUsage();
+    transcription?.start();
+    if (nativeAudio && sources?.system) nativeAudio.start().catch((error) => {
+      if (win && !win.isDestroyed()) win.webContents.send('transcription:event', { type: 'error', text: error.message });
+    });
+  } catch (error) {
     if (win && !win.isDestroyed()) win.webContents.send('transcription:event', { type: 'error', text: error.message });
-  });
+  }
 });
 ipcMain.on('transcription:stop', () => {
   interviewSession?.flush('stopped');
   nativeAudio?.stop();
   transcription?.stop();
+  stopUsageMeter();
 });
 ipcMain.on('transcription:clear', () => interviewSession?.clear());
 ipcMain.on('transcription:audio', (_event, { speaker, audio }) => {
   if (['user', 'computer'].includes(speaker) && audio instanceof Uint8Array) transcription?.audio(speaker, audio);
 });
 ipcMain.handle('local-ai:suggestions', async (_event, request) => {
+  requireActiveUsage();
   const model = String(request?.model || '').slice(0, 200);
   const draft = String(request?.draft || '').trim().slice(0, 500);
   const transcript = String(request?.transcript || '').trim().slice(-20_000);
@@ -253,6 +321,7 @@ ipcMain.handle('local-ai:suggestions', async (_event, request) => {
   return localAI.suggest({ model, draft, context, transcript });
 });
 ipcMain.handle('interview:detect-question', async (_event, request) => {
+  requireActiveUsage();
   const model = String(request?.model || '').slice(0, 200);
   const turn = {
     id: String(request?.turn?.id || '').slice(0, 100),
@@ -270,6 +339,7 @@ ipcMain.handle('interview:detect-question', async (_event, request) => {
   });
 });
 ipcMain.handle('interview:retrieve-context', (_event, request) => {
+  requireActiveUsage();
   const context = {
     text: String(request?.context?.text || '').slice(0, 500_000),
     files: Array.isArray(request?.context?.files) ? request.context.files.slice(0, 20).map((file) => ({
@@ -292,6 +362,11 @@ ipcMain.on('interview:answer', (event, request) => {
   const id = String(request?.id || '');
   const model = String(request?.model || '').slice(0, 200);
   if (!id || !model) return;
+  try { requireActiveUsage(); }
+  catch (error) {
+    if (!event.sender.isDestroyed()) event.sender.send('interview:answer-error', { id, message: error.message });
+    return;
+  }
   const retrievedContext = {
     profile: String(request?.retrievedContext?.profile || '').slice(0, 4000),
     contextLanguages: Array.isArray(request?.retrievedContext?.contextLanguages)
@@ -416,6 +491,11 @@ ipcMain.handle('context:pick-files', async () => {
 ipcMain.on('local-ai:chat', (event, request) => {
   const { id, model, messages, context } = request || {};
   if (typeof id !== 'string' || typeof model !== 'string' || !Array.isArray(messages)) return;
+  try { requireActiveUsage(); }
+  catch (error) {
+    if (!event.sender.isDestroyed()) event.sender.send('local-ai:error', { id, message: error.message });
+    return;
+  }
   const safeMessages = messages.slice(-80).map(({ role, content, images }) => ({
     role: ['system', 'user', 'assistant'].includes(role) ? role : 'user',
     content: String(content || '').slice(0, 500_000),
@@ -455,6 +535,11 @@ ipcMain.on('local-ai:cancel', (_event, id) => {
 });
 
 app.whenReady().then(() => {
+  authClient = createAuthClient({
+    serverUrl: process.env.AUTH_SERVER_URL || 'http://127.0.0.1:8787',
+    userDataPath: app.getPath('userData'),
+    openExternal: (url) => shell.openExternal(url)
+  });
   localAI = createLocalAI({
     userDataPath: app.getPath('userData'),
     resourcesPath: process.resourcesPath,
@@ -469,6 +554,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', () => {
+  stopUsageMeter();
   nativeAudio?.stop();
   transcription?.dispose();
   interviewSession?.dispose();

@@ -13,17 +13,37 @@
     button, textarea, select { font: inherit; color: inherit; }
     .panel { height: 100%; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); overflow: hidden; display: grid; grid-template-columns: 48px minmax(0, 1fr) 220px; box-shadow: 0 16px 50px #0008; }
     .panel.settings-mode { grid-template-columns: 48px minmax(0, 1fr); }
+    .panel.offers-mode #composer, .panel.offers-mode #prompt-suggestions { display: none !important; }
     .activity-bar { position: relative; background: var(--chrome); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; }
     .activity { width: 48px; height: 44px; padding: 0; border: 0; border-left: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-size: 21px; display: grid; place-items: center; }
     .activity:hover { color: var(--text); border-color: transparent; }
     .activity.active { color: var(--text); border-left-color: var(--accent); }
     #show-account { margin-top: auto; }
-    .account-menu { position: fixed; z-index: 900; left: 56px; bottom: 16px; width: 220px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: rgb(27 30 35 / var(--app-opacity)); box-shadow: 0 12px 35px #000b; }
+    .account-menu { position: fixed; z-index: 900; left: 56px; bottom: 16px; width: 280px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: rgb(27 30 35 / var(--app-opacity)); box-shadow: 0 12px 35px #000b; }
     .account-menu[hidden] { display: none; }
     .account-name { padding: 7px 8px 10px; margin-bottom: 5px; border-bottom: 1px solid var(--line); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .account-menu button { width: 100%; margin-top: 4px; text-align: left; background: transparent; }
     .account-menu button:disabled { opacity: .5; cursor: not-allowed; }
     .account-menu .logout { color: rgb(255 115 115 / var(--text-opacity)); border-color: #693b3b; }
+    .coupon-form { padding: 8px 0; margin: 5px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .coupon-form label { display: block; margin: 0 8px 6px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .coupon-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; }
+    #coupon-code { min-width: 0; width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--input); color: var(--text); text-transform: uppercase; }
+    #coupon-submit { width: auto; margin: 0; }
+    #coupon-status { min-height: 15px; margin: 5px 8px 0; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+    #coupon-status.success { color: var(--accent); }
+    #coupon-status.error { color: var(--danger); }
+    .wallet-box { padding: 9px 8px; margin-bottom: 5px; border-radius: 8px; background: var(--input); }
+    .wallet-label { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+    #wallet-balance { display: block; margin-top: 2px; color: var(--accent); font-size: 17px; font-weight: 750; }
+    .recharge-form { padding: 8px 0; border-top: 1px solid var(--line); }
+    .recharge-form label { display: block; margin: 0 8px 6px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .recharge-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; }
+    #recharge-plan { width: 100%; min-width: 0; padding: 7px 8px; }
+    #recharge-submit { width: auto; margin: 0; white-space: nowrap; }
+    #payment-status { min-height: 15px; margin: 5px 8px 0; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+    #payment-status.success { color: var(--accent); }
+    #payment-status.error { color: var(--danger); }
     .workspace { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
     header { min-width: 0; min-height: 64px; padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; overflow: hidden; }
     .brand { flex: 1 1 0; min-width: 0; overflow: hidden; }
@@ -33,6 +53,15 @@
     select, button { border: 1px solid var(--line); border-radius: 7px; background: var(--surface); padding: 7px 9px; }
     select { width: clamp(110px, 30%, 180px); min-width: 0; flex: 0 1 180px; }
     header > button { flex: 0 0 auto; }
+    .session-toggle { min-width: 64px; font-weight: 700; }
+    .session-toggle.paused { color: var(--dark-text); border-color: var(--accent-bg); background: var(--accent-bg); }
+    .session-toggle.running { color: #fff; border-color: #a64e4e; background: #8d3e3e; }
+    .session-clock { min-width: 58px; color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .workspace { position: relative; }
+    .session-blocker { position: absolute; z-index: 100; inset: 64px 0 0; padding: 24px; display: grid; place-content: center; justify-items: center; gap: 8px; background: rgb(17 19 23 / calc(var(--app-opacity) + .04)); color: var(--muted); text-align: center; }
+    .session-blocker strong { color: var(--text); font-size: 16px; }
+    .session-blocker .open-recharge { margin-top: 6px; color: var(--dark-text); border-color: var(--accent-bg); background: var(--accent-bg); font-weight: 700; }
+    .session-blocker[hidden] { display: none; }
     button { cursor: pointer; }
     button:hover { border-color: #59616d; }
     #messages { min-height: 0; flex: 1 1 0; padding: 18px; overflow-y: auto; user-select: text; }
@@ -43,7 +72,7 @@
     .message.assistant { background: var(--surface); border: 1px solid var(--line); }
     .message.pending::after { content: '▋'; color: var(--accent); animation: blink .8s infinite; }
     @keyframes blink { 50% { opacity: 0; } }
-    form { width: 100%; margin: 0; padding: 12px; border-top: 1px solid var(--line); background: var(--bg); display: grid; grid-template-columns: minmax(0, 1fr) 62px; align-items: end; gap: 8px; align-self: end; }
+    #composer { width: 100%; margin: 0; padding: 12px; border-top: 1px solid var(--line); background: var(--bg); display: grid; grid-template-columns: minmax(0, 1fr) 62px; align-items: end; gap: 8px; align-self: end; }
     textarea { min-width: 0; min-height: 42px; max-height: 130px; resize: none; border: 1px solid var(--line); border-radius: 9px; background: var(--input); padding: 10px 12px; outline: none; overflow-y: auto; }
     textarea:focus { border-color: var(--accent); }
     #send { width: 62px; height: 42px; min-width: 62px; padding: 0 10px; align-self: end; background: var(--accent-bg); border-color: var(--accent-bg); color: var(--dark-text); font-weight: 650; }
@@ -60,8 +89,23 @@
     .progress-track { grid-column: 1 / -1; height: 5px; border-radius: 99px; background: #30343b; overflow: hidden; }
     #download-progress { width: 0; height: 100%; background: var(--accent-bg); transition: width .15s linear; }
     .notes-view { min-height: 0; flex: 1 1 0; display: grid; grid-template-rows: auto 1fr; }
-    .notes-view[hidden], .context-view[hidden], .transcript-view[hidden], .settings-view[hidden], .chat-view[hidden], form[hidden] { display: none; }
-    .settings-view { min-height: 0; flex: 1 1 0; overflow-y: auto; padding: 22px; }
+    .notes-view[hidden], .context-view[hidden], .transcript-view[hidden], .settings-view[hidden], .offers-view[hidden], .chat-view[hidden], form[hidden] { display: none; }
+    .settings-view { min-height: 0; flex: 1 1 0; overflow: hidden; display: grid; grid-template-columns: 154px minmax(0, 1fr); }
+    .settings-nav { padding: 16px 10px; border-right: 1px solid var(--line); background: rgb(24 26 31 / var(--app-opacity)); }
+    .settings-nav-title { margin: 0 8px 10px; color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+    .settings-tab { width: 100%; margin: 2px 0; border-color: transparent; background: transparent; color: var(--muted); text-align: left; }
+    .settings-tab:hover { background: var(--surface); color: var(--text); }
+    .settings-tab[aria-selected="true"] { border-color: #496253; background: rgb(27 41 35 / var(--app-opacity)); color: var(--accent); }
+    .settings-content { min-width: 0; overflow-y: auto; padding: 22px; }
+    .offers-view { min-height: 0; flex: 1 1 0; overflow-y: auto; padding: 22px; }
+    .offers-view .wallet-box, .offers-view .coupon-form, .offers-view .recharge-form { max-width: 520px; }
+    .offers-view .wallet-box { margin: 0 0 12px; padding: 16px; border: 1px solid var(--line); background: var(--surface); }
+    .offers-view .coupon-form, .offers-view .recharge-form { display: grid; gap: 10px; padding: 16px; margin: 0 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .offers-view .coupon-form label, .offers-view .recharge-form label { margin: 0; }
+    .offers-view .coupon-row, .offers-view .recharge-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: 10px; min-width: 0; }
+    .offers-view #coupon-code, .offers-view #recharge-plan { display: block; width: 100%; min-width: 0; height: 42px; padding: 9px 11px; }
+    .offers-view #coupon-submit, .offers-view #recharge-submit { width: auto; min-width: 76px; height: 42px; margin: 0; padding: 0 14px; text-align: center; }
+    .offers-view #coupon-status, .offers-view #payment-status { margin: 0; }
     .settings-view h2 { margin: 0 0 5px; font-size: 17px; }
     .settings-intro { margin: 0 0 22px; color: var(--muted); font-size: 12px; }
     .setting-row { max-width: 520px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
@@ -69,6 +113,11 @@
     .setting-value { color: var(--accent); font-variant-numeric: tabular-nums; }
     .setting-description { margin: 0 0 12px; color: var(--muted); font-size: 11px; }
     .setting-row input[type="range"] { width: 100%; accent-color: #83e1b4; }
+    .setting-row #model { width: 100%; max-width: none; }
+    .setting-row .model-download { margin: 14px -16px -16px; border-bottom: 0; border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; }
+    .account-menu .coupon-row { display: flex; align-items: center; gap: 5px; }
+    .account-menu #coupon-code { min-width: 0; flex: 1 1 auto; }
+    .account-menu #coupon-submit { flex: 0 0 auto; margin: 0; }
     .notes-meta { padding: 10px 16px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
     #notepad { width: 100%; height: 100%; max-height: none; resize: none; border: 0; border-radius: 0; background: var(--input); padding: 18px; line-height: 1.6; }
     .context-view { min-height: 0; flex: 1 1 0; overflow-y: auto; padding: 18px; }
@@ -141,6 +190,15 @@
     .platform-darwin .resize-grip { display: none; }
     .permission-gate { position: fixed; inset: 8px; z-index: 1000; border: 1px solid var(--line); border-radius: 12px; background: #111317f5; display: grid; place-items: center; padding: 24px; }
     .permission-gate[hidden] { display: none; }
+    .login-gate { position: fixed; inset: 8px; z-index: 1100; border: 1px solid var(--line); border-radius: 12px; background: #111317fa; display: grid; place-items: center; padding: 24px; }
+    .login-gate[hidden] { display: none; }
+    .login-card { width: min(400px, 100%); padding: 28px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: 0 20px 60px #0009; text-align: center; }
+    .login-mark { width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-bg); color: var(--dark-text); font-size: 24px; font-weight: 800; }
+    .login-card h2 { margin: 0 0 8px; font-size: 20px; }
+    .login-card p { margin: 0 0 20px; color: var(--muted); font-size: 12px; }
+    #google-login { width: 100%; background: #fff; border-color: #fff; color: #202124; font-weight: 650; }
+    #login-status { min-height: 18px; margin-top: 12px; color: var(--muted); font-size: 11px; }
+    #login-status.error { color: var(--danger); }
     .permission-card { width: min(400px, 100%); padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 20px 60px #0009; }
     .permission-card h2 { margin: 0 0 8px; font-size: 18px; }
     .permission-card p { margin: 0 0 16px; color: var(--muted); font-size: 12px; }
@@ -159,23 +217,21 @@
       <button class="activity" id="show-account" type="button" title="Account and settings" aria-label="Account and settings" aria-expanded="false">⚙</button>
       <section class="account-menu" id="account-menu" aria-label="Account menu" hidden>
         <div class="account-name" id="account-name">Local User</div>
+        <button id="open-offers" type="button">Recharge &amp; Offers</button>
         <button type="button" disabled>Privacy Policy</button>
         <button type="button" disabled>Terms &amp; Conditions</button>
         <button id="open-settings" type="button">Settings</button>
-        <button class="logout" type="button" disabled>Log out</button>
+        <button class="logout" id="logout" type="button">Log out</button>
       </section>
     </nav>
     <div class="workspace">
       <header>
         <div class="brand"><h1 id="view-title">Live transcription</h1><span id="status">On-device speech recognition</span></div>
-        <select id="model" aria-label="Model" hidden></select>
         <button id="new-chat" type="button" title="Clear chat, context, transcript, answers, and suggestions">New session</button>
+        <button id="session-toggle" class="session-toggle paused" type="button" title="Start your timed session">Start</button>
+        <output id="session-clock" class="session-clock" aria-label="Time remaining">0m 0s</output>
       </header>
-      <section class="model-download" id="model-download" hidden>
-        <div class="model-download-info"><span id="download-title"></span><span id="download-detail"></span></div>
-        <button id="download-model" type="button">Download</button>
-        <div class="progress-track"><div id="download-progress"></div></div>
-      </section>
+      <section class="session-blocker" id="session-blocker" hidden><strong>Session paused</strong><span id="session-blocker-message">Start your session to use this feature.</span><button class="open-recharge" type="button">Recharge &amp; Offers</button></section>
       <section class="chat-view" id="messages" aria-live="polite" hidden></section>
       <section class="notes-view" id="notes-view" hidden>
         <div class="notes-meta" id="notes-status">Saved locally</div>
@@ -194,18 +250,62 @@
         <div id="context-files"></div>
       </section>
       <section class="settings-view" id="settings-view" hidden>
-        <h2>Appearance settings</h2>
-        <p class="settings-intro">Changes are applied immediately and saved on this computer.</p>
-        <div class="setting-row">
-          <div class="setting-heading"><label for="app-opacity">App transparency</label><output class="setting-value" id="app-opacity-value">94%</output></div>
-          <p class="setting-description">Changes panels and backgrounds without fading the text.</p>
-          <input id="app-opacity" type="range" min="20" max="100" step="1" value="94">
+        <nav class="settings-nav" aria-label="Settings sections" role="tablist">
+          <div class="settings-nav-title">Settings</div>
+          <button class="settings-tab" id="settings-tab-appearance" type="button" role="tab" aria-selected="true" aria-controls="settings-appearance">Appearance</button>
+          <button class="settings-tab" id="settings-tab-ai" type="button" role="tab" aria-selected="false" aria-controls="settings-ai">AI &amp; Models</button>
+        </nav>
+        <div class="settings-content">
+          <section id="settings-appearance" role="tabpanel" aria-labelledby="settings-tab-appearance">
+            <h2>Appearance</h2>
+            <p class="settings-intro">Changes are applied immediately and saved on this computer.</p>
+            <div class="setting-row">
+              <div class="setting-heading"><label for="app-opacity">App transparency</label><output class="setting-value" id="app-opacity-value">94%</output></div>
+              <p class="setting-description">Changes panels and backgrounds without fading the text.</p>
+              <input id="app-opacity" type="range" min="20" max="100" step="1" value="94">
+            </div>
+            <div class="setting-row">
+              <div class="setting-heading"><label for="text-opacity">Text transparency</label><output class="setting-value" id="text-opacity-value">100%</output></div>
+              <p class="setting-description">Changes text visibility independently of the app background.</p>
+              <input id="text-opacity" type="range" min="20" max="100" step="1" value="100">
+            </div>
+          </section>
+          <section id="settings-ai" role="tabpanel" aria-labelledby="settings-tab-ai" hidden>
+            <h2>AI &amp; Models</h2>
+            <p class="settings-intro">Choose a local model or download another one for offline use.</p>
+            <div class="setting-row">
+              <div class="setting-heading"><label for="model">Local AI model</label></div>
+              <p class="setting-description">The selected model powers chat, interview answers, and suggestions.</p>
+              <select id="model" aria-label="Local AI model"></select>
+              <section class="model-download" id="model-download" hidden>
+                <div class="model-download-info"><span id="download-title"></span><span id="download-detail"></span></div>
+                <button id="download-model" type="button">Download</button>
+                <div class="progress-track"><div id="download-progress"></div></div>
+              </section>
+            </div>
+          </section>
         </div>
-        <div class="setting-row">
-          <div class="setting-heading"><label for="text-opacity">Text transparency</label><output class="setting-value" id="text-opacity-value">100%</output></div>
-          <p class="setting-description">Changes text visibility independently of the app background.</p>
-          <input id="text-opacity" type="range" min="20" max="100" step="1" value="100">
-        </div>
+      </section>
+      <section class="offers-view settings-content" id="offers-view" hidden>
+        <h2>Recharge &amp; Offers</h2>
+        <p class="settings-intro">View your usage, redeem a coupon, or add more time.</p>
+        <div class="wallet-box"><span class="wallet-label">Available usage</span><span id="wallet-balance">—</span></div>
+        <form class="coupon-form" id="coupon-form">
+          <label for="coupon-code">Have a coupon?</label>
+          <div class="coupon-row">
+            <input id="coupon-code" type="text" maxlength="32" autocomplete="off" placeholder="CODE" aria-label="Coupon code">
+            <button id="coupon-submit" type="submit">Apply</button>
+          </div>
+          <div id="coupon-status" aria-live="polite"></div>
+        </form>
+        <form class="recharge-form" id="recharge-form">
+          <label for="recharge-plan">Recharge minutes</label>
+          <div class="recharge-row">
+            <select id="recharge-plan" aria-label="Recharge plan"></select>
+            <button id="recharge-submit" type="submit">Pay</button>
+          </div>
+          <div id="payment-status" aria-live="polite"></div>
+        </form>
       </section>
       <section class="transcript-view" id="transcript-view">
         <div class="transcript-toolbar">
@@ -234,6 +334,15 @@
       <div id="interview-questions-list"><div class="interview-questions-empty">Suggestions appear after an interviewer question is detected.</div></div>
     </aside>
   </main>
+  <section class="login-gate" id="login-gate" role="dialog" aria-modal="true" aria-labelledby="login-title">
+    <div class="login-card">
+      <div class="login-mark" aria-hidden="true">N</div>
+      <h2 id="login-title">Welcome to My App</h2>
+      <p>Sign in to continue. Your notes and AI processing remain on this computer.</p>
+      <button id="google-login" type="button">Continue with Google</button>
+      <div id="login-status" aria-live="polite">Checking your session…</div>
+    </div>
+  </section>
   <section class="permission-gate" id="permission-gate" role="dialog" aria-modal="true" aria-labelledby="permission-title" hidden>
     <div class="permission-card">
       <h2 id="permission-title">Allow audio access</h2>
