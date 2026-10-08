@@ -747,6 +747,12 @@ async function openRechargeOffers() {
   await Promise.allSettled([loadPaymentPlans(), refreshWallet()]);
 }
 
+async function ensureUsageSession() {
+  if (sessionActive) return;
+  const session = await window.overlay.startUsage();
+  updateUsageState({ active: true, ...session });
+}
+
 sessionToggle.addEventListener('click', async () => {
   sessionToggle.disabled = true;
   try {
@@ -755,8 +761,7 @@ sessionToggle.addEventListener('click', async () => {
       const wallet = await window.overlay.stopUsage();
       updateUsageState({ active: false, ...wallet });
     } else {
-      const session = await window.overlay.startUsage();
-      updateUsageState({ active: true, ...session });
+      await ensureUsageSession();
     }
   } catch (error) {
     updateUsageState({ active: false });
@@ -1088,6 +1093,8 @@ async function startLiveTranscription() {
     transcriptStatus.textContent = 'Turn on Microphone or System audio.';
     return;
   }
+  transcriptStatus.textContent = 'Starting session…';
+  await ensureUsageSession();
   transcriptStatus.textContent = 'Requesting audio access…';
   const requested = [];
   if (transcriptionSources.system && window.overlay.platform !== 'darwin') {

@@ -45,6 +45,13 @@ For example:
 The app launches the packaged runtime as a hidden child process bound only to a
 random `127.0.0.1` port. It starts on demand and is stopped when the app exits.
 
+On Windows, install both the local AI runtime and transcription worker before
+starting a development build:
+
+```powershell
+npm run setup:windows
+```
+
 For a normal development launch:
 
 ```bash
@@ -167,7 +174,9 @@ npm run setup:transcription:mac
 
 The macOS backend keeps the model loaded and uses Silero voice-activity and
 confidence filtering so noise and silence are not decoded as speech. On Windows use
-`npm run setup:transcription:win`. On macOS, the in-app permission screen requests
+`npm run setup:windows`; it installs the audio dependencies, downloads the Whisper
+model, builds the standalone transcription worker, and downloads the Windows local
+AI runtime. On macOS, the in-app permission screen requests
 microphone and system-audio access separately. System audio is captured with a
 native Core Audio tap, so no screen/window picker or screen video capture is used.
 After granting macOS permission, fully quit and reopen the app if macOS requests it.

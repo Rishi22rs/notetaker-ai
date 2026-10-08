@@ -178,3 +178,11 @@ test('microphone can be enabled without a headphone check and keeps echo cancell
   assert.doesNotMatch(htmlSource, /headphone-gate|Connect headphones first/);
   assert.match(rendererSource, /echoCancellation: true/);
 });
+
+test('starting transcription activates usage before requesting audio', () => {
+  const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const start = rendererSource.indexOf('async function startLiveTranscription()');
+  const end = rendererSource.indexOf('async function stopLiveTranscription()', start);
+  const source = rendererSource.slice(start, end);
+  assert.ok(source.indexOf('await ensureUsageSession()') < source.indexOf('permissionStreams.computer'));
+});

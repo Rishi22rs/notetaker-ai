@@ -14,7 +14,7 @@ module.exports = function createTranscription(publish) {
     if (child) return;
     const packaged = fs.existsSync(bundledWorker);
     if (!packaged && !fs.existsSync(python)) {
-      publish({ type: 'error', text: 'Local transcription is not installed. Run npm run setup:transcription.' });
+      publish({ type: 'error', text: 'Local transcription is not installed. Run npm run setup:transcription:win.' });
       return;
     }
     const process = spawn(packaged ? bundledWorker : python, packaged ? [] : ['-u', path.join(base, 'transcribe_stream.py')], {
@@ -22,18 +22,24 @@ module.exports = function createTranscription(publish) {
       env: { ...global.process.env, TRANSCRIPTION_MODEL_DIR: path.join(base, 'models', 'tiny.en') }
     });
     child = process;
+    let stderr = '';
     publish({ type: 'status', text: 'Starting transcription…' });
     const lines = readline.createInterface({ input: process.stdout });
     lines.on('line', (line) => {
       if (child !== process) return;
       try { publish(JSON.parse(line)); } catch {}
     });
-    process.stderr.resume();
+    process.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-4000); });
     process.stdin.on('error', () => {});
     process.on('error', (error) => publish({ type: 'error', text: error.message }));
-    process.on('close', () => {
+    process.on('close', (code) => {
       lines.close();
-      if (child === process) { child = null; publish({ type: 'status', text: 'Stopped' }); }
+      if (child === process) {
+        child = null;
+        if (code && stderr.trim()) publish({ type: 'error', text: stderr.trim().slice(-1000) });
+        else if (code) publish({ type: 'error', text: `Local transcription stopped with code ${code}. Run npm run setup:transcription:win.` });
+        else publish({ type: 'status', text: 'Stopped' });
+      }
     });
   }
 
