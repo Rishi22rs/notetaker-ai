@@ -71,8 +71,11 @@ module.exports = function createMetalTranscription(publish) {
   const lastText = new Map();
   const computerAudioHistory = [];
 
-  async function waitUntilReady(id, useGpu) {
-    for (let attempt = 0; attempt < 150 && running && id === launchId; attempt += 1) {
+  async function waitUntilReady(id, useGpu, cpuRetry) {
+    // CPU initialization can take appreciably longer on a cold production
+    // install than it does in development. Give it a real startup window.
+    const attempts = useGpu ? 150 : 300;
+    for (let attempt = 0; attempt < attempts && running && id === launchId; attempt += 1) {
       try {
         const response = await fetch(`http://127.0.0.1:${port}/`);
         // Any HTTP response proves the loopback server is listening; the root
@@ -82,8 +85,11 @@ module.exports = function createMetalTranscription(publish) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     if (running && !ready && id === launchId) {
-      if (useGpu && child) {
-        publish({ type: 'warning', text: 'Metal startup timed out. Switching to the local CPU backend…' });
+      if (child) {
+        if (!useGpu && !cpuRetry) {
+          publish({ type: 'warning', text: 'Whisper CPU startup is taking longer than expected. Retrying once…' });
+        }
+        if (useGpu) publish({ type: 'warning', text: 'Metal startup timed out. Switching to the local CPU backend…' });
         child.kill();
       } else {
         publish({ type: 'error', text: `${backendName} did not start. Check the app logs for the native Whisper error.` });
@@ -91,7 +97,7 @@ module.exports = function createMetalTranscription(publish) {
     }
   }
 
-  async function launch(useGpu) {
+  async function launch(useGpu, cpuRetry = false) {
     ready = false;
     port = await getFreePort();
     const id = ++launchId;
@@ -123,11 +129,16 @@ module.exports = function createMetalTranscription(publish) {
         launch(false).catch((error) => publish({ type: 'error', text: `Whisper fallback: ${error.message}` }));
         return;
       }
+      if (!cpuRetry) {
+        publish({ type: 'warning', text: 'Whisper CPU backend stopped while starting. Retrying once…' });
+        launch(false, true).catch((error) => publish({ type: 'error', text: `Whisper fallback: ${error.message}` }));
+        return;
+      }
       running = false;
-      const detail = stderr.match(/(?:error:|failed|couldn't)[^\n]*/i)?.[0];
+      const detail = stderr.match(/(?:error:|failed|couldn't)[^\n]*/i)?.[0] || stderr.trim().split('\n').at(-1);
       publish({ type: 'error', text: `Whisper stopped${detail ? `: ${detail}` : ` (code ${code ?? signal ?? 'unknown'})`}.` });
     });
-    waitUntilReady(id, useGpu);
+    waitUntilReady(id, useGpu, cpuRetry);
   }
 
   async function start() {

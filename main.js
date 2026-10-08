@@ -283,16 +283,13 @@ ipcMain.on('permissions:complete', () => {
   setInteractive(win, false);
 });
 ipcMain.handle('audio:permission', () => nativeAudio?.start(true));
-ipcMain.on('transcription:start', (_event, sources) => {
-  try {
-    requireActiveUsage();
-    transcription?.start();
-    if (nativeAudio && sources?.system) nativeAudio.start().catch((error) => {
-      if (win && !win.isDestroyed()) win.webContents.send('transcription:event', { type: 'error', text: error.message });
-    });
-  } catch (error) {
-    if (win && !win.isDestroyed()) win.webContents.send('transcription:event', { type: 'error', text: error.message });
-  }
+ipcMain.handle('transcription:start', async (_event, sources) => {
+  // Listening is a deliberate use action, so it can safely resume/start a
+  // metered session after the renderer has obtained its audio streams.
+  const session = await startUsageMeter();
+  transcription?.start();
+  if (nativeAudio && sources?.system) await nativeAudio.start();
+  return { active: true, balanceSeconds: session.balanceSeconds };
 });
 ipcMain.on('transcription:stop', () => {
   interviewSession?.flush('stopped');

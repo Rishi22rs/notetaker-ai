@@ -1,0 +1,4 @@
+Contact: mailto:hello@myunyon.com
+Canonical: https://myunyon.com/.well-known/security.txt
+Preferred-Languages: en
+Expires: 2027-10-07T00:00:00.000Z

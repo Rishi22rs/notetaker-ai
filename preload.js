@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('overlay', {
   getUsageStatus: () => ipcRenderer.invoke('usage:status'),
   completePermissionGate: () => ipcRenderer.send('permissions:complete'),
   requestSystemAudio: () => ipcRenderer.invoke('audio:permission'),
-  startTranscription: (sources) => ipcRenderer.send('transcription:start', sources),
+  startTranscription: (sources) => ipcRenderer.invoke('transcription:start', sources),
   stopTranscription: () => ipcRenderer.send('transcription:stop'),
   clearTranscription: () => ipcRenderer.send('transcription:clear'),
   sendTranscriptionAudio: (speaker, audio) => ipcRenderer.send('transcription:audio', { speaker, audio }),

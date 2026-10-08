@@ -1,0 +1,17 @@
+# UNYON
+
+UNYON is a private, local-first desktop AI copilot for macOS and Windows.
+
+## Core capabilities
+
+- On-device live transcription for microphone and computer audio
+- Real-time meeting and interview assistance
+- Context-aware answers using private PDFs, DOCX files, images, text, and code
+- Local AI chat and locally saved notes
+- Movable desktop overlay with best-effort operating-system capture protection
+
+UNYON is currently beta software. The macOS Apple silicon beta is available at:
+https://myunyon.com/downloads/UNYON-1.0.0-arm64.dmg
+
+Official website: https://myunyon.com/
+Contact: hello@myunyon.com

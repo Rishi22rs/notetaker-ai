@@ -1,0 +1,12 @@
+{
+  "name": "UNYON — Private AI Copilot",
+  "short_name": "UNYON",
+  "description": "Private live transcription and context-aware AI assistance on your desktop.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f1efe7",
+  "theme_color": "#141713",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -10,7 +10,7 @@ const DEFAULT_PLANS = Object.freeze([
 
 function durationLabel(durationSeconds) {
   const seconds = Math.max(0, Math.floor(Number(durationSeconds) || 0));
-  return seconds % 60 ? `${seconds}s` : `${seconds / 60} minutes`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 function secureEqual(first, second) {
@@ -81,7 +81,15 @@ function createPaymentService({ db, config }) {
       { $setOnInsert: { initializedAt: new Date() } },
       { upsert: true }
     );
-    if (initialized.upsertedCount) await plansCollection.insertMany(DEFAULT_PLANS.map((plan) => ({ ...plan, createdAt: new Date(), updatedAt: new Date() })));
+    if (initialized.upsertedCount) {
+      try {
+        await plansCollection.insertMany(DEFAULT_PLANS.map((plan) => ({ ...plan, createdAt: new Date(), updatedAt: new Date() })), { ordered: false });
+      } catch (error) {
+        // A migrated legacy catalog may already contain one or more starter
+        // IDs. Those existing database records remain authoritative.
+        if (error.code !== 11000) throw error;
+      }
+    }
   }
 
   async function plans() {

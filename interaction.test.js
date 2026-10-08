@@ -151,7 +151,8 @@ test('account popover opens a dedicated recharge and offers screen', () => {
   assert.match(rendererSource, /function couponErrorMessage/);
   assert.match(rendererSource, /This coupon has already been redeemed on your account\./);
   assert.match(rendererSource, /couponStatus\.textContent = couponErrorMessage\(error\)/);
-  assert.match(rendererSource, /form\.hidden = notesOpen \|\| contextOpen \|\| transcriptOpen \|\| settingsOpen \|\| offersOpen/);
+  assert.match(rendererSource, /form\.hidden = notesOpen \|\| contextOpen \|\| summaryOpen \|\| settingsOpen \|\| offersOpen \|\| !sessionActive/);
+  assert.match(rendererSource, /promptSuggestions\.hidden = notesOpen \|\| contextOpen \|\| summaryOpen \|\| settingsOpen \|\| offersOpen/);
   assert.match(htmlSource, /\.panel\.offers-mode #composer, \.panel\.offers-mode #prompt-suggestions \{ display: none !important; \}/);
   assert.match(rendererSource, /window\.overlay\.redeemCoupon\(code\)/);
   assert.match(serverSource, /url\.pathname === '\/coupons\/redeem'/);

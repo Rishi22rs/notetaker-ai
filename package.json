@@ -35,8 +35,8 @@
     "pdf-parse": "^1.1.1"
   },
   "build": {
-    "appId": "com.rishi.myapp",
-    "productName": "My App",
+    "appId": "ai.unyon.desktop",
+    "productName": "UNYON",
     "afterPack": "scripts/after-pack.js",
     "directories": {
       "output": "dist"

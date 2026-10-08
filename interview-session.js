@@ -28,7 +28,10 @@ function mergeTranscriptText(previous, incoming) {
 function createInterviewSession({
   onTurn,
   pauseMs = 2800,
-  questionPauseMs = 2400,
+  // Interviewers commonly pause after the first clause of a question, then
+  // add an example or constraint. Questions therefore need a longer quiet
+  // window than ordinary captions before they become answerable turns.
+  questionPauseMs = 5600,
   maxTurnMs = 20_000,
   now = Date.now,
   schedule = setTimeout,
@@ -56,7 +59,8 @@ function createInterviewSession({
   function armTimer() {
     cancelTimer();
     if (!active) return;
-    const delay = /[?]\s*$/.test(active.text) ? questionPauseMs : pauseMs;
+    const looksLikeQuestion = /[?]\s*$|^(?:what|why|how|when|where|who|which|can|could|would|should|do|does|did|is|are|have|has)\b/i.test(active.text);
+    const delay = looksLikeQuestion ? questionPauseMs : pauseMs;
     timer = schedule(() => finalize('pause'), delay);
   }
 

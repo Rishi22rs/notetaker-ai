@@ -57,6 +57,12 @@ test('question punctuation uses the shorter endpoint delay', () => {
   assert.equal([...f.timers.values()][0].delay, 650);
 });
 
+test('a spoken question without Whisper punctuation waits for the longer turn boundary', () => {
+  const f = fixture({ pauseMs: 1200, questionPauseMs: 5600 });
+  f.session.ingest({ speaker: 'computer', text: 'How did you verify the result', capturedAt: 1000 });
+  assert.equal([...f.timers.values()][0].delay, 5600);
+});
+
 test('default pause spans overlapping speech-recognition windows', () => {
   const f = fixture();
   f.session.ingest({ speaker: 'computer', text: 'Tell me about your project', capturedAt: 1000 });

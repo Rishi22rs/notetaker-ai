@@ -8,3 +8,11 @@ __pycache__/
 native-audiotee/.build/
 .env
 auth-session.json
+
+# Release installers are published outside Git (for example, GitHub Releases).
+website/public/downloads/*.dmg
+website/public/downloads/*.zip
+website/public/downloads/*.exe
+
+# Local Netlify folder
+.netlify
