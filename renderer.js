@@ -1,6 +1,5 @@
 const modelSelect = document.getElementById('model');
 const status = document.getElementById('status');
-const messagesElement = document.getElementById('messages');
 const form = document.getElementById('composer');
 const prompt = document.getElementById('prompt');
 const send = document.getElementById('send');
@@ -9,7 +8,6 @@ const sessionToggle = document.getElementById('session-toggle');
 const sessionClock = document.getElementById('session-clock');
 const sessionBlocker = document.getElementById('session-blocker');
 const sessionBlockerMessage = document.getElementById('session-blocker-message');
-const showChat = document.getElementById('show-chat');
 const showNotes = document.getElementById('show-notes');
 const notesView = document.getElementById('notes-view');
 const notepad = document.getElementById('notepad');
@@ -41,7 +39,8 @@ const clearTranscript = document.getElementById('clear-transcript');
 const toggleMicrophone = document.getElementById('toggle-microphone');
 const toggleSystemAudio = document.getElementById('toggle-system-audio');
 const permissionGate = document.getElementById('permission-gate');
-const grantPermissions = document.getElementById('grant-permissions');
+const permissionList = document.getElementById('permission-list');
+const settingsPermissionList = document.getElementById('settings-permission-list');
 const permissionStatus = document.getElementById('permission-status');
 const interviewQuestions = document.getElementById('interview-questions');
 const interviewQuestionsList = document.getElementById('interview-questions-list');
@@ -61,25 +60,30 @@ const rechargeForm = document.getElementById('recharge-form');
 const rechargePlan = document.getElementById('recharge-plan');
 const rechargeSubmit = document.getElementById('recharge-submit');
 const paymentStatus = document.getElementById('payment-status');
+const paymentWaitModal = document.getElementById('payment-wait-modal');
+const paymentWaitMessage = document.getElementById('payment-wait-message');
 const openSettings = document.getElementById('open-settings');
 const openOffers = document.getElementById('open-offers');
 const settingsView = document.getElementById('settings-view');
 const offersView = document.getElementById('offers-view');
 const settingsAppearanceTab = document.getElementById('settings-tab-appearance');
+const settingsAudioTab = document.getElementById('settings-tab-audio');
 const settingsAiTab = document.getElementById('settings-tab-ai');
 const settingsAppearancePanel = document.getElementById('settings-appearance');
+const settingsAudioPanel = document.getElementById('settings-audio');
 const settingsAiPanel = document.getElementById('settings-ai');
 const appOpacity = document.getElementById('app-opacity');
 const appOpacityValue = document.getElementById('app-opacity-value');
 const textOpacity = document.getElementById('text-opacity');
 const textOpacityValue = document.getElementById('text-opacity-value');
 const panel = document.querySelector('.panel');
+const { selectLatestInterviewerQuestion } = window.interviewQuestionContext;
 const STORAGE_KEY = 'local-ai-conversation-v1';
 const TRANSCRIPT_CONTEXT_KEY = 'local-ai-transcript-context-v1';
 const APPEARANCE_KEY = 'local-ai-appearance-v1';
-let messages = loadMessages();
 let transcriptContext = loadTranscriptContext();
 let cancelGeneration = null;
+let activeTypedAnswerId = null;
 let noteSaveTimer = null;
 let contextSaveTimer = null;
 let contextState = { text: '', files: [] };
@@ -97,13 +101,16 @@ let availableUsageSeconds = 0;
 let usageClockStartedAt = 0;
 let usageClockTimer = null;
 let transcriptionCaptures = [];
-let transcriptionSources = { microphone: false, system: true };
+let transcriptionSources = { microphone: true, system: true };
 let permissionStreams = { computer: null, user: null };
+let audioPermissionState = { microphone: 'unknown', system: 'unknown' };
 let cancelInterviewAnswer = null;
 let answerStartTimer = null;
 let interviewPipelineRevision = 0;
 let activeInterviewAnswerTurnId = null;
 let lastInterviewQuestion = null;
+let latestComputerTurnEndedAt = 0;
+let pendingComputerContinuation = null;
 const recommendedModels = [
   { name: 'qwen2.5-1.5b-instruct-q4_k_m', label: 'Qwen 2.5 1.5B Instruct', description: 'Balanced · Recommended', size: 1_117_320_736, vision: false },
   { name: 'qwen2.5-0.5b-instruct-q4_k_m', label: 'Qwen 2.5 0.5B Instruct', description: 'Fastest · Basic answers', size: 491_400_032, vision: false },
@@ -133,17 +140,13 @@ function applyAppearance(values = loadAppearance()) {
 
 applyAppearance();
 
-function loadMessages() {
-  try {
-    const value = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return Array.isArray(value) ? value.filter((item) => item && ['user', 'assistant'].includes(item.role) && typeof item.content === 'string') : [];
-  } catch { return []; }
-}
-
 function loadTranscriptContext() {
   try {
     const value = JSON.parse(localStorage.getItem(TRANSCRIPT_CONTEXT_KEY));
-    return Array.isArray(value) ? value.filter((item) => item && ['user', 'computer'].includes(item.speaker) && typeof item.text === 'string').slice(-40) : [];
+    return Array.isArray(value) ? value.filter((item) => item && ['user', 'computer', 'assistant'].includes(item.speaker) && typeof item.text === 'string')
+      .slice(-40).map((item) => item.speaker === 'assistant' && item.pending
+        ? { ...item, text: item.text || 'Answer interrupted.', pending: false }
+        : item) : [];
   } catch { return []; }
 }
 
@@ -152,9 +155,7 @@ function saveTranscriptContext() {
   localStorage.setItem(TRANSCRIPT_CONTEXT_KEY, JSON.stringify(transcriptContext));
 }
 
-function saveMessages() { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-80))); }
 function setStatus(text, error = false) { status.textContent = text; status.dataset.error = String(error); }
-function scrollToBottom() { messagesElement.scrollTop = messagesElement.scrollHeight; }
 
 function contextLabel() {
   const names = contextState.files.map((file) => file.name).filter(Boolean);
@@ -187,7 +188,7 @@ function renderPromptSuggestions() {
   clearTimeout(suggestionTimer);
   const revision = ++suggestionRevision;
   const draft = prompt.value.trim().replace(/\s+/g, ' ').slice(0, 500);
-  const recentTranscript = transcriptContext.map((item) => `${item.speaker === 'user' ? 'User' : 'Computer'}: ${item.text}`).join('\n').slice(-20_000);
+  const recentTranscript = transcriptContext.map((item) => `${item.speaker === 'computer' ? 'Interviewer' : item.speaker === 'assistant' ? 'AI' : 'You'}: ${item.text}`).join('\n').slice(-20_000);
   if (!draft || !modelSelect.value) { promptSuggestions.replaceChildren(); return; }
   suggestionTimer = setTimeout(async () => {
     try {
@@ -272,36 +273,69 @@ async function renderInterviewQuestionSuggestions(turn, pipelineRevision) {
 function answerCardFor(turnId, question, request, label) {
   let card = [...transcriptFeed.querySelectorAll('.interview-answer')].find((item) => item.dataset.turnId === turnId);
   if (card) {
-    card.querySelector('.interview-answer-question').textContent = question;
+    card.title = `Answer to: ${question}`;
+    card.answerRequest = request;
+    card.answerLabel = label;
+    renderAnsweredQuestion(card, question);
     return card;
   }
   transcriptFeed.querySelector('.transcript-empty')?.remove();
   card = document.createElement('section');
   card.className = 'interview-answer';
   card.dataset.turnId = turnId;
+  card.title = `Answer to: ${question}`;
+  card.answerRequest = request;
+  card.answerLabel = label;
   const header = document.createElement('div');
   header.className = 'interview-answer-header';
   const title = document.createElement('span');
-  title.textContent = 'Suggested answer';
-  const questionText = document.createElement('span');
-  questionText.className = 'interview-answer-question';
-  questionText.textContent = question;
+  title.textContent = 'AI answer';
   const expand = document.createElement('button');
   expand.className = 'expand-interview-answer';
   expand.type = 'button';
   expand.textContent = 'Expand answer';
   expand.hidden = true;
-  expand.addEventListener('click', () => generateInterviewAnswer({ ...request, model: modelSelect.value }, label, turnId, 'detailed'));
+  expand.addEventListener('click', () => generateInterviewAnswer({ ...card.answerRequest, model: modelSelect.value }, card.answerLabel, turnId, 'detailed'));
+  const focus = document.createElement('div');
+  focus.className = 'interview-answer-focus';
   const text = document.createElement('pre');
   text.className = 'interview-answer-text';
-  header.append(title, questionText, expand);
-  card.append(header, text);
+  header.append(title, expand);
+  card.append(header, focus, text);
+  renderAnsweredQuestion(card, question);
   transcriptFeed.append(card);
   return card;
 }
 
-function generateInterviewAnswer(request, label, turnId, verbosity = 'concise') {
+function renderAnsweredQuestion(card, question) {
+  const focus = card.querySelector('.interview-answer-focus');
+  focus.replaceChildren();
+  const label = document.createElement('span');
+  label.className = 'interview-answer-focus-label';
+  label.textContent = 'Answering';
+  focus.append(label);
+  const line = document.createElement('div');
+  line.className = 'interview-answer-focus-question';
+  line.textContent = question;
+  line.title = question;
+  focus.append(line);
+}
+
+function cancelUnfinishedInterviewAnswer(keepTurnId = null) {
+  const unfinishedTurnId = activeInterviewAnswerTurnId;
+  const wasGenerating = typeof cancelInterviewAnswer === 'function';
   cancelInterviewAnswer?.();
+  cancelInterviewAnswer = null;
+  if (wasGenerating && unfinishedTurnId && unfinishedTurnId !== keepTurnId) {
+    const card = [...transcriptFeed.querySelectorAll('.interview-answer')]
+      .find((item) => item.dataset.turnId === unfinishedTurnId);
+    if (card?.querySelector('.interview-answer-text.pending')) card.remove();
+  }
+  activeInterviewAnswerTurnId = null;
+}
+
+function generateInterviewAnswer(request, label, turnId, verbosity = 'concise') {
+  cancelUnfinishedInterviewAnswer(turnId);
   activeInterviewAnswerTurnId = turnId;
   const card = answerCardFor(turnId, request.question, request, label);
   const text = card.querySelector('.interview-answer-text');
@@ -332,7 +366,7 @@ function generateInterviewAnswer(request, label, turnId, verbosity = 'concise') 
       expand.hidden = verbosity === 'detailed';
       const turn = transcriptContext.find((item) => item.id === turnId);
       if (turn) {
-        turn.answer = { text: text.textContent, verbosity, label };
+        turn.answer = { text: text.textContent, verbosity, label, question: request.question };
         saveTranscriptContext();
       }
       transcriptStatus.textContent = `${verbosity === 'detailed' ? 'Expanded answer' : 'Answer'} ready · ${label}`;
@@ -348,8 +382,13 @@ function generateInterviewAnswer(request, label, turnId, verbosity = 'concise') 
 }
 
 async function answerTranscriptTurnManually(bubble, textElement, button) {
-  const question = textElement.textContent.trim();
-  if (!question || button.disabled) return;
+  if (button.disabled) return;
+  const target = selectLatestInterviewerQuestion(transcriptContext, textElement.textContent, lastCaption?.bubble === bubble ? lastCaption.capturedAt : 0);
+  if (!target) {
+    transcriptStatus.textContent = 'No interviewer question has been detected yet.';
+    return;
+  }
+  const question = target.text;
   const selectedModel = modelSelect.selectedOptions[0];
   if (!modelSelect.value || selectedModel?.dataset.installed !== 'true') {
     transcriptStatus.textContent = 'Download and select a local model before requesting an answer.';
@@ -358,8 +397,10 @@ async function answerTranscriptTurnManually(bubble, textElement, button) {
   button.disabled = true;
   button.textContent = '…';
   button.title = 'Preparing answer…';
+  clearTimeout(answerStartTimer);
+  cancelUnfinishedInterviewAnswer();
   const pipelineRevision = ++interviewPipelineRevision;
-  let turn = transcriptContext.find((item) => item.id === bubble.dataset.turnId);
+  let turn = target.turn;
   if (!turn) {
     turn = { id: `manual-${Date.now()}-${Math.random().toString(16).slice(2)}`, speaker: 'computer', text: question, final: true, reason: 'manual-answer' };
     transcriptContext.push(turn);
@@ -372,7 +413,7 @@ async function answerTranscriptTurnManually(bubble, textElement, button) {
       detection = await window.overlay.detectInterviewQuestion({
         model: modelSelect.value,
         turn: { ...turn, text: question },
-        recentTurns: transcriptContext.slice(-6)
+        recentTurns: recentDialogueTurns().slice(-6)
       }).catch(() => ({ type: 'general' }));
       turn.detection = detection;
     }
@@ -380,19 +421,19 @@ async function answerTranscriptTurnManually(bubble, textElement, button) {
     const retrievedContext = await window.overlay.retrieveInterviewContext({
       question,
       context: contextState,
-      recentTurns: transcriptContext.slice(-8)
+      recentTurns: recentDialogueTurns()
     });
     if (pipelineRevision !== interviewPipelineRevision) return;
     turn.text = question;
     turn.retrievedContext = retrievedContext;
     saveTranscriptContext();
     generateInterviewAnswer({ model: modelSelect.value, question, type, retrievedContext }, type.replace('_', ' '), turn.id);
-    button.textContent = 'Answer anyway';
-    button.title = 'Generate this answer again';
+    button.textContent = 'Answer latest question';
+    button.title = 'Answer the latest interviewer question using system audio';
   } catch (error) {
     transcriptStatus.textContent = `Could not prepare answer: ${error.message}`;
-    button.textContent = 'Answer anyway';
-    button.title = 'Answer this message anyway';
+    button.textContent = 'Answer it';
+    button.title = 'Answer this interviewer message';
   } finally {
     button.disabled = false;
   }
@@ -401,20 +442,40 @@ async function answerTranscriptTurnManually(bubble, textElement, button) {
 function addManualAnswerButton(bubble, textElement, turnId = '') {
   if (!bubble.classList.contains('computer')) return;
   if (turnId) bubble.dataset.turnId = turnId;
-  let button = bubble.querySelector('.caption-answer-button');
+  const row = bubble.closest('.caption-turn');
+  if (!row) return;
+  // Only the newest interviewer caption offers a manual answer action.
+  for (const oldButton of transcriptFeed.querySelectorAll('.caption-answer-button')) {
+    if (!row.contains(oldButton)) oldButton.remove();
+  }
+  let button = row.querySelector('.caption-answer-button');
   if (button) return button;
   button = document.createElement('button');
   button.className = 'caption-answer-button';
   button.type = 'button';
-  button.textContent = 'Answer anyway';
-  button.title = 'Answer this message anyway';
-  button.setAttribute('aria-label', 'Answer this interviewer message anyway');
+  button.textContent = 'Answer it';
+  button.title = 'Answer the latest interviewer question';
+  button.setAttribute('aria-label', 'Answer the latest interviewer question');
   button.addEventListener('click', () => answerTranscriptTurnManually(bubble, textElement, button));
-  bubble.append(button);
+  row.append(button);
   return button;
 }
 
+function scrollCaptionToLatest(bubble) {
+  const viewport = bubble.querySelector('.caption-text-viewport');
+  if (!viewport) return;
+  // New recognized words extend the line on the right. Slide the viewport
+  // toward them so earlier words leave on the left like a live ticker.
+  requestAnimationFrame(() => {
+    if (viewport.isConnected) viewport.scrollTo({ left: viewport.scrollWidth - viewport.clientWidth, behavior: 'smooth' });
+  });
+}
+
 function appendStoredTurn(turn) {
+  if (turn.speaker === 'assistant' || turn.source === 'typed') {
+    appendTypedMessage(turn);
+    return;
+  }
   if (turn.speaker === 'user') return;
   const bubble = document.createElement('div');
   bubble.className = `caption ${turn.speaker === 'user' ? 'user' : 'computer'}`;
@@ -422,19 +483,36 @@ function appendStoredTurn(turn) {
   label.className = 'caption-label';
   label.textContent = turn.speaker === 'user' ? 'You' : 'Computer';
   const text = document.createElement('span');
+  text.className = 'caption-text';
   text.textContent = turn.text;
-  bubble.append(label, text);
+  const viewport = document.createElement('span');
+  viewport.className = 'caption-text-viewport';
+  viewport.append(text);
+  bubble.append(label, viewport);
+  const row = document.createElement('div');
+  row.className = 'caption-turn';
+  row.append(bubble);
+  transcriptFeed.append(row);
   addManualAnswerButton(bubble, text, turn.id);
-  transcriptFeed.append(bubble);
   if (turn.answer?.text) {
-    const request = { model: modelSelect.value, question: turn.text, type: turn.detection?.type || 'general', retrievedContext: turn.retrievedContext || {} };
-    const card = answerCardFor(turn.id, turn.text, request, turn.answer.label || 'general');
+    const answeredQuestion = turn.answer.question || turn.text;
+    const request = { model: modelSelect.value, question: answeredQuestion, type: turn.detection?.type || 'general', retrievedContext: turn.retrievedContext || {} };
+    const card = answerCardFor(turn.id, answeredQuestion, request, turn.answer.label || 'general');
     card.querySelector('.interview-answer-text').textContent = turn.answer.text;
     card.querySelector('.expand-interview-answer').hidden = turn.answer.verbosity === 'detailed';
   }
-  if (Array.isArray(turn.suggestedQuestions) && turn.suggestedQuestions.length) {
-    questionSuggestionGroup(turn, turn.suggestedQuestions, false);
-  }
+  // Follow-up question suggestions are paused for now.
+}
+
+function appendTypedMessage(turn) {
+  transcriptFeed.querySelector('.transcript-empty')?.remove();
+  const element = document.createElement('div');
+  element.className = `transcript-message ${turn.speaker === 'assistant' ? 'assistant' : 'typed'}${turn.pending ? ' pending' : ''}`;
+  element.dataset.turnId = turn.id;
+  element.textContent = turn.text;
+  transcriptFeed.append(element);
+  transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
+  return element;
 }
 
 function renderStoredTranscript() {
@@ -464,34 +542,12 @@ function renderSummary() {
     message.className = `summary-message ${turn.speaker === 'user' ? 'user' : 'computer'}`;
     const speaker = document.createElement('span');
     speaker.className = 'summary-speaker';
-    speaker.textContent = turn.speaker === 'user' ? 'You' : 'Computer';
+    speaker.textContent = turn.speaker === 'assistant' ? 'AI answer' : turn.speaker === 'computer' ? 'Computer' : turn.source === 'typed' ? 'You · typed' : 'You';
     const text = document.createElement('span');
     text.textContent = turn.text;
     message.append(speaker, text);
     summaryConversation.append(message);
   }
-}
-
-function render() {
-  messagesElement.replaceChildren();
-  if (!messages.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    const title = document.createElement('strong');
-    title.textContent = 'Private, local chat';
-    const subtitle = document.createElement('span');
-    subtitle.textContent = 'Messages stay on this computer.';
-    empty.append(title, subtitle);
-    messagesElement.append(empty);
-  } else {
-    for (const message of messages) {
-      const element = document.createElement('div');
-      element.className = `message ${message.role}${message.pending ? ' pending' : ''}`;
-      element.textContent = message.content;
-      messagesElement.append(element);
-    }
-  }
-  scrollToBottom();
 }
 
 async function refreshModels() {
@@ -562,39 +618,77 @@ function updateModelSelection() {
   downloadModel.textContent = downloadingModel ? 'Downloading…' : 'Download';
 }
 
-function finishGeneration(error) {
-  const last = messages.at(-1);
-  if (last?.role === 'assistant') delete last.pending;
+function recentDialogueTurns() {
+  return transcriptContext.filter((turn) => turn.speaker === 'computer' || turn.speaker === 'user').slice(-8);
+}
+
+function interviewChatMessages() {
+  const dialogue = transcriptContext.filter((turn) => !turn.pending && String(turn.text || '').trim()).slice(-18);
+  const messages = [{
+    role: 'system',
+    content: 'You are a private interview copilot helping a candidate in a live interview. System audio is the interviewer; microphone audio is the candidate; typed messages are the candidate speaking to you, not interviewer questions. Answer the latest typed request directly. Use the recent interview conversation as context when relevant. Never invent candidate experience. If code is requested, provide complete code in the requested language.'
+  }];
+  for (const turn of dialogue) {
+    const text = String(turn.text).slice(0, 2000);
+    if (turn.speaker === 'assistant') messages.push({ role: 'assistant', content: text });
+    else if (turn.source === 'typed') messages.push({ role: 'user', content: text });
+    else if (turn.speaker === 'computer') {
+      messages.push({ role: 'user', content: `Interviewer: ${text}` });
+      if (turn.answer?.text) messages.push({ role: 'assistant', content: `Earlier suggested answer: ${String(turn.answer.text).slice(0, 2000)}` });
+    } else messages.push({ role: 'user', content: `Candidate said: ${text}` });
+  }
+  return messages;
+}
+
+function finishGeneration(turn, error = '') {
+  if (activeTypedAnswerId !== turn.id) return;
+  if (error && !turn.text) turn.text = error === 'Stopped' ? 'Answer stopped.' : `Could not answer: ${error}`;
+  delete turn.pending;
   cancelGeneration = null;
+  activeTypedAnswerId = null;
   send.textContent = 'Send';
-  saveMessages();
-  render();
-  setStatus(error || 'Local AI ready · offline', Boolean(error));
+  const element = [...transcriptFeed.querySelectorAll('.transcript-message.assistant')].find((item) => item.dataset.turnId === turn.id);
+  if (element) { element.textContent = turn.text; element.classList.remove('pending'); }
+  saveTranscriptContext();
+  renderSummary();
+  transcriptStatus.textContent = error || 'Answer ready';
 }
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
-  if (cancelGeneration) { cancelGeneration(); finishGeneration('Generation stopped'); return; }
+  if (cancelGeneration) {
+    const turn = transcriptContext.find((item) => item.id === activeTypedAnswerId);
+    cancelGeneration();
+    if (turn) finishGeneration(turn, 'Stopped');
+    return;
+  }
   const content = prompt.value.trim();
   const model = modelSelect.value;
   if (!content || !model || send.disabled) return;
-  messages.push({ role: 'user', content }, { role: 'assistant', content: '', pending: true });
+  const userTurn = { id: `typed-${Date.now()}-${Math.random().toString(16).slice(2)}`, speaker: 'user', source: 'typed', text: content };
+  transcriptContext.push(userTurn);
+  const requestMessages = interviewChatMessages();
+  const assistantTurn = { id: `reply-${Date.now()}-${Math.random().toString(16).slice(2)}`, speaker: 'assistant', text: '', pending: true };
+  transcriptContext.push(assistantTurn);
+  activeTypedAnswerId = assistantTurn.id;
+  saveTranscriptContext();
+  renderSummary();
+  appendTypedMessage(userTurn);
+  const answerElement = appendTypedMessage(assistantTurn);
   prompt.value = '';
   prompt.style.height = '42px';
   promptSuggestions.replaceChildren();
   send.textContent = 'Stop';
-  setStatus(`Thinking with ${model}…`);
-  render();
-  const requestMessages = messages.slice(0, -1).map(({ role, content: text }) => ({ role, content: text }));
+  transcriptStatus.textContent = 'Answering your question…';
   cancelGeneration = window.overlay.chat({ model, messages: requestMessages, context: contextState }, {
     onChunk(chunk) {
-      messages.at(-1).content += chunk;
-      const lastElement = messagesElement.lastElementChild;
-      if (lastElement) lastElement.textContent = messages.at(-1).content;
-      scrollToBottom();
+      if (activeTypedAnswerId !== assistantTurn.id) return;
+      assistantTurn.text += chunk;
+      answerElement.textContent = assistantTurn.text;
+      transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
     },
-    onDone() { finishGeneration(); },
-    onError(error) { finishGeneration(error); }
+    onDone() { finishGeneration(assistantTurn); },
+    onError(error) { finishGeneration(assistantTurn, error); }
   });
 });
 
@@ -642,10 +736,9 @@ downloadModel.addEventListener('click', () => {
 newChat.addEventListener('click', async () => {
   cancelGeneration?.();
   cancelGeneration = null;
-  messages = [];
-  saveMessages();
+  activeTypedAnswerId = null;
+  localStorage.removeItem(STORAGE_KEY);
   send.textContent = 'Send';
-  render();
   resetTranscriptHistory();
   contextState = { text: '', files: [] };
   contextUploadErrors = [];
@@ -671,29 +764,22 @@ function setView(view) {
   const summaryOpen = view === 'summary';
   const settingsOpen = view === 'settings';
   const offersOpen = view === 'offers';
-  messagesElement.hidden = notesOpen || contextOpen || transcriptOpen || summaryOpen || settingsOpen || offersOpen || !sessionActive;
   notesView.hidden = !notesOpen;
   contextView.hidden = !contextOpen;
   transcriptView.hidden = !transcriptOpen;
   summaryView.hidden = !summaryOpen;
   settingsView.hidden = !settingsOpen;
   offersView.hidden = !offersOpen;
-  // The composer is shared by Chat and Live transcription. Keeping the
-  // suggestions directly before it makes the bubbles sit above the input in
-  // both views.
-  form.hidden = notesOpen || contextOpen || summaryOpen || settingsOpen || offersOpen || !sessionActive;
-  promptSuggestions.hidden = notesOpen || contextOpen || summaryOpen || settingsOpen || offersOpen;
+  form.hidden = !transcriptOpen || !sessionActive;
+  promptSuggestions.hidden = !transcriptOpen;
   modelSelect.hidden = !settingsOpen;
   newChat.hidden = settingsOpen || offersOpen;
   sessionToggle.hidden = settingsOpen || offersOpen;
   sessionClock.hidden = settingsOpen || offersOpen;
-  const blockedScreen = !sessionActive && (transcriptOpen || (!notesOpen && !contextOpen && !summaryOpen && !settingsOpen && !offersOpen));
+  const blockedScreen = !sessionActive && transcriptOpen;
   sessionBlocker.hidden = !blockedScreen;
-  sessionBlockerMessage.textContent = transcriptOpen
-    ? 'Start your session to use live transcription.'
-    : 'Start your session to use Local AI.';
+  sessionBlockerMessage.textContent = 'Start your session to use live transcription and interview answers.';
   updateModelSelection();
-  showChat.classList.toggle('active', !notesOpen && !contextOpen && !transcriptOpen && !summaryOpen);
   showNotes.classList.toggle('active', notesOpen);
   showContext.classList.toggle('active', contextOpen);
   showTranscript.classList.toggle('active', transcriptOpen);
@@ -701,20 +787,24 @@ function setView(view) {
   showAccount.classList.toggle('active', settingsOpen || offersOpen);
   panel.classList.toggle('settings-mode', settingsOpen || offersOpen);
   panel.classList.toggle('offers-mode', offersOpen);
-  interviewQuestions.hidden = settingsOpen || offersOpen;
-  viewTitle.textContent = settingsOpen ? 'Settings' : offersOpen ? 'Recharge & Offers' : notesOpen ? 'Notepad' : contextOpen ? 'Context' : summaryOpen ? 'Meeting summary' : transcriptOpen ? 'Live transcription' : 'Local AI';
-  status.textContent = settingsOpen ? 'Appearance is saved locally' : offersOpen ? 'Manage your local account usage' : notesOpen || contextOpen ? 'Stored only on this computer' : summaryOpen ? 'Conversation saved locally' : transcriptOpen ? 'On-device speech recognition' : 'Local AI ready · offline';
+  viewTitle.textContent = settingsOpen ? 'Settings' : offersOpen ? 'Recharge & Offers' : notesOpen ? 'Notepad' : contextOpen ? 'Context' : summaryOpen ? 'Meeting summary' : 'Live transcription';
+  status.textContent = settingsOpen ? 'Appearance is saved locally' : offersOpen ? 'Manage your local account usage' : notesOpen || contextOpen ? 'Stored only on this computer' : summaryOpen ? 'Conversation saved locally' : 'On-device speech recognition and interview answers';
   if (notesOpen) notepad.focus();
   if (contextOpen) contextInput.focus();
   else if (!notesOpen) renderPromptSuggestions();
 }
 
 function setSettingsTab(tab) {
+  const appearanceOpen = tab === 'appearance';
+  const audioOpen = tab === 'audio';
   const aiOpen = tab === 'ai';
-  settingsAppearanceTab.setAttribute('aria-selected', String(!aiOpen));
+  settingsAppearanceTab.setAttribute('aria-selected', String(appearanceOpen));
+  settingsAudioTab.setAttribute('aria-selected', String(audioOpen));
   settingsAiTab.setAttribute('aria-selected', String(aiOpen));
-  settingsAppearancePanel.hidden = aiOpen;
+  settingsAppearancePanel.hidden = !appearanceOpen;
+  settingsAudioPanel.hidden = !audioOpen;
   settingsAiPanel.hidden = !aiOpen;
+  if (audioOpen) refreshMicrophonePermissionStatus();
   updateModelSelection();
 }
 
@@ -736,7 +826,7 @@ function updateUsageState(value = {}) {
   sessionToggle.title = sessionActive ? 'Pause your timed session' : 'Start your timed session';
   walletBalance.textContent = formatUsage(availableUsageSeconds);
   updateModelSelection();
-  const view = !offersView.hidden ? 'offers' : !settingsView.hidden ? 'settings' : !notesView.hidden ? 'notes' : !contextView.hidden ? 'context' : !summaryView.hidden ? 'summary' : !transcriptView.hidden ? 'transcript' : 'chat';
+  const view = !offersView.hidden ? 'offers' : !settingsView.hidden ? 'settings' : !notesView.hidden ? 'notes' : !contextView.hidden ? 'context' : !summaryView.hidden ? 'summary' : 'transcript';
   setView(view);
 }
 
@@ -772,7 +862,6 @@ sessionToggle.addEventListener('click', async () => {
 
 document.querySelectorAll('.open-recharge').forEach((button) => button.addEventListener('click', openRechargeOffers));
 
-showChat.addEventListener('click', () => setView('chat'));
 showNotes.addEventListener('click', () => setView('notes'));
 showContext.addEventListener('click', () => setView('context'));
 showTranscript.addEventListener('click', () => setView('transcript'));
@@ -839,14 +928,19 @@ async function watchPayment(id) {
   throw new Error('Payment confirmation is taking longer than expected.');
 }
 
+paymentWaitModal.addEventListener('cancel', (event) => event.preventDefault());
+
 rechargeForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   rechargeSubmit.disabled = true;
   paymentStatus.className = '';
   paymentStatus.textContent = 'Opening secure checkout…';
+  paymentWaitMessage.textContent = 'Opening secure checkout…';
   try {
+    paymentWaitModal.showModal();
     const payment = await window.overlay.startRecharge(rechargePlan.value);
     paymentStatus.textContent = 'Complete payment in your browser…';
+    paymentWaitMessage.textContent = 'Complete your payment in the browser. Waiting for confirmation…';
     await watchPayment(payment.paymentId);
     await refreshWallet();
     paymentStatus.className = 'success';
@@ -854,7 +948,10 @@ rechargeForm.addEventListener('submit', async (event) => {
   } catch (error) {
     paymentStatus.className = 'error';
     paymentStatus.textContent = error.message || 'Could not complete payment.';
-  } finally { rechargeSubmit.disabled = false; }
+  } finally {
+    if (paymentWaitModal.open) paymentWaitModal.close();
+    rechargeSubmit.disabled = false;
+  }
 });
 
 couponForm.addEventListener('submit', async (event) => {
@@ -898,8 +995,8 @@ async function clearLocalUserWorkspace() {
   suggestionRevision += 1;
   if (transcriptionRunning) await stopLiveTranscription();
 
-  messages = [];
   localStorage.removeItem(STORAGE_KEY);
+  activeTypedAnswerId = null;
   resetTranscriptHistory();
   contextState = { text: '', files: [] };
   contextUploadErrors = [];
@@ -908,7 +1005,6 @@ async function clearLocalUserWorkspace() {
   prompt.value = '';
   promptSuggestions.replaceChildren();
   send.textContent = 'Send';
-  render();
   renderContextFiles();
 
   // Let an in-flight context save finish before replacing it with the empty state.
@@ -923,10 +1019,11 @@ async function clearLocalUserWorkspace() {
   transcriptStatus.textContent = 'New session ready';
 }
 
+window.overlay.onGoogleBrowserOpened(() => { loginStatus.textContent = 'Complete Google sign-in in your browser…'; });
 googleLogin.addEventListener('click', async () => {
   googleLogin.disabled = true;
   loginStatus.classList.remove('error');
-  loginStatus.textContent = 'Complete sign-in in your browser…';
+  loginStatus.textContent = 'Connecting to sign-in server…';
   try {
     const result = await window.overlay.loginWithGoogle();
     applyAuthState(result);
@@ -962,6 +1059,7 @@ openOffers.addEventListener('click', () => {
   refreshWallet();
 });
 settingsAppearanceTab.addEventListener('click', () => setSettingsTab('appearance'));
+settingsAudioTab.addEventListener('click', () => setSettingsTab('audio'));
 settingsAiTab.addEventListener('click', () => setSettingsTab('ai'));
 document.addEventListener('click', () => {
   accountMenu.hidden = true;
@@ -979,8 +1077,11 @@ textOpacity.addEventListener('input', () => applyAppearance({ app: Number(appOpa
 function updateAudioSourceButtons() {
   toggleMicrophone.setAttribute('aria-pressed', String(transcriptionSources.microphone));
   toggleSystemAudio.setAttribute('aria-pressed', String(transcriptionSources.system));
+  toggleMicrophone.textContent = transcriptionSources.microphone ? 'On' : 'Off';
+  toggleSystemAudio.textContent = transcriptionSources.system ? 'On' : 'Off';
   toggleMicrophone.disabled = transcriptionRunning;
   toggleSystemAudio.disabled = transcriptionRunning;
+  renderAudioPermissionLists();
 }
 
 toggleMicrophone.addEventListener('click', () => {
@@ -1015,14 +1116,14 @@ function beginAudioCapture(stream, speaker) {
     const copy = new Float32Array(input);
     chunks.push(copy);
     sampleCount += copy.length;
-    // Three-second windows with overlap preserve words that straddle
+    // Two-second windows with overlap preserve words that straddle
     // chunk boundaries; the backend's VAD removes non-speech inside them.
-    if (sampleCount < context.sampleRate * 3) return;
+    if (sampleCount < context.sampleRate * 2) return;
     const merged = new Float32Array(sampleCount);
     let offset = 0;
     for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length; }
     chunks.length = 0;
-    const overlap = merged.slice(Math.max(0, merged.length - Math.round(context.sampleRate * 0.75)));
+    const overlap = merged.slice(Math.max(0, merged.length - Math.round(context.sampleRate * 0.5)));
     chunks.push(overlap);
     sampleCount = overlap.length;
     let output = merged;
@@ -1054,64 +1155,174 @@ function streamIsLive(stream) {
   return Boolean(stream?.getAudioTracks().some((track) => track.readyState === 'live'));
 }
 
-grantPermissions.addEventListener('click', async () => {
-  grantPermissions.disabled = true;
-  permissionStatus.classList.remove('error');
-  try {
-    permissionStatus.textContent = 'Allow system audio access…';
+const microphoneConstraints = {
+  audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+  video: false
+};
+
+function selectedPermissionsReady() {
+  return (!transcriptionSources.microphone || audioPermissionState.microphone === 'ready') &&
+    (!transcriptionSources.system || audioPermissionState.system === 'ready');
+}
+
+function renderPermissionList(container, selectedOnly) {
+  container.replaceChildren();
+  for (const source of ['microphone', 'system']) {
+    if (selectedOnly && !transcriptionSources[source]) continue;
+    const enabled = transcriptionSources[source];
+    const state = enabled ? audioPermissionState[source] : 'off';
+    const row = document.createElement('div');
+    row.className = 'permission-row';
+    row.dataset.state = state;
+    const mark = document.createElement('span');
+    mark.className = 'permission-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = state === 'ready' ? '✓' : '·';
+    const copy = document.createElement('div');
+    copy.className = 'permission-copy';
+    const title = document.createElement('strong');
+    title.textContent = source === 'microphone' ? 'Microphone' : 'System audio';
+    const detail = document.createElement('span');
+    detail.textContent = state === 'ready' ? 'Access ready' : state === 'off' ? 'Turn on this source above to use it' :
+      state === 'checking' ? 'Checking access…' : state === 'needs' ? 'Permission needed' : 'Not checked yet';
+    copy.append(title, detail);
+    row.append(mark, copy);
+    if (enabled && state !== 'ready') {
+      const action = document.createElement('button');
+      action.type = 'button';
+      action.className = 'permission-action';
+      action.textContent = state === 'checking' ? 'Checking…' : state === 'needs' ? 'Try again' : 'Allow';
+      action.disabled = state === 'checking' || transcriptionRunning;
+      action.addEventListener('click', () => requestAudioPermission(source));
+      row.append(action);
+    }
+    container.append(row);
+  }
+}
+
+function renderAudioPermissionLists() {
+  renderPermissionList(settingsPermissionList, false);
+  renderPermissionList(permissionList, true);
+}
+
+async function refreshMicrophonePermissionStatus() {
+  if (streamIsLive(permissionStreams.user)) {
+    audioPermissionState.microphone = 'ready';
+  } else if (window.overlay.platform === 'darwin') {
+    const status = await window.overlay.getMicrophonePermissionStatus().catch(() => 'unknown');
+    audioPermissionState.microphone = status === 'granted' ? 'ready' :
+      status === 'denied' || status === 'restricted' ? 'needs' : 'unknown';
+  } else {
+    const status = navigator.permissions?.query
+      ? await navigator.permissions.query({ name: 'microphone' }).catch(() => null)
+      : null;
+    audioPermissionState.microphone = status?.state === 'granted' ? 'ready' : status?.state === 'denied' ? 'needs' : 'unknown';
+  }
+  renderAudioPermissionLists();
+}
+
+async function checkAudioPermissions() {
+  if (transcriptionSources.microphone) {
+    await refreshMicrophonePermissionStatus();
+  }
+  if (transcriptionSources.system) {
     if (window.overlay.platform === 'darwin') {
+      audioPermissionState.system = 'checking';
+      renderAudioPermissionLists();
+      try { await window.overlay.requestSystemAudio(); audioPermissionState.system = 'ready'; }
+      catch { audioPermissionState.system = 'needs'; }
+    } else if (window.overlay.platform !== 'darwin') {
+      audioPermissionState.system = streamIsLive(permissionStreams.computer) ? 'ready' : 'needs';
+    }
+  }
+  if (transcriptionSources.microphone && audioPermissionState.microphone === 'ready' &&
+    (!transcriptionSources.system || audioPermissionState.system === 'ready') && !streamIsLive(permissionStreams.user)) {
+    try { permissionStreams.user = await navigator.mediaDevices.getUserMedia(microphoneConstraints); }
+    catch { audioPermissionState.microphone = 'needs'; }
+  }
+  renderAudioPermissionLists();
+  return selectedPermissionsReady();
+}
+
+async function requestAudioPermission(source) {
+  let resumeListening = false;
+  audioPermissionState[source] = 'checking';
+  permissionStatus.classList.remove('error');
+  permissionStatus.textContent = `Checking ${source === 'microphone' ? 'microphone' : 'system audio'} access…`;
+  renderAudioPermissionLists();
+  try {
+    if (source === 'microphone') {
+      const status = window.overlay.platform === 'darwin'
+        ? await window.overlay.getMicrophonePermissionStatus() : 'unknown';
+      if (status === 'denied' || status === 'restricted') {
+        await window.overlay.openAudioPermissionSettings('microphone');
+        throw new Error('Enable Microphone for UNYON in macOS Privacy & Security, then click Try again.');
+      }
+      permissionStreams.user?.getTracks().forEach((track) => track.stop());
+      permissionStreams.user = await navigator.mediaDevices.getUserMedia(microphoneConstraints);
+      if (!streamIsLive(permissionStreams.user)) throw new Error('Microphone did not provide an audio stream.');
+    } else if (window.overlay.platform === 'darwin') {
       await window.overlay.requestSystemAudio();
     } else {
-    permissionStreams.computer = await navigator.mediaDevices.getDisplayMedia({
-      video: true, audio: true, systemAudio: 'include'
-    });
-    if (!streamIsLive(permissionStreams.computer)) {
-      permissionStreams.computer.getTracks().forEach((track) => track.stop());
-      permissionStreams.computer = null;
-      throw new Error('System audio was not selected in the native picker.');
+      permissionStreams.computer?.getTracks().forEach((track) => track.stop());
+      permissionStreams.computer = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true, systemAudio: 'include' });
+      if (!streamIsLive(permissionStreams.computer)) throw new Error('Select system audio in the sharing picker.');
     }
+    if (source === 'microphone') {
+      permissionStreams.user.getTracks().forEach((track) => track.stop());
+      permissionStreams.user = null;
     }
-    permissionStatus.textContent = 'Allow microphone access…';
-    permissionStreams.user = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 }, video: false
-    });
-    permissionStatus.textContent = 'Permissions allowed';
-    permissionGate.hidden = true;
-    window.overlay.completePermissionGate();
+    audioPermissionState[source] = 'ready';
+    permissionStatus.textContent = `${source === 'microphone' ? 'Microphone' : 'System audio'} ready.`;
+    renderAudioPermissionLists();
+    if (!permissionGate.hidden && selectedPermissionsReady()) {
+      permissionGate.hidden = true;
+      window.overlay.completePermissionGate();
+      resumeListening = true;
+    }
   } catch (error) {
+    audioPermissionState[source] = 'needs';
+    if (source === 'system' && window.overlay.platform === 'darwin' &&
+      /permission|denied|access/i.test(error?.message || '')) {
+      window.overlay.openAudioPermissionSettings('system').catch(() => {});
+    }
     permissionStatus.classList.add('error');
     permissionStatus.textContent = error?.name === 'NotAllowedError'
-      ? 'Permission was denied. Enable My App in Privacy & Security, then try again.'
-      : (error?.message || 'Could not request audio permissions.');
-  } finally {
-    grantPermissions.disabled = false;
+      ? `Allow ${source === 'microphone' ? 'Microphone' : 'System audio'} in Privacy & Security, then click Try again.`
+      : (error?.message || 'Could not request audio permission.');
+    renderAudioPermissionLists();
   }
-});
+  if (resumeListening) {
+    try { await startLiveTranscription(); }
+    catch (error) { transcriptStatus.textContent = error.message || 'Could not start listening.'; }
+  }
+}
 
 async function startLiveTranscription() {
   if (!transcriptionSources.microphone && !transcriptionSources.system) {
     transcriptStatus.textContent = 'Turn on Microphone or System audio.';
     return;
   }
+  transcriptStatus.textContent = 'Checking audio access…';
+  if (!await checkAudioPermissions()) {
+    permissionStreams.user?.getTracks().forEach((track) => track.stop());
+    permissionStreams.user = null;
+    permissionStatus.textContent = 'Allow the permissions marked above to start listening.';
+    permissionGate.hidden = false;
+    return;
+  }
   transcriptStatus.textContent = 'Starting session…';
   await ensureUsageSession();
-  transcriptStatus.textContent = 'Requesting audio access…';
   const requested = [];
   if (transcriptionSources.system && window.overlay.platform !== 'darwin') {
-    if (!streamIsLive(permissionStreams.computer)) {
-      permissionGate.hidden = false;
-      permissionStatus.textContent = 'System audio permission needs to be renewed.';
-      return;
-    }
     requested.push(['computer', Promise.resolve(permissionStreams.computer.clone())]);
+    permissionStreams.computer.getTracks().forEach((track) => track.stop());
+    permissionStreams.computer = null;
   }
   if (transcriptionSources.microphone) {
-    if (!streamIsLive(permissionStreams.user)) {
-      permissionGate.hidden = false;
-      permissionStatus.textContent = 'Microphone permission needs to be renewed.';
-      return;
-    }
     requested.push(['user', Promise.resolve(permissionStreams.user.clone())]);
+    permissionStreams.user.getTracks().forEach((track) => track.stop());
+    permissionStreams.user = null;
   }
   const results = await Promise.allSettled(requested.map(([, capture]) => capture));
   transcriptionRunning = true;
@@ -1171,6 +1382,10 @@ toggleTranscription.addEventListener('click', async () => {
 });
 
 function resetTranscriptHistory() {
+  cancelGeneration?.();
+  cancelGeneration = null;
+  activeTypedAnswerId = null;
+  send.textContent = 'Send';
   interviewPipelineRevision += 1;
   cancelInterviewAnswer?.();
   cancelInterviewAnswer = null;
@@ -1178,11 +1393,9 @@ function resetTranscriptHistory() {
   answerStartTimer = null;
   activeInterviewAnswerTurnId = null;
   lastInterviewQuestion = null;
-  interviewQuestionsList.replaceChildren();
-  const questionsEmpty = document.createElement('div');
-  questionsEmpty.className = 'interview-questions-empty';
-  questionsEmpty.textContent = 'Suggestions appear after an interviewer question is detected.';
-  interviewQuestionsList.append(questionsEmpty);
+  latestComputerTurnEndedAt = 0;
+  pendingComputerContinuation = null;
+  // Follow-up question suggestions are paused for now.
   window.overlay.clearTranscription();
   transcriptFeed.replaceChildren();
   lastCaption = null;
@@ -1198,7 +1411,10 @@ function resetTranscriptHistory() {
 
 clearTranscript.addEventListener('click', resetTranscriptHistory);
 
-const CAPTION_PAUSE_MS = 4000;
+// Keep the visual computer caption open through the same natural pauses used
+// by the interview-turn collector. This prevents one spoken prompt becoming
+// a stack of separate chat heads while it is still being transcribed.
+const CAPTION_PAUSE_MS = 7000;
 let lastCaption = null;
 
 function mergeCaptionText(previous, incoming) {
@@ -1235,6 +1451,13 @@ window.overlay.onTranscription((event) => {
     transcriptStatus.textContent = event.text;
   }
   if (event.type === 'interview-turn') {
+    if (event.turn.speaker === 'computer') {
+      if (pendingComputerContinuation && Date.now() - pendingComputerContinuation.at < 25_000) {
+        event.turn.text = mergeCaptionText(pendingComputerContinuation.text, event.turn.text);
+      }
+      pendingComputerContinuation = null;
+      latestComputerTurnEndedAt = Number(event.turn.endedAt) || 0;
+    }
     transcriptContext.push(event.turn);
     if (lastCaption?.speaker === event.turn.speaker && lastCaption.bubble?.isConnected) {
       addManualAnswerButton(lastCaption.bubble, lastCaption.text, event.turn.id);
@@ -1249,14 +1472,13 @@ window.overlay.onTranscription((event) => {
       // running underneath it.
       clearTimeout(answerStartTimer);
       answerStartTimer = null;
-      cancelInterviewAnswer?.();
-      cancelInterviewAnswer = null;
+      cancelUnfinishedInterviewAnswer();
       const pipelineRevision = ++interviewPipelineRevision;
       transcriptStatus.textContent = 'Understanding interviewer…';
       window.overlay.detectInterviewQuestion({
         model: modelSelect.value,
         turn,
-        recentTurns: transcriptContext.slice(-6)
+        recentTurns: recentDialogueTurns().slice(-6)
       }).then(async (detection) => {
         if (pipelineRevision !== interviewPipelineRevision) return;
         const savedTurn = transcriptContext.find((item) => item.id === turn.id);
@@ -1276,12 +1498,12 @@ window.overlay.onTranscription((event) => {
           activeInterviewAnswerTurnId = answerTurnId;
           const suggestionTurn = transcriptContext.find((item) => item.id === answerTurnId) || turn;
           suggestionTurn.text = answerQuestion;
-          renderInterviewQuestionSuggestions(suggestionTurn, pipelineRevision);
+          // Follow-up question suggestions are paused for now.
           transcriptStatus.textContent = `Question detected · finding ${label} context…`;
           const retrievedContext = await window.overlay.retrieveInterviewContext({
             question: answerQuestion,
             context: contextState,
-            recentTurns: transcriptContext.slice(-8)
+            recentTurns: recentDialogueTurns()
           });
           if (pipelineRevision !== interviewPipelineRevision) return;
           const currentTurn = transcriptContext.find((item) => item.id === answerTurnId);
@@ -1299,7 +1521,7 @@ window.overlay.onTranscription((event) => {
               type: detection.type,
               retrievedContext
             }, label, answerTurnId);
-          }, 1500);
+          }, 1000);
         } else {
           transcriptStatus.textContent = 'Listening · no question detected';
         }
@@ -1307,11 +1529,30 @@ window.overlay.onTranscription((event) => {
     } else {
       // Candidate speech closes the current compound interviewer question.
       lastInterviewQuestion = null;
+      pendingComputerContinuation = null;
     }
     return;
   }
   if (event.type !== 'transcript') return;
   const capturedAt = Number(event.capturedAt) || Date.now();
+  if (event.speaker === 'computer' && latestComputerTurnEndedAt && capturedAt > latestComputerTurnEndedAt + 250) {
+    // A late transcript chunk means the interviewer resumed after the quiet
+    // boundary. Stop the older answer immediately and carry its question into
+    // the next finalized turn instead of replying mid-sentence.
+    const answerPending = answerStartTimer !== null || cancelInterviewAnswer !== null ||
+      /^Understanding interviewer|^Question detected/.test(transcriptStatus.textContent);
+    if (answerPending) {
+      pendingComputerContinuation ||= {
+        text: transcriptContext.filter((turn) => turn.speaker === 'computer').at(-1)?.text || '',
+        at: Date.now()
+      };
+      clearTimeout(answerStartTimer);
+      answerStartTimer = null;
+      cancelUnfinishedInterviewAnswer();
+      interviewPipelineRevision += 1;
+      transcriptStatus.textContent = 'Interviewer continuing…';
+    }
+  }
   // Your microphone transcript remains in the local meeting record and
   // Summary view, but is intentionally not rendered in Live transcription.
   if (event.speaker === 'user') {
@@ -1324,6 +1565,7 @@ window.overlay.onTranscription((event) => {
       lastCaption.bubble.isConnected) {
     lastCaption.text.textContent = mergeCaptionText(lastCaption.text.textContent, event.text);
     lastCaption.capturedAt = capturedAt;
+    scrollCaptionToLatest(lastCaption.bubble);
     if (event.speaker === 'computer') transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
     return;
   }
@@ -1333,11 +1575,19 @@ window.overlay.onTranscription((event) => {
   label.className = 'caption-label';
   label.textContent = event.speaker === 'user' ? 'You' : 'Computer';
   const text = document.createElement('span');
+  text.className = 'caption-text';
   text.textContent = event.text;
-  bubble.append(label, text);
+  const viewport = document.createElement('span');
+  viewport.className = 'caption-text-viewport';
+  viewport.append(text);
+  bubble.append(label, viewport);
+  const row = document.createElement('div');
+  row.className = 'caption-turn';
+  row.append(bubble);
+  transcriptFeed.append(row);
   addManualAnswerButton(bubble, text);
-  transcriptFeed.append(bubble);
   lastCaption = { speaker: event.speaker, capturedAt, bubble, text };
+  scrollCaptionToLatest(bubble);
   if (event.speaker === 'computer') transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
 });
 window.overlay.onUsageUpdate((update) => {
@@ -1455,7 +1705,6 @@ window.addEventListener('beforeunload', () => {
   for (const stream of Object.values(permissionStreams)) stream?.getTracks().forEach((track) => track.stop());
 });
 
-render();
 renderStoredTranscript();
 renderSummary();
 refreshModels();

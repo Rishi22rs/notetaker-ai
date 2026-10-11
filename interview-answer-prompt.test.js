@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { buildInterviewAnswerMessages } = require('./interview-answer-prompt');
 
-test('builds a bounded structured interview prompt', () => {
+test('builds a bounded conversational interview prompt', () => {
   const messages = buildInterviewAnswerMessages({
     question: 'How did you improve API latency?',
     type: 'behavioral',
@@ -14,7 +14,7 @@ test('builds a bounded structured interview prompt', () => {
   });
   assert.equal(messages.length, 2);
   assert.equal(messages[0].role, 'system');
-  assert.match(messages[0].content, /DIRECT ANSWER/);
+  assert.match(messages[0].content, /Do not use headings, numbered lists, bullets/);
   assert.match(messages[0].content, /Never invent/);
   assert.match(messages[0].content, /under 180 words/);
   assert.match(messages[1].content, /Reduced p95 latency by 40%/);
@@ -44,6 +44,7 @@ test('coding answers always include complete code in the requested or contextual
   assert.match(messages[0].content, /always provide a complete code solution/);
   assert.match(messages[0].content, /APPROACH, CODE, COMPLEXITY, EDGE CASES/);
   assert.match(messages[0].content, /runnable or interview-ready code/);
+  assert.match(messages[0].content, /Do not use numbered or bulleted talking points/);
   assert.match(messages[1].content, /Languages found in context files:\nTypeScript/);
   assert.match(messages[1].content, /search\.ts/);
 });
@@ -57,4 +58,19 @@ test('coding wording overrides an incorrectly classified transcript type', () =>
   assert.match(messages[1].content, /Question type: coding/);
   assert.match(messages[1].content, /Shortest Path code in JavaScript/);
   assert.doesNotMatch(messages[0].content, /DIRECT ANSWER, TALKING POINTS/);
+});
+
+test('interviewer answer prompt separates system audio from typed chat context', () => {
+  const messages = buildInterviewAnswerMessages({
+    question: 'How did you verify memoization helped?',
+    retrievedContext: { recentTurns: [
+      { speaker: 'computer', source: 'audio', text: 'How did you verify memoization helped?' },
+      { speaker: 'user', source: 'typed', text: 'Give me a JavaScript example' }
+    ] }
+  });
+  assert.match(messages[0].content, /System audio is the interviewer/);
+  assert.match(messages[0].content, /Never replace it with a recent typed message/);
+  assert.match(messages[0].content, /multiple questions/);
+  assert.match(messages[1].content, /Candidate typed note: Give me a JavaScript example/);
+  assert.match(messages[1].content, /Current interviewer question:\nHow did you verify memoization helped/);
 });

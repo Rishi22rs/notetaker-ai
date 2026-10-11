@@ -111,3 +111,31 @@ test('categorizes common interview question types', () => {
   assert.equal(inferType('Can you write a function in Python to reverse a string?'), 'coding');
   assert.equal(inferType('Explain HTTP request handling'), 'technical');
 });
+
+test('detects noisy Two Sum prompts and approach instructions without model latency', async () => {
+  const prompts = [
+    'Derek, even an array of integers. and to jurors, returning in the two of the two numbers that add up to a target. one solution and you cannot reuse an element. use an element. Walk me through brute force for force first, then optimize with time and space for both.',
+    'Derek, even an array of integers. and to jurors, returning in the two of the two numbers that add up to a target.',
+    'Given an array of integers, return indices of two numbers whose sum equals the target.',
+    'Walk me through brute force for force first, then optimize with time and space for both.',
+    'Then optimize with time and space for both.'
+  ];
+  for (const text of prompts) {
+    const result = await detectQuestion({
+      turn: { speaker: 'computer', text },
+      classify: async () => { throw new Error('Should not call the classifier'); }
+    });
+    assert.equal(result.isQuestion, true, text);
+    assert.equal(result.type, 'coding', text);
+    assert.equal(result.source, 'rules', text);
+  }
+});
+
+test('algorithm cues alone do not turn factual statements or candidate speech into questions', async () => {
+  assert.equal(ruleDecision('The array contains two numbers that add up to a target.').decision, null);
+  assert.equal(ruleDecision('Brute force uses more time and less space.').decision, null);
+  const result = await detectQuestion({
+    turn: { speaker: 'user', text: 'Then optimize with time and space for both.' }
+  });
+  assert.equal(result.isQuestion, false);
+});

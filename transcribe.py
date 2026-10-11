@@ -9,7 +9,7 @@ import sys
 import threading
 
 ROOT = Path(__file__).resolve().parent
-MODEL = ROOT / "models" / "base"
+MODEL = ROOT / "models" / "tiny.en"
 
 
 def emit(kind, **payload):
@@ -24,7 +24,7 @@ def main():
     args = parser.parse_args()
     if args.download:
         from faster_whisper.utils import download_model
-        download_model("base", output_dir=str(MODEL))
+        download_model("tiny.en", output_dir=str(MODEL))
         emit("status", text="Local model ready")
         return
 
@@ -40,7 +40,8 @@ def main():
     model = WhisperModel(str(MODEL), device="cpu", compute_type="int8",
                          local_files_only=True, cpu_threads=min(4, os.cpu_count() or 2))
     if args.file:
-        segments, _ = model.transcribe(args.file, beam_size=1, vad_filter=True)
+        segments, _ = model.transcribe(args.file, language="en", beam_size=1, best_of=1,
+                                      temperature=0, vad_filter=True)
         emit("transcript", text=" ".join(s.text.strip() for s in segments))
         return
 
@@ -98,13 +99,14 @@ def main():
                 mono = np.frombuffer(packet, dtype=np.float32).reshape(-1, channels).mean(axis=1)
                 chunks.append(mono)
                 count += len(mono)
-                if count < rate * 4:
+                if count < rate * 2:
                     continue
                 samples = np.concatenate(chunks)
                 chunks, count = [], 0
                 divisor = math.gcd(rate, 16000)
                 samples = resample_poly(samples, 16000 // divisor, rate // divisor).astype(np.float32)
-                segments, _ = model.transcribe(samples, beam_size=1, vad_filter=True,
+                segments, _ = model.transcribe(samples, language="en", beam_size=1,
+                                                best_of=1, temperature=0, vad_filter=True,
                                                 condition_on_previous_text=False)
                 text = " ".join(s.text.strip() for s in segments if s.no_speech_prob < 0.6)
                 if text and not stop.is_set():

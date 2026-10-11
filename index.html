@@ -11,7 +11,7 @@
     html, body { margin: 0; width: 100%; height: 100%; background: transparent; }
     body { padding: 8px; font: 14px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--text); }
     button, textarea, select { font: inherit; color: inherit; }
-    .panel { height: 100%; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); overflow: hidden; display: grid; grid-template-columns: 48px minmax(0, 1fr) 220px; box-shadow: 0 16px 50px #0008; }
+    .panel { height: 100%; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); overflow: hidden; display: grid; grid-template-columns: 48px minmax(0, 1fr); box-shadow: 0 16px 50px #0008; }
     .panel.settings-mode { grid-template-columns: 48px minmax(0, 1fr); }
     .panel.offers-mode #composer, .panel.offers-mode #prompt-suggestions { display: none !important; }
     .activity-bar { position: relative; background: var(--chrome); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; }
@@ -151,20 +151,36 @@
     .context-file .remove-file { align-self: start; padding: 3px 7px; border: 0; background: transparent; color: var(--muted); font-size: 17px; }
     .context-file.error { border-color: #7a4141; }
     .context-file.error .file-excerpt { color: var(--danger); }
-    .transcript-view { min-height: 0; flex: 1 1 0; display: grid; grid-template-rows: auto auto 1fr; }
+    .transcript-view { min-height: 0; flex: 1 1 0; display: grid; grid-template-rows: auto 1fr; }
     .transcript-toolbar { min-width: 0; padding: 10px 12px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: start; gap: 8px; overflow: hidden; }
     .transcript-toolbar button { flex: 0 0 auto; }
     #transcript-status { min-width: 0; margin-left: auto; color: var(--muted); font-size: 11px; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
-    .audio-sources { padding: 9px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
-    .audio-sources-label { color: var(--muted); font-size: 11px; margin-right: 2px; }
-    .audio-toggle { padding: 6px 10px; color: var(--muted); background: var(--chrome); }
+    .audio-sources { display: grid; gap: 10px; max-width: 520px; }
+    .audio-source-row, .permission-row { min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+    .audio-source-copy, .permission-copy { min-width: 0; flex: 1; }
+    .audio-source-copy strong, .permission-copy strong { display: block; font-size: 12px; }
+    .audio-source-copy span, .permission-copy span { display: block; color: var(--muted); font-size: 10px; line-height: 1.35; }
+    .audio-toggle { flex: 0 0 auto; min-width: 58px; padding: 6px 10px; color: var(--muted); background: var(--chrome); }
     .audio-toggle[aria-pressed="true"] { color: var(--dark-text); background: var(--accent-bg); border-color: var(--accent-bg); font-weight: 650; }
     .audio-toggle:disabled { opacity: .55; cursor: not-allowed; }
-    .interview-answer { margin: 8px 0 14px; padding: 12px; border: 1px solid #3d5a4d; border-radius: 10px; background: rgb(24 32 29 / var(--app-opacity)); user-select: text; }
+    .permission-checklist { display: grid; gap: 8px; max-width: 520px; }
+    .permission-row { padding: 10px 12px; }
+    .permission-mark { flex: 0 0 auto; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 50%; display: grid; place-items: center; color: var(--muted); font-size: 13px; font-weight: 800; }
+    .permission-row[data-state="ready"] .permission-mark { border-color: var(--accent); background: var(--accent-bg); color: var(--dark-text); }
+    .permission-row[data-state="ready"] .permission-action { display: none; }
+    .permission-action { flex: 0 0 auto; color: var(--accent); font-size: 11px; font-weight: 700; }
+    .permission-action:disabled { opacity: .55; cursor: wait; }
+    .audio-permission-heading { max-width: 520px; margin-top: 22px !important; }
+    .interview-answer { max-width: 92%; margin: 5px 0 17px; padding: 12px 14px; border: 1px solid #3d5a4d; border-radius: 12px 12px 12px 4px; background: rgb(24 32 29 / var(--app-opacity)); box-shadow: 0 5px 18px #0003; user-select: text; }
     .interview-answer-header { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; }
-    .interview-answer-question { min-width: 0; flex: 1; color: var(--muted); font-weight: 500; text-transform: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .interview-answer-header > span { flex: 1; }
     .expand-interview-answer { flex: 0 0 auto; padding: 4px 7px; color: var(--accent); font-size: 10px; font-weight: 650; text-transform: none; }
     .expand-interview-answer[hidden] { display: none; }
+    .interview-answer-focus { margin: 0 0 10px; padding: 8px 10px; border: 1px solid #41564b; border-radius: 8px; background: rgb(35 49 42 / var(--app-opacity)); }
+    .interview-answer-focus-label { display: block; margin-bottom: 4px; color: var(--accent); font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .04em; }
+    .interview-answer-focus-question { color: var(--text); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+    .interview-answer-focus ol { margin: 3px 0 0; padding-left: 18px; color: var(--text); font-size: 12px; line-height: 1.45; }
+    .interview-answer-focus li + li { margin-top: 3px; }
     .interview-answer-text { margin: 0; color: var(--text); font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
     .interview-answer-text.pending::after { content: '▋'; color: var(--accent); animation: blink .8s infinite; }
     .transcript-content { min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
@@ -183,13 +199,20 @@
     .interview-question-suggestion { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: rgb(32 35 41 / var(--app-opacity)); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
     .interview-questions-empty { color: var(--muted); font-size: 11px; }
     .transcript-empty { color: var(--muted); text-align: center; margin-top: 30%; }
+    .transcript-message { max-width: 88%; margin: 8px 0 12px; padding: 10px 12px; border-radius: 11px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+    .transcript-message.typed { margin-left: auto; border: 1px solid #496253; background: var(--user-surface); }
+    .transcript-message.assistant { border: 1px solid #3d5a4d; background: rgb(24 32 29 / var(--app-opacity)); }
+    .transcript-message.pending::after { content: '▋'; color: var(--accent); animation: blink .8s infinite; }
     .caption { position: relative; max-width: 88%; min-width: 0; margin-bottom: 10px; padding: 8px 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; }
     .caption.user { margin-left: auto; background: var(--user-surface); }
-    .caption.computer { margin-right: 8px; }
+    .caption-turn { width: min(100%, 680px); min-width: 0; display: flex; flex-direction: column; align-items: flex-start; margin: 0 0 13px; }
+    .caption.computer { width: 100%; max-width: 100%; min-width: 0; min-height: 34px; margin: 0; padding: 7px 10px; display: flex; align-items: center; gap: 7px; border-radius: 9px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+    .caption.computer .caption-text-viewport { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; }
+    .caption.computer .caption-text { display: block; width: max-content; max-width: none; white-space: nowrap; }
     .caption-label { display: block; margin-bottom: 2px; color: var(--accent); font-size: 10px; font-weight: 700; text-transform: uppercase; }
-    .caption.computer .caption-label { color: rgb(141 183 255 / var(--text-opacity)); }
-    .caption-answer-button { position: absolute; right: 8px; top: 0; min-height: 23px; padding: 3px 8px; transform: translateY(-50%); border-radius: 999px; border-color: #496253; background: rgb(27 41 35 / var(--app-opacity)); color: var(--accent); font-size: 10px; font-weight: 800; line-height: 1.2; white-space: nowrap; box-shadow: 0 2px 8px #0006; }
-    .caption-answer-button:hover { border-color: var(--accent); background: rgb(34 55 46 / var(--app-opacity)); }
+    .caption.computer .caption-label { flex: 0 0 auto; margin: 0; color: rgb(141 183 255 / var(--text-opacity)); }
+    .caption-answer-button { align-self: flex-start; min-height: 32px; margin: 6px 0 0; padding: 6px 12px; border-color: #496253; border-radius: 7px; background: rgb(27 41 35 / var(--app-opacity)); color: var(--accent); font-size: 11px; font-weight: 800; line-height: 1.2; box-shadow: 0 2px 8px #0006; }
+    .caption-answer-button:hover { border-color: var(--accent); background: rgb(34 55 46 / var(--app-opacity)); box-shadow: 0 0 0 1px #83e1b444, 0 2px 8px #0006; }
     .caption-answer-button:disabled { opacity: .55; cursor: wait; }
     .resize-grip { position: fixed; right: 10px; bottom: 10px; width: 22px; height: 22px; pointer-events: none; border-right: 2px solid #707780; border-bottom: 2px solid #707780; border-radius: 0 0 7px; }
     .interactive header { cursor: move; }
@@ -209,21 +232,25 @@
     #google-login { width: 100%; background: #fff; border-color: #fff; color: #202124; font-weight: 650; }
     #login-status { min-height: 18px; margin-top: 12px; color: var(--muted); font-size: 11px; }
     #login-status.error { color: var(--danger); }
-    .permission-card { width: min(400px, 100%); padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 20px 60px #0009; }
+    .permission-card { width: min(480px, 100%); padding: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 20px 60px #0009; }
     .permission-card h2 { margin: 0 0 8px; font-size: 18px; }
     .permission-card p { margin: 0 0 16px; color: var(--muted); font-size: 12px; }
-    #grant-permissions { width: 100%; background: var(--accent-bg); border-color: var(--accent-bg); color: var(--dark-text); font-weight: 700; }
     #permission-status { min-height: 18px; margin-top: 10px; color: var(--muted); overflow-wrap: anywhere; }
     #permission-status.error { color: var(--danger); }
+    .payment-wait-modal { width: min(380px, calc(100vw - 40px)); margin: auto; padding: 28px 24px; border: 1px solid #4b6657; border-radius: 16px; background: #202b25; color: var(--text); box-shadow: 0 24px 70px #000b; text-align: center; }
+    .payment-wait-modal::backdrop { background: #080d0bcc; }
+    .payment-wait-spinner { width: 38px; height: 38px; margin: 0 auto 18px; border: 3px solid #83e1b444; border-top-color: var(--accent); border-radius: 50%; animation: payment-spin .8s linear infinite; }
+    .payment-wait-modal h2 { margin: 0 0 8px; font-size: 18px; }
+    .payment-wait-modal p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    @keyframes payment-spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <main class="panel">
     <nav class="activity-bar" aria-label="Views">
-      <button class="activity" id="show-chat" type="button" title="Local AI chat" aria-label="Local AI chat">◈</button>
+      <button class="activity active" id="show-transcript" type="button" title="Live transcription" aria-label="Live transcription">◉</button>
       <button class="activity" id="show-notes" type="button" title="Local notepad" aria-label="Local notepad">▤</button>
       <button class="activity" id="show-context" type="button" title="Model context" aria-label="Model context">◎</button>
-      <button class="activity active" id="show-transcript" type="button" title="Live transcription" aria-label="Live transcription">◉</button>
       <button class="activity" id="show-summary" type="button" title="Meeting summary" aria-label="Meeting summary">☷</button>
       <button class="activity" id="show-account" type="button" title="Account and settings" aria-label="Account and settings" aria-expanded="false">⚙</button>
       <section class="account-menu" id="account-menu" aria-label="Account menu" hidden>
@@ -243,7 +270,6 @@
         <output id="session-clock" class="session-clock" aria-label="Time remaining">0m 0s</output>
       </header>
       <section class="session-blocker" id="session-blocker" hidden><strong>Session paused</strong><span id="session-blocker-message">Start your session to use this feature.</span><button class="open-recharge" type="button">Recharge &amp; Offers</button></section>
-      <section class="chat-view" id="messages" aria-live="polite" hidden></section>
       <section class="notes-view" id="notes-view" hidden>
         <div class="notes-meta" id="notes-status">Saved locally</div>
         <textarea id="notepad" spellcheck="true" placeholder="Write your notes here…" aria-label="Local notepad"></textarea>
@@ -264,6 +290,7 @@
         <nav class="settings-nav" aria-label="Settings sections" role="tablist">
           <div class="settings-nav-title">Settings</div>
           <button class="settings-tab" id="settings-tab-appearance" type="button" role="tab" aria-selected="true" aria-controls="settings-appearance">Appearance</button>
+          <button class="settings-tab" id="settings-tab-audio" type="button" role="tab" aria-selected="false" aria-controls="settings-audio">Audio</button>
           <button class="settings-tab" id="settings-tab-ai" type="button" role="tab" aria-selected="false" aria-controls="settings-ai">AI &amp; Models</button>
         </nav>
         <div class="settings-content">
@@ -281,12 +308,22 @@
               <input id="text-opacity" type="range" min="20" max="100" step="1" value="100">
             </div>
           </section>
+          <section id="settings-audio" role="tabpanel" aria-labelledby="settings-tab-audio" hidden>
+            <h2>Audio</h2>
+            <p class="settings-intro">Choose what the app listens to. Both sources are on by default.</p>
+            <div class="audio-sources" aria-label="Audio sources">
+              <div class="audio-source-row"><div class="audio-source-copy"><strong>Microphone</strong><span>Your voice, with echo protection.</span></div><button class="audio-toggle" id="toggle-microphone" type="button" aria-pressed="true">On</button></div>
+              <div class="audio-source-row"><div class="audio-source-copy"><strong>System audio</strong><span>The interviewer's voice from your computer.</span></div><button class="audio-toggle" id="toggle-system-audio" type="button" aria-pressed="true">On</button></div>
+            </div>
+            <h2 class="audio-permission-heading">Permissions</h2>
+            <div class="permission-checklist" id="settings-permission-list"></div>
+          </section>
           <section id="settings-ai" role="tabpanel" aria-labelledby="settings-tab-ai" hidden>
             <h2>AI &amp; Models</h2>
             <p class="settings-intro">Choose a local model or download another one for offline use.</p>
             <div class="setting-row">
               <div class="setting-heading"><label for="model">Local AI model</label></div>
-              <p class="setting-description">The selected model powers chat, interview answers, and suggestions.</p>
+              <p class="setting-description">The selected model powers interview answers and typed questions.</p>
               <select id="model" aria-label="Local AI model"></select>
               <section class="model-download" id="model-download" hidden>
                 <div class="model-download-info"><span id="download-title"></span><span id="download-detail"></span></div>
@@ -328,26 +365,23 @@
           <button id="clear-transcript" type="button">Clear</button>
           <span id="transcript-status">Stopped</span>
         </div>
-        <div class="audio-sources" aria-label="Audio sources">
-          <span class="audio-sources-label">Listen to</span>
-          <button class="audio-toggle" id="toggle-microphone" type="button" aria-pressed="true">Microphone</button>
-          <button class="audio-toggle" id="toggle-system-audio" type="button" aria-pressed="true">System audio</button>
-        </div>
         <div class="transcript-content">
           <div id="transcript-feed"><div class="transcript-empty">Start listening for live local captions.</div></div>
         </div>
       </section>
       <div class="prompt-suggestions" id="prompt-suggestions" aria-label="Prompt suggestions" hidden></div>
       <form id="composer" hidden>
-        <textarea id="prompt" rows="1" placeholder="Message your local model…" aria-label="Message"></textarea>
+        <textarea id="prompt" rows="1" placeholder="Ask about this interview…" aria-label="Ask about this interview"></textarea>
         <button id="send" type="submit">Send</button>
       </form>
     </div>
+    <!-- Follow-up question suggestions are paused for now.
     <aside class="interview-questions" id="interview-questions" aria-live="polite">
       <h3>Questions to ask</h3>
       <div class="interview-questions-subtitle">Possible follow-ups based on the current discussion</div>
       <div id="interview-questions-list"><div class="interview-questions-empty">Suggestions appear after an interviewer question is detected.</div></div>
     </aside>
+    -->
   </main>
   <section class="login-gate" id="login-gate" role="dialog" aria-modal="true" aria-labelledby="login-title">
     <div class="login-card">
@@ -361,12 +395,18 @@
   <section class="permission-gate" id="permission-gate" role="dialog" aria-modal="true" aria-labelledby="permission-title" hidden>
     <div class="permission-card">
       <h2 id="permission-title">Allow audio access</h2>
-      <p>My App needs system audio and microphone permission for local transcription. Clicking below opens the native permission prompts.</p>
-      <button id="grant-permissions" type="button">Allow permissions</button>
-      <div id="permission-status" aria-live="polite">Not requested</div>
+      <p>Select each missing permission below. A check mark appears when access is ready.</p>
+      <div class="permission-checklist" id="permission-list"></div>
+      <div id="permission-status" aria-live="polite"></div>
     </div>
   </section>
+  <dialog class="payment-wait-modal" id="payment-wait-modal" aria-labelledby="payment-wait-title" aria-describedby="payment-wait-message">
+    <div class="payment-wait-spinner" aria-hidden="true"></div>
+    <h2 id="payment-wait-title">Complete your payment in the browser</h2>
+    <p id="payment-wait-message" role="status">Opening secure checkout…</p>
+  </dialog>
   <div class="resize-grip" aria-hidden="true"></div>
+  <script src="interview-question-context.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

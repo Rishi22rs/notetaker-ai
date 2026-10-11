@@ -2,8 +2,10 @@ const { spawn } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
 const net = require('node:net');
+const os = require('node:os');
 const { app } = require('electron');
 const { isLikelyAcousticEcho } = require('./audio-echo-filter');
+const { usableSpeech, createTranscriptionQueue } = require('./transcription-audio');
 
 function wavFromFloat32(samples) {
   const pcm = Buffer.alloc(samples.length * 2);
@@ -29,16 +31,6 @@ function getFreePort() {
       socket.close(() => resolve(port));
     });
   });
-}
-
-function usableSpeech(samples) {
-  let sum = 0;
-  let peak = 0;
-  for (const value of samples) { sum += value * value; peak = Math.max(peak, Math.abs(value)); }
-  const rms = Math.sqrt(sum / Math.max(1, samples.length));
-  // Keep quiet speech. Silero VAD and Whisper's probabilities provide the
-  // stronger rejection later; a high energy gate here was clipping words.
-  return rms >= 0.003 && peak >= 0.012;
 }
 
 function cleanText(value) {
@@ -67,7 +59,11 @@ module.exports = function createMetalTranscription(publish) {
   let ready = false;
   let launchId = 0;
   let backendName = 'Whisper Metal (tiny.en)';
-  let queue = Promise.resolve();
+  const queue = createTranscriptionQueue({
+    processAudio: transcribe,
+    onError: error => publish({ type: 'warning', text: `Transcription skipped: ${error.message}` }),
+    onLag: () => publish({ type: 'warning', text: 'Transcription cannot keep up. Some older audio was skipped to keep captions current.' })
+  });
   const lastText = new Map();
   const computerAudioHistory = [];
 
@@ -103,7 +99,8 @@ module.exports = function createMetalTranscription(publish) {
     const id = ++launchId;
     backendName = useGpu ? 'Whisper Metal (tiny.en)' : 'Whisper CPU fallback (tiny.en)';
     const args = [
-      '-m', modelPath, '-l', 'en', '-nf', '-sns', '-nth', '0.72',
+      '-m', modelPath, '-l', 'en', '-bo', '1', '-bs', '1', '-nlp', '-nf', '-sns', '-nth', '0.72',
+      '-t', String(Math.max(1, Math.min(4, os.availableParallelism()))),
       '--vad', '-vm', vadPath, '-vt', '0.62', '-vspd', '300', '-vsd', '180', '-vp', '120',
       '--host', '127.0.0.1', '--port', String(port)
     ];
@@ -143,6 +140,8 @@ module.exports = function createMetalTranscription(publish) {
 
   async function start() {
     if (running) return;
+    lastText.clear();
+    queue.clear();
     if (!fs.existsSync(serverPath) || !fs.existsSync(modelPath) || !fs.existsSync(vadPath)) {
       publish({ type: 'error', text: 'Whisper Metal is not installed. Run npm run setup:transcription:mac.' });
       return;
@@ -153,19 +152,28 @@ module.exports = function createMetalTranscription(publish) {
 
   async function transcribe(speaker, bytes, capturedAt) {
     if (!running || !ready) return;
+    const id = launchId;
     const raw = Buffer.from(bytes);
     const samples = new Float32Array(raw.buffer, raw.byteOffset, Math.floor(raw.byteLength / 4));
     if (!usableSpeech(samples)) return;
     const form = new FormData();
     form.append('file', new Blob([wavFromFloat32(samples)], { type: 'audio/wav' }), `${speaker}.wav`);
     form.append('response_format', 'verbose_json');
+    form.append('language', 'en');
+    form.append('translate', 'false');
+    form.append('no_language_probabilities', 'true');
+    form.append('no_timestamps', 'true');
+    form.append('token_timestamps', 'false');
     form.append('temperature', '0.0');
     form.append('temperature_inc', '0.0');
     form.append('no_speech_thold', '0.72');
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/inference`, { method: 'POST', body: form });
+      const response = await fetch(`http://127.0.0.1:${port}/inference`, {
+        method: 'POST', body: form, signal: AbortSignal.timeout(10_000)
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
+      if (!running || id !== launchId) return;
       const segments = Array.isArray(result.segments) ? result.segments : [];
       if (!segments.length) return;
       const credible = segments.filter((segment) => {
@@ -181,15 +189,17 @@ module.exports = function createMetalTranscription(publish) {
       });
       if (!credible.length) return;
       const text = cleanText(credible.map((segment) => segment.text).join(' '));
-      if (!text || text.toLowerCase() === lastText.get(speaker)) return;
-      lastText.set(speaker, text.toLowerCase());
+      const previous = lastText.get(speaker);
+      if (!text || (text.toLowerCase() === previous?.text && capturedAt - previous.capturedAt <= 2000)) return;
+      lastText.set(speaker, { text: text.toLowerCase(), capturedAt });
       publish({ type: 'transcript', speaker, text, capturedAt });
     } catch (error) {
-      if (running) publish({ type: 'warning', text: `Transcription skipped: ${error.message}` });
+      if (running && id === launchId) publish({ type: 'warning', text: `Transcription skipped: ${error.message}` });
     }
   }
 
   function audio(speaker, bytes) {
+    if (!running || !ready) return;
     const capturedAt = Date.now();
     const raw = Buffer.from(bytes);
     const samples = new Float32Array(raw.buffer, raw.byteOffset, Math.floor(raw.byteLength / 4));
@@ -201,13 +211,15 @@ module.exports = function createMetalTranscription(publish) {
         Math.abs(capturedAt - item.capturedAt) <= 5_000 && isLikelyAcousticEcho(samples, item.samples));
       if (isEcho) return;
     }
-    queue = queue.then(() => transcribe(speaker, bytes, capturedAt));
+    queue.enqueue(speaker, bytes, capturedAt);
   }
 
   function stop() {
     running = false; ready = false;
     launchId += 1;
     child?.kill(); child = null;
+    queue.clear();
+    lastText.clear();
     computerAudioHistory.length = 0;
     publish({ type: 'status', text: 'Stopped' });
   }

@@ -32,7 +32,7 @@ def main():
 
     emit("status", text="Loading transcription model…")
     model = WhisperModel(str(MODEL), device="cpu", compute_type="int8",
-                         local_files_only=True, cpu_threads=min(6, os.cpu_count() or 2))
+                         local_files_only=True, cpu_threads=min(4, os.cpu_count() or 2), num_workers=1)
     emit("ready", text="Listening")
     for line in sys.stdin:
         try:
@@ -47,6 +47,7 @@ def main():
             if float(np.sqrt(np.mean(np.square(samples)))) < 0.006:
                 continue
             segments, _ = model.transcribe(samples, language="en", beam_size=1,
+                                            best_of=1, temperature=0, without_timestamps=True,
                                             vad_filter=False, condition_on_previous_text=False)
             text = " ".join(s.text.strip() for s in segments if s.no_speech_prob < 0.55).strip()
             if text:
@@ -54,6 +55,10 @@ def main():
                      capturedAt=message.get("capturedAt"))
         except Exception as error:
             emit("warning", text=str(error))
+        finally:
+            # Acknowledgement lets the parent keep just one inference in flight,
+            # including for silence, short packets, and decoding failures.
+            emit("processed")
 
 
 if __name__ == "__main__":

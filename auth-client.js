@@ -43,7 +43,13 @@ function createAuthClient({ serverUrl, userDataPath, openExternal, timeoutMs = 1
     }
   }
 
-  async function login() {
+  async function login(onBrowserOpened = () => {}) {
+    try {
+      const response = await fetch(new URL('/health', serverUrl), { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    } catch {
+      throw new Error('Sign-in server is unavailable. Start the auth server, then try again.');
+    }
     return new Promise((resolve, reject) => {
       let settled = false;
       const finish = (error, value) => {
@@ -75,6 +81,7 @@ function createAuthClient({ serverUrl, userDataPath, openExternal, timeoutMs = 1
           const port = server.address().port;
           const callback = `http://127.0.0.1:${port}/callback`;
           await openExternal(new URL(`/auth/google/start?desktop_redirect=${encodeURIComponent(callback)}`, serverUrl).toString());
+          onBrowserOpened();
         } catch (error) { finish(error); }
       });
       server.on('error', (error) => finish(error));

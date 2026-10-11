@@ -1,7 +1,7 @@
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs/promises');
-const { app, BrowserWindow, globalShortcut, screen, dialog, ipcMain, desktopCapturer, shell } = require('electron');
+const { app, BrowserWindow, globalShortcut, screen, dialog, ipcMain, desktopCapturer, shell, systemPreferences } = require('electron');
 const { createAuthClient } = require('./auth-client');
 const { createLocalAI } = require('./local-ai');
 const { buildContextMessages } = require('./context-prompt');
@@ -223,7 +223,9 @@ ipcMain.handle('profile:name', () => {
   catch { return 'Local User'; }
 });
 ipcMain.handle('auth:status', () => authClient.status());
-ipcMain.handle('auth:login', () => authClient.login());
+ipcMain.handle('auth:login', (event) => authClient.login(() => {
+  if (!event.sender.isDestroyed()) event.sender.send('auth:browser-opened');
+}));
 ipcMain.handle('auth:logout', () => authClient.logout());
 ipcMain.handle('coupon:redeem', (_event, code) => authClient.redeemCoupon(String(code || '').slice(0, 32)));
 ipcMain.handle('payments:plans', () => authClient.paymentPlans());
@@ -283,6 +285,14 @@ ipcMain.on('permissions:complete', () => {
   setInteractive(win, false);
 });
 ipcMain.handle('audio:permission', () => nativeAudio?.start(true));
+ipcMain.handle('audio:microphone-status', () => process.platform === 'darwin'
+  ? systemPreferences.getMediaAccessStatus('microphone')
+  : 'unknown');
+ipcMain.handle('audio:open-settings', (_event, source) => {
+  if (process.platform !== 'darwin') return false;
+  const pane = source === 'microphone' ? 'Privacy_Microphone' : 'Privacy_AudioCapture';
+  return shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${pane}`);
+});
 ipcMain.handle('transcription:start', async (_event, sources) => {
   // Listening is a deliberate use action, so it can safely resume/start a
   // metered session after the renderer has obtained its audio streams.
@@ -347,6 +357,7 @@ ipcMain.handle('interview:retrieve-context', (_event, request) => {
   };
   const recentTurns = Array.isArray(request?.recentTurns) ? request.recentTurns.slice(-8).map((turn) => ({
     speaker: turn?.speaker === 'computer' ? 'computer' : 'user',
+    source: turn?.source === 'typed' ? 'typed' : 'audio',
     text: String(turn?.text || '').slice(0, 5000)
   })) : [];
   return retrieveInterviewContext({
@@ -375,6 +386,7 @@ ipcMain.on('interview:answer', (event, request) => {
     })) : [],
     recentTurns: Array.isArray(request?.retrievedContext?.recentTurns) ? request.retrievedContext.recentTurns.slice(-8).map((turn) => ({
       speaker: turn?.speaker === 'computer' ? 'computer' : 'user',
+      source: turn?.source === 'typed' ? 'typed' : 'audio',
       text: String(turn?.text || '').slice(0, 2000)
     })) : []
   };

@@ -6,6 +6,17 @@ const CODING_REQUEST = /\b(?:write|give|show|create|make|generate|provide|implem
 const CODING_FRAGMENT = /\b(?:shortest path|dijkstra|a\*|breadth first search|depth first search|binary search|sorting|linked list|binary tree|graph traversal|dynamic programming)\b[\s\S]{0,100}\b(?:code|function|program|algorithm|javascript|typescript|python|java|c\+\+|c#|golang|rust)\b|\bcode\b[\s\S]{0,60}\b(?:javascript|typescript|python|java|c\+\+|c#|golang|rust)\b/i;
 const NON_QUESTION = /^(hello|hi|hey|okay|ok|great|good|right|sure|thanks|thank you|welcome|nice to meet you|let(?:'s| us) (?:begin|start|move on))[.!]?$/i;
 
+function hasAlgorithmPrompt(text) {
+  // ASR can lose "given" and "return indices" while preserving the task.
+  const pairSum = /\b(?:array|integers?|numbers?)\b/i.test(text) &&
+    /\b(?:two|2|pair)\b/i.test(text) &&
+    /\b(?:add(?:s)? up|sum)\b[\s\S]{0,80}\btarget\b/i.test(text) &&
+    /\b(?:return\w*|find|indices|indexes)\b/i.test(text);
+  const approachRequest = /\b(?:walk me through|explain|show|start|first|then)\b[\s\S]{0,100}\bbrute[ -]?force\b/i.test(text) ||
+    /\b(?:then\s+)?optimi[sz]e\b[\s\S]{0,100}\b(?:time|space|complexity)\b/i.test(text);
+  return pairSum || approachRequest;
+}
+
 function normalizeRuleText(value) {
   return String(value || '')
     .replace(/\bshorted\s+shortest\b/gi, 'Shortest')
@@ -18,11 +29,12 @@ function normalizeRuleText(value) {
 
 function hasCodingIntent(value) {
   const text = normalizeRuleText(value);
-  return CODING_REQUEST.test(text) || CODING_FRAGMENT.test(text);
+  return CODING_REQUEST.test(text) || CODING_FRAGMENT.test(text) || hasAlgorithmPrompt(text);
 }
 
 function inferType(text) {
   text = normalizeRuleText(text);
+  if (hasAlgorithmPrompt(text)) return 'coding';
   if (/\b(tell me about a time|give me an example|conflict|challenge|failure|strength|weakness|leadership|team|stakeholder)\b/i.test(text)) return 'behavioral';
   if (/\b(system design|design (?:a|an|the)|scale|availability|distributed|database|cache|queue|load balanc|architecture)\b/i.test(text)) return 'system_design';
   if (/\b(code|coding|implement|implementation|algorithm|data structure|complexity|big[- ]?o|array|linked list|tree|graph|dynamic programming|write (?:a |the )?(?:function|method|program|query)|debug|refactor|leetcode|hackerrank)\b/i.test(text)) return 'coding';

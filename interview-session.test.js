@@ -51,21 +51,33 @@ test('speaker change finalizes the previous speaker immediately', () => {
   assert.equal(f.turns[1].speaker, 'user');
 });
 
-test('question punctuation uses the shorter endpoint delay', () => {
-  const f = fixture({ pauseMs: 1200, questionPauseMs: 650 });
+test('question punctuation uses the computer question endpoint delay', () => {
+  const f = fixture({ computerPauseMs: 1200, questionPauseMs: 650 });
   f.session.ingest({ speaker: 'computer', text: 'Why this role?', capturedAt: 1000 });
   assert.equal([...f.timers.values()][0].delay, 650);
 });
 
 test('a spoken question without Whisper punctuation waits for the longer turn boundary', () => {
-  const f = fixture({ pauseMs: 1200, questionPauseMs: 5600 });
+  const f = fixture({ computerPauseMs: 1200, questionPauseMs: 5600 });
   f.session.ingest({ speaker: 'computer', text: 'How did you verify the result', capturedAt: 1000 });
   assert.equal([...f.timers.values()][0].delay, 5600);
 });
 
-test('default pause spans overlapping speech-recognition windows', () => {
+test('computer speech uses a bounded pause so one prompt stays in one turn', () => {
   const f = fixture();
   f.session.ingest({ speaker: 'computer', text: 'Tell me about your project', capturedAt: 1000 });
+  assert.equal([...f.timers.values()][0].delay, 6500);
+});
+
+test('question-shaped speech finalizes sooner than other interviewer speech', () => {
+  const f = fixture();
+  f.session.ingest({ speaker: 'computer', text: 'How would you scale this API?', capturedAt: 1000 });
+  assert.equal([...f.timers.values()][0].delay, 6000);
+});
+
+test('candidate speech still uses the shorter ordinary pause', () => {
+  const f = fixture();
+  f.session.ingest({ speaker: 'user', text: 'I led the implementation', capturedAt: 1000 });
   assert.equal([...f.timers.values()][0].delay, 2800);
 });
 

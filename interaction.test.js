@@ -86,14 +86,66 @@ test('embedded browser modifier wheel scrolls the page without zooming', () => {
   assert.equal(prevented, false);
 });
 
-test('computer transcript bubbles expose a manual answer fallback', () => {
+test('only the latest computer line has an answer action below it', () => {
   const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
   assert.match(rendererSource, /function addManualAnswerButton/);
-  assert.match(rendererSource, /Answer anyway/);
+  assert.match(rendererSource, /button\.textContent = 'Answer it'/);
+  assert.match(rendererSource, /if \(!row\.contains\(oldButton\)\) oldButton\.remove\(\)/);
+  assert.match(rendererSource, /row\.append\(button\)/);
   assert.doesNotMatch(rendererSource, /button\.textContent = '[↗↻]'/);
   assert.match(rendererSource, /answerTranscriptTurnManually/);
   assert.match(rendererSource, /retrieveInterviewContext/);
   assert.match(rendererSource, /generateInterviewAnswer/);
+});
+
+test('live answer waits for continuation and cancels when interviewer resumes', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  assert.match(source, /const CAPTION_PAUSE_MS = 7000/);
+  assert.match(source, /answerStartTimer = setTimeout\(\(\) => \{[\s\S]*?\}, 1000\)/);
+  assert.match(source, /event\.speaker === 'computer' && latestComputerTurnEndedAt && capturedAt > latestComputerTurnEndedAt/);
+  assert.match(source, /pendingComputerContinuation/);
+});
+
+test('interrupted AI answer cards are removed instead of left empty', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const functionSource = source.match(/function cancelUnfinishedInterviewAnswer\(keepTurnId = null\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(functionSource);
+  let removed = false;
+  const result = vm.runInNewContext(`${functionSource}\ncancelUnfinishedInterviewAnswer(); activeInterviewAnswerTurnId`, {
+    activeInterviewAnswerTurnId: 'old-question',
+    cancelInterviewAnswer() {},
+    transcriptFeed: { querySelectorAll: () => [{
+      dataset: { turnId: 'old-question' },
+      querySelector: () => ({}),
+      remove() { removed = true; }
+    }] }
+  });
+  assert.equal(result, null);
+  assert.equal(removed, true);
+});
+
+test('typed interview questions and replies remain in the live conversation context', () => {
+  const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const htmlSource = fs.readFileSync(require.resolve('./index.html'), 'utf8');
+  assert.doesNotMatch(htmlSource, /id="show-chat"/);
+  assert.match(htmlSource, /<nav class="activity-bar"[^>]*>\s*<button[^>]*id="show-transcript"/);
+  assert.match(htmlSource, /<!-- Follow-up question suggestions are paused for now\./);
+  assert.match(rendererSource, /appendTypedMessage\(userTurn\)/);
+  assert.match(rendererSource, /appendTypedMessage\(assistantTurn\)/);
+  const functionSource = rendererSource.match(/function interviewChatMessages\(\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(functionSource);
+  const messages = vm.runInNewContext(`${functionSource}\ninterviewChatMessages()`, {
+    transcriptContext: [
+      { speaker: 'computer', text: 'Tell me about React.' },
+      { speaker: 'user', source: 'typed', text: 'Use JavaScript in my answers.' },
+      { speaker: 'assistant', text: 'I will use JavaScript.' },
+      { speaker: 'user', source: 'typed', text: 'What about hooks?' },
+      { speaker: 'assistant', text: '', pending: true }
+    ]
+  });
+  assert.deepEqual(Array.from(messages, (item) => item.role), ['system', 'user', 'user', 'assistant', 'user']);
+  assert.match(messages.at(-1).content, /What about hooks/);
+  assert.match(messages[2].content, /Use JavaScript/);
 });
 
 test('account menu exposes locally persisted independent appearance controls', () => {
@@ -151,8 +203,8 @@ test('account popover opens a dedicated recharge and offers screen', () => {
   assert.match(rendererSource, /function couponErrorMessage/);
   assert.match(rendererSource, /This coupon has already been redeemed on your account\./);
   assert.match(rendererSource, /couponStatus\.textContent = couponErrorMessage\(error\)/);
-  assert.match(rendererSource, /form\.hidden = notesOpen \|\| contextOpen \|\| summaryOpen \|\| settingsOpen \|\| offersOpen \|\| !sessionActive/);
-  assert.match(rendererSource, /promptSuggestions\.hidden = notesOpen \|\| contextOpen \|\| summaryOpen \|\| settingsOpen \|\| offersOpen/);
+  assert.match(rendererSource, /form\.hidden = !transcriptOpen \|\| !sessionActive/);
+  assert.match(rendererSource, /promptSuggestions\.hidden = !transcriptOpen/);
   assert.match(htmlSource, /\.panel\.offers-mode #composer, \.panel\.offers-mode #prompt-suggestions \{ display: none !important; \}/);
   assert.match(rendererSource, /window\.overlay\.redeemCoupon\(code\)/);
   assert.match(serverSource, /url\.pathname === '\/coupons\/redeem'/);
@@ -170,19 +222,33 @@ test('dedicated offers screen provides server-defined recharge plans and wallet 
   assert.match(rendererSource, /result\.status === 'credited'/);
 });
 
-test('microphone can be enabled without a headphone check and keeps echo cancellation', () => {
+test('browser checkout shows a non-dismissible progress dialog until payment settles', () => {
   const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
   const htmlSource = fs.readFileSync(require.resolve('./index.html'), 'utf8');
-  assert.match(rendererSource, /microphone: false/);
+  assert.match(htmlSource, /<dialog[^>]*id="payment-wait-modal"/);
+  assert.match(htmlSource, /Complete your payment in the browser/);
+  assert.match(htmlSource, /payment-wait-spinner/);
+  assert.match(rendererSource, /paymentWaitModal\.addEventListener\('cancel', \(event\) => event\.preventDefault\(\)\)/);
+  assert.match(rendererSource, /paymentWaitModal\.showModal\(\)/);
+  assert.match(rendererSource, /await watchPayment\(payment\.paymentId\)/);
+  assert.match(rendererSource, /if \(paymentWaitModal\.open\) paymentWaitModal\.close\(\)/);
+});
+
+test('microphone and system audio start enabled without a headphone check', () => {
+  const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const htmlSource = fs.readFileSync(require.resolve('./index.html'), 'utf8');
+  assert.match(rendererSource, /transcriptionSources = \{ microphone: true, system: true \}/);
+  assert.match(htmlSource, /id="settings-audio"/);
+  assert.match(htmlSource, /id="permission-list"/);
   assert.doesNotMatch(rendererSource, /checkHeadphones|detectHeadphones|requestHeadphones|HEADPHONE_NAME/);
   assert.doesNotMatch(htmlSource, /headphone-gate|Connect headphones first/);
   assert.match(rendererSource, /echoCancellation: true/);
 });
 
-test('starting transcription activates usage before requesting audio', () => {
+test('starting transcription checks permissions before charging session time', () => {
   const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
   const start = rendererSource.indexOf('async function startLiveTranscription()');
   const end = rendererSource.indexOf('async function stopLiveTranscription()', start);
   const source = rendererSource.slice(start, end);
-  assert.ok(source.indexOf('await ensureUsageSession()') < source.indexOf('permissionStreams.computer'));
+  assert.ok(source.indexOf('await checkAudioPermissions()') < source.indexOf('await ensureUsageSession()'));
 });

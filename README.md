@@ -164,6 +164,12 @@ The right-side activity button opens low-latency local transcription. It capture
 computer audio and microphone audio separately and labels caption bubbles as
 Computer and You. Install the fast local model once before first use:
 
+Transcription is English-only and uses `tiny.en`. Two-second overlapping audio
+windows produce captions sooner. Silence is skipped before inference, and a single
+decoder avoids repeated decoding and language-detection work. Waiting audio is
+merged by speaker with an eight-second limit per speaker; if a device cannot keep
+up, older audio is skipped with a warning instead of building an unlimited delay.
+
 On Apple Silicon macOS 14.2 or newer, install CMake (`brew install cmake`) and
 build the Metal-accelerated `whisper.cpp` backend, its low-latency `tiny.en` model, and the
 native system-audio helper:

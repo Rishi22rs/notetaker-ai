@@ -105,6 +105,7 @@ function retrieveInterviewContext({ question, context = {}, recentTurns = [], ma
   }
   const dialogue = recentTurns.slice(-8).map((turn) => ({
     speaker: turn?.speaker === 'computer' ? 'computer' : 'user',
+    source: turn?.source === 'typed' ? 'typed' : 'audio',
     text: String(turn?.text || '').replace(/\s+/g, ' ').trim().slice(0, 2000)
   })).filter((turn) => turn.text);
   return {

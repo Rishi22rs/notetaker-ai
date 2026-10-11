@@ -27,12 +27,12 @@ function mergeTranscriptText(previous, incoming) {
 
 function createInterviewSession({
   onTurn,
+  // Wait long enough for the interviewer to finish a clause or constraint.
   pauseMs = 2800,
-  // Interviewers commonly pause after the first clause of a question, then
-  // add an example or constraint. Questions therefore need a longer quiet
-  // window than ordinary captions before they become answerable turns.
-  questionPauseMs = 5600,
+  computerPauseMs = 6500,
+  questionPauseMs = 6000,
   maxTurnMs = 20_000,
+  computerMaxTurnMs = 45_000,
   now = Date.now,
   schedule = setTimeout,
   cancel = clearTimeout
@@ -60,7 +60,9 @@ function createInterviewSession({
     cancelTimer();
     if (!active) return;
     const looksLikeQuestion = /[?]\s*$|^(?:what|why|how|when|where|who|which|can|could|would|should|do|does|did|is|are|have|has)\b/i.test(active.text);
-    const delay = looksLikeQuestion ? questionPauseMs : pauseMs;
+    const delay = active.speaker === 'computer'
+      ? (looksLikeQuestion ? questionPauseMs : computerPauseMs)
+      : pauseMs;
     timer = schedule(() => finalize('pause'), delay);
   }
 
@@ -75,7 +77,8 @@ function createInterviewSession({
       : receivedAt;
 
     if (active && active.speaker !== speaker) finalize('speaker-change');
-    if (active && capturedAt - active.startedAt >= maxTurnMs) finalize('maximum-duration');
+    const maximumDuration = active?.speaker === 'computer' ? computerMaxTurnMs : maxTurnMs;
+    if (active && capturedAt - active.startedAt >= maximumDuration) finalize('maximum-duration');
 
     if (!active) {
       active = {
