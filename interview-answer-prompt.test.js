@@ -14,7 +14,7 @@ test('builds a bounded conversational interview prompt', () => {
   });
   assert.equal(messages.length, 2);
   assert.equal(messages[0].role, 'system');
-  assert.match(messages[0].content, /Do not use headings, numbered lists, bullets/);
+  assert.match(messages[0].content, /short paragraphs, and 3–5 short bullets/);
   assert.match(messages[0].content, /Never invent/);
   assert.match(messages[0].content, /under 180 words/);
   assert.match(messages[1].content, /Reduced p95 latency by 40%/);
@@ -42,9 +42,9 @@ test('coding answers always include complete code in the requested or contextual
     }
   });
   assert.match(messages[0].content, /always provide a complete code solution/);
-  assert.match(messages[0].content, /APPROACH, CODE, COMPLEXITY, EDGE CASES/);
+  assert.match(messages[0].content, /APPROACH, CODE, EXPLANATION, COMPLEXITY, EDGE CASES/);
   assert.match(messages[0].content, /runnable or interview-ready code/);
-  assert.match(messages[0].content, /Do not use numbered or bulleted talking points/);
+  assert.match(messages[0].content, /Explain how the important parts of the code work/);
   assert.match(messages[1].content, /Languages found in context files:\nTypeScript/);
   assert.match(messages[1].content, /search\.ts/);
 });
@@ -54,7 +54,7 @@ test('coding wording overrides an incorrectly classified transcript type', () =>
     question: 'Shorted Shortest Pathcode in Java Script',
     type: 'technical'
   });
-  assert.match(messages[0].content, /APPROACH, CODE, COMPLEXITY, EDGE CASES/);
+  assert.match(messages[0].content, /APPROACH, CODE, EXPLANATION, COMPLEXITY, EDGE CASES/);
   assert.match(messages[1].content, /Question type: coding/);
   assert.match(messages[1].content, /Shortest Path code in JavaScript/);
   assert.doesNotMatch(messages[0].content, /DIRECT ANSWER, TALKING POINTS/);
@@ -73,4 +73,11 @@ test('interviewer answer prompt separates system audio from typed chat context',
   assert.match(messages[0].content, /multiple questions/);
   assert.match(messages[1].content, /Candidate typed note: Give me a JavaScript example/);
   assert.match(messages[1].content, /Current interviewer question:\nHow did you verify memoization helped/);
+});
+
+ test('selected code language overrides previous language requests and updates explanation', () => {
+  const messages = buildInterviewAnswerMessages({ question: 'Implement binary search in Python', codeLanguage: 'JavaScript' });
+  assert.match(messages[0].content, /selected JavaScript/);
+  assert.match(messages[0].content, /overrides earlier language requests/);
+  assert.match(messages[0].content, /Rewrite both the code and its explanation/);
 });

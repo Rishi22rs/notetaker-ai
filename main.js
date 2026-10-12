@@ -1,9 +1,16 @@
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs/promises');
-const { app, BrowserWindow, globalShortcut, screen, dialog, ipcMain, desktopCapturer, shell, systemPreferences } = require('electron');
+const { app, BrowserWindow, globalShortcut, screen, dialog, ipcMain, desktopCapturer, shell, systemPreferences, safeStorage } = require('electron');
 const { createAuthClient } = require('./auth-client');
 const { createLocalAI } = require('./local-ai');
+const { createCloudAI } = require('./cloud-ai');
+const { createCloudSettings } = require('./cloud-settings');
+const { createCloudTranscription } = require('./cloud-transcription');
+let cloudSettings;
+let localTranscription;
+let cloudTranscription;
+let transcriptionActive = false;
 const { buildContextMessages } = require('./context-prompt');
 const { createInterviewSession } = require('./interview-session');
 const { detectQuestion } = require('./question-detector');
@@ -205,7 +212,19 @@ async function createWindow() {
     if (win && !win.isDestroyed()) win.webContents.send('transcription:event', event);
   };
   audioEchoFilter = createAudioEchoFilter({ onEvent: publishTranscriptionEvent });
-  transcription = require(transcriptionBackend)((event) => audioEchoFilter.push(event));
+  const publish = (event) => audioEchoFilter.push(event);
+  localTranscription = require(transcriptionBackend)(publish);
+  cloudTranscription = createCloudTranscription(publish, { getSettings: () => cloudSettings.get() });
+  transcription = {
+    start() {
+      const backend = cloudSettings.get().transcription === 'groq' ? cloudTranscription : localTranscription;
+      transcription.current = backend;
+      return backend.start();
+    },
+    audio(speaker, bytes) { transcription.current?.audio(speaker, bytes); },
+    stop() { transcription.current?.stop(); transcription.current = null; transcriptionActive = false; },
+    dispose() { localTranscription.dispose(); cloudTranscription.dispose(); }
+  };
   interviewSession = createInterviewSession({
     onTurn: (turn) => {
       if (win && !win.isDestroyed()) win.webContents.send('transcription:event', { type: 'interview-turn', turn });
@@ -217,6 +236,11 @@ async function createWindow() {
   win.show();
 }
 
+ipcMain.handle('cloud:settings', () => cloudSettings.publicSettings());
+ipcMain.handle('cloud:save-settings', async (_event, input) => {
+  if (transcriptionActive || activeChats.size || activeInterviewAnswers.size) throw new Error('Stop listening and wait for answers before changing cloud settings.');
+  return cloudSettings.save(input);
+});
 ipcMain.handle('local-ai:models', () => localAI.listModels());
 ipcMain.handle('profile:name', () => {
   try { return os.userInfo().username || 'Local User'; }
@@ -297,8 +321,13 @@ ipcMain.handle('transcription:start', async (_event, sources) => {
   // Listening is a deliberate use action, so it can safely resume/start a
   // metered session after the renderer has obtained its audio streams.
   const session = await startUsageMeter();
-  transcription?.start();
-  if (nativeAudio && sources?.system) await nativeAudio.start();
+  try {
+    await transcription?.start();
+    transcriptionActive = true;
+    if (nativeAudio && sources?.system) await nativeAudio.start();
+  } catch (error) {
+    nativeAudio?.stop(); transcription?.stop(); await stopUsageMeter(); throw error;
+  }
   return { active: true, balanceSeconds: session.balanceSeconds };
 });
 ipcMain.on('transcription:stop', () => {
@@ -318,7 +347,7 @@ ipcMain.handle('local-ai:suggestions', async (_event, request) => {
   const transcript = String(request?.transcript || '').trim().slice(-20_000);
   const context = {
     text: String(request?.context?.text || '').slice(0, 100_000),
-    files: Array.isArray(request?.context?.files) ? request.context.files.slice(0, 20).map((file) => ({
+    files: Array.isArray(request?.context?.files) ? request.context.files.slice(0, 21).map((file) => ({
       name: String(file?.name || 'Reference file').slice(0, 240),
       kind: file?.kind === 'image' ? 'image' : 'text',
       content: String(file?.content || '').slice(0, file?.kind === 'image' ? 35_000_000 : 100_000)
@@ -349,7 +378,7 @@ ipcMain.handle('interview:retrieve-context', (_event, request) => {
   requireActiveUsage();
   const context = {
     text: String(request?.context?.text || '').slice(0, 500_000),
-    files: Array.isArray(request?.context?.files) ? request.context.files.slice(0, 20).map((file) => ({
+    files: Array.isArray(request?.context?.files) ? request.context.files.slice(0, 21).map((file) => ({
       name: String(file?.name || 'Reference file').slice(0, 240),
       kind: file?.kind === 'text' ? 'text' : 'image',
       content: file?.kind === 'text' ? String(file?.content || '').slice(0, 500_000) : ''
@@ -394,8 +423,10 @@ ipcMain.on('interview:answer', (event, request) => {
     question: String(request?.question || '').slice(0, 5000),
     type: String(request?.type || 'general'),
     retrievedContext,
+    codeLanguage: String(request?.codeLanguage || '').slice(0, 40),
     verbosity: request?.verbosity === 'detailed' ? 'detailed' : 'concise'
   });
+
   const send = (channel, value = {}) => {
     if (!event.sender.isDestroyed()) event.sender.send(channel, { id, ...value });
   };
@@ -512,13 +543,22 @@ ipcMain.on('local-ai:chat', (event, request) => {
   }));
   const safeContext = {
     text: String(context?.text || '').slice(0, 500_000),
-    files: Array.isArray(context?.files) ? context.files.slice(0, 20).map((file) => ({
+    files: Array.isArray(context?.files) ? context.files.slice(0, 21).map((file) => ({
       name: String(file?.name || 'Reference file').slice(0, 240),
       kind: file?.kind === 'image' ? 'image' : 'text',
       content: String(file?.content || '').slice(0, 35_000_000)
     })) : []
   };
-  const contextualMessages = buildContextMessages(safeMessages, safeContext);
+  let contextualMessages;
+  if (model.startsWith('cloud:')) {
+    const question = safeMessages.findLast(message => message.role === 'user')?.content || '';
+    const relevant = retrieveInterviewContext({ question, context: safeContext });
+    contextualMessages = buildContextMessages(safeMessages.slice(-12).map(message => ({ ...message, content: message.content.slice(0, 6000) })), {
+      text: relevant.profile,
+      files: relevant.chunks.map(chunk => ({ name: chunk.source, kind: 'text', content: chunk.text }))
+    });
+  } else contextualMessages = buildContextMessages(safeMessages, safeContext);
+  contextualMessages.unshift({ role: 'system', content: 'Always answer in English, regardless of the language of the question or conversation. Keep code, proper names, and technical identifiers unchanged.' });
   activeChats.get(id)?.();
   const send = (channel, value = {}) => {
     if (!event.sender.isDestroyed()) event.sender.send(channel, { id, ...value });
@@ -543,13 +583,17 @@ ipcMain.on('local-ai:cancel', (_event, id) => {
   activeChats.delete(id);
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   authClient = createAuthClient({
     serverUrl: process.env.AUTH_SERVER_URL || 'http://127.0.0.1:8787',
     userDataPath: app.getPath('userData'),
     openExternal: (url) => shell.openExternal(url)
   });
+  cloudSettings = createCloudSettings({ userDataPath: app.getPath('userData'), safeStorage });
+  await cloudSettings.load();
+  const cloudAI = createCloudAI({ getSettings: () => cloudSettings.get() });
   localAI = createLocalAI({
+    cloudAI,
     userDataPath: app.getPath('userData'),
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),

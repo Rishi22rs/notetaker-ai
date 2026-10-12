@@ -1,4 +1,6 @@
 const fs = require('node:fs');
+const { CLOUD_MODEL } = require('./cloud-ai');
+const isCloudModel = model => [CLOUD_MODEL, 'cloud:gemini-2.5-flash-lite'].includes(model);
 const fsp = require('node:fs/promises');
 const crypto = require('node:crypto');
 const http = require('node:http');
@@ -88,7 +90,7 @@ function requestJson({ port, pathname, method = 'GET', body, timeout = 120_000 }
   });
 }
 
-function createLocalAI({ userDataPath, resourcesPath, appPath, isPackaged, platform = process.platform, arch = process.arch }) {
+function createLocalAI({ cloudAI, userDataPath, resourcesPath, appPath, isPackaged, platform = process.platform, arch = process.arch }) {
   const modelsDirectory = path.join(userDataPath, 'models');
   const runtimeRoot = isPackaged ? resourcesPath : path.join(appPath, 'vendor');
   const executable = path.join(runtimeRoot, 'llama', runtimeDirectory(platform, arch), binaryName(platform));
@@ -102,7 +104,7 @@ function createLocalAI({ userDataPath, resourcesPath, appPath, isPackaged, platf
 
   async function listModels() {
     await fsp.mkdir(modelsDirectory, { recursive: true });
-    const installed = [];
+    const installed = cloudAI ? [{ name: CLOUD_MODEL, displayName: 'Gemini 3.5 Flash-Lite', description: 'Cloud · Requires Gemini API key', cloud: true }] : [];
     for (const model of MODELS) {
       try {
         const stat = await fsp.stat(modelPath(model));
@@ -216,6 +218,7 @@ function createLocalAI({ userDataPath, resourcesPath, appPath, isPackaged, platf
   }
 
   async function complete({ model, messages, temperature = 0.2 }) {
+    if (isCloudModel(model) && cloudAI) return cloudAI.complete({ messages });
     const port = await ensureServer(model);
     const result = await requestJson({
       port, pathname: '/v1/chat/completions', method: 'POST',
@@ -227,7 +230,7 @@ function createLocalAI({ userDataPath, resourcesPath, appPath, isPackaged, platf
   async function suggest({ model, draft, context, transcript = '' }) {
     const textFiles = (context.files || []).filter((file) => file.kind === 'text' && file.content);
     const contextText = [String(context.text || '').trim(), ...textFiles.map((file) => `--- ${file.name} ---\n${file.content}`)].filter(Boolean).join('\n\n').slice(0, 60_000);
-    const content = ['Generate exactly 3 likely autocomplete QUESTIONS the user may want to ask next.', 'Return questions only. Never answer the question, provide facts, explanations, recommendations, or declarative statements.', 'Each suggestion must be a complete, natural question ending with a question mark.', 'Return only JSON in this form: {"suggestions":["...","...","..."]}.', '', '<saved_context>', contextText, '</saved_context>', '', '<recent_transcript>', String(transcript).slice(-20_000), '</recent_transcript>', '', '<draft>', draft, '</draft>'].join('\n');
+    const content = ['Generate exactly 3 likely autocomplete QUESTIONS in English the user may want to ask next.', 'Return questions only. Never answer the question, provide facts, explanations, recommendations, or declarative statements.', 'Each suggestion must be a complete, natural question ending with a question mark.', 'Return only JSON in this form: {"suggestions":["...","...","..."]}.', '', '<saved_context>', contextText, '</saved_context>', '', '<recent_transcript>', String(transcript).slice(-20_000), '</recent_transcript>', '', '<draft>', draft, '</draft>'].join('\n');
     const parsed = JSON.parse(await complete({ model, messages: [{ role: 'user', content }], temperature: 0.35 }) || '{}');
     return Array.isArray(parsed.suggestions) ? parsed.suggestions.map((value) => String(value).replace(/\s+/g, ' ').trim()).filter((value) => value.endsWith('?') && value.length <= 100).slice(0, 3) : [];
   }
@@ -239,6 +242,7 @@ function createLocalAI({ userDataPath, resourcesPath, appPath, isPackaged, platf
   }
 
   function chat({ model, messages, onChunk, onDone, onError }) {
+    if (isCloudModel(model) && cloudAI) return cloudAI.chat({ messages, onChunk, onDone, onError });
     let cancelled = false;
     let req;
     ensureServer(model).then((port) => {

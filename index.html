@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
-  <title>Local AI Overlay</title>
+  <title>UNYON · Your conversation copilot</title>
   <style>
     :root { color-scheme: dark; --app-opacity: .94; --text-opacity: 1; --bg: rgb(17 19 23 / var(--app-opacity)); --surface: rgb(32 35 41 / var(--app-opacity)); --chrome: rgb(24 26 31 / var(--app-opacity)); --input: rgb(21 23 27 / var(--app-opacity)); --user-surface: rgb(45 68 58 / var(--app-opacity)); --accent-bg: rgb(131 225 180 / var(--app-opacity)); --line: #353941; --text: rgb(244 245 247 / var(--text-opacity)); --muted: rgb(156 163 173 / var(--text-opacity)); --accent: rgb(131 225 180 / var(--text-opacity)); --dark-text: rgb(16 37 27 / var(--text-opacity)); --danger: rgb(255 158 158 / var(--text-opacity)); }
     * { box-sizing: border-box; }
     html, body { margin: 0; width: 100%; height: 100%; background: transparent; }
     body { padding: 8px; font: 14px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--text); }
-    button, textarea, select { font: inherit; color: inherit; }
+    button, textarea, select, input { font: inherit; color: inherit; }
     .panel { height: 100%; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); overflow: hidden; display: grid; grid-template-columns: 48px minmax(0, 1fr); box-shadow: 0 16px 50px #0008; }
     .panel.settings-mode { grid-template-columns: 48px minmax(0, 1fr); }
     .panel.offers-mode #composer, .panel.offers-mode #prompt-suggestions { display: none !important; }
@@ -123,7 +123,11 @@
     .setting-value { color: var(--accent); font-variant-numeric: tabular-nums; }
     .setting-description { margin: 0 0 12px; color: var(--muted); font-size: 11px; }
     .setting-row input[type="range"] { width: 100%; accent-color: #83e1b4; }
-    .setting-row #model { width: 100%; max-width: none; }
+    .setting-row #model, .setting-row select { width: 100%; max-width: none; }
+    .cloud-provider-settings > label { display: block; margin: 12px 0 6px; font-size: 12px; }
+    .cloud-provider-settings input[type="password"] { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--input); }
+    .cloud-provider-settings button { margin-top: 10px; }
+    #cloud-status { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
     .setting-row .model-download { margin: 14px -16px -16px; border-bottom: 0; border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; }
     .account-menu .coupon-row { display: flex; align-items: center; gap: 5px; }
     .account-menu #coupon-code { min-width: 0; flex: 1 1 auto; }
@@ -243,16 +247,84 @@
     .payment-wait-modal h2 { margin: 0 0 8px; font-size: 18px; }
     .payment-wait-modal p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
     @keyframes payment-spin { to { transform: rotate(360deg); } }
+      .interview-answer-text, .transcript-message.assistant { white-space: normal; }
+    .interview-answer-text p, .transcript-message.assistant p { margin: 0 0 9px; line-height: 1.55; }
+    .interview-answer-text h4, .transcript-message.assistant h4 { margin: 14px 0 7px; color: var(--accent); font-size: 12px; }
+    .interview-answer-text ul, .transcript-message.assistant ul { padding-left: 20px; margin: 8px 0; }
+    .interview-answer-text li, .transcript-message.assistant li { margin: 5px 0; }
+    .answer-loader { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; }
+    .answer-loader::before { content: ''; width: 12px; height: 12px; border: 2px solid #ffffff25; border-top-color: var(--accent); border-radius: 50%; animation: answer-spin .8s linear infinite; }
+    .pending:has(.answer-loader)::after { content: none; }
+    @keyframes answer-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .answer-loader::before { animation: none; } }
+    .answer-code { min-width: 0; margin: 10px 0; border: 1px solid #41564b; border-radius: 8px; overflow: hidden; }
+    .answer-code-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 10px; background: #ffffff08; font-size: 11px; }
+    .answer-code-toolbar select { max-width: 155px; color: var(--text); background: #202c26; border: 1px solid #526458; border-radius: 5px; padding: 4px; }
+    .answer-code pre { margin: 0; padding: 12px; overflow-x: auto; white-space: pre; font: 12px/1.6 monospace; }
+    .transcript-message.assistant.pending::after { content: '▋'; color: var(--accent); animation: blink .8s infinite; }
+
+    :root { --bg: rgb(17 19 20 / var(--app-opacity)); --surface: rgb(28 31 30 / var(--app-opacity)); --chrome: rgb(20 22 22 / var(--app-opacity)); --input: rgb(23 26 25 / var(--app-opacity)); --line: #303531; --accent: rgb(201 255 69 / var(--text-opacity)); --accent-bg: rgb(201 255 69 / var(--app-opacity)); --dark-text: #1b250b; --muted: rgb(150 159 151 / var(--text-opacity)); }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .panel, .panel.settings-mode { grid-template-columns: 174px minmax(0, 1fr); border-radius: 18px; box-shadow: 0 24px 80px #0006; }
+    .activity-bar { padding: 23px 12px 14px; gap: 5px; align-items: stretch; }
+    .app-identity { display: flex; align-items: center; gap: 9px; margin: 0 0 28px; font-size: 17px; font-weight: 750; letter-spacing: 1px; }
+    .app-identity svg { width: 34px; flex-shrink: 0; }
+    .app-identity small { display: block; font-size: 8px; letter-spacing: .25px; color: var(--muted); font-weight: 400; margin-top: 3px; }
+    .nav-caption { font-size: 9px; letter-spacing: 1.8px; color: var(--muted); padding: 0 10px 10px; }
+    .activity { display: flex; align-items: center; gap: 11px; width: 100%; height: 42px; padding: 0 12px; border: 1px solid transparent; border-radius: 9px; font-size: 20px; text-align: left; }
+    .nav-label { font-size: 12px; font-weight: 500; }
+    .activity.active { color: var(--accent); background: #c9ff4510; border: 1px solid #c9ff4520; }
+    .account-menu { left: 184px; }
+    header { min-height: 72px; padding: 14px 24px; }
+    h1 { font-size: 15px; letter-spacing: -.3px; }
+    button { transition: background .15s, border-color .15s; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    button:disabled { cursor: not-allowed; opacity: .5; }
+    .home-view, .setup-view { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 26px 30px; }
+    #end-session[hidden], #composer[hidden], .home-view[hidden], .setup-view[hidden], [hidden].back-button { display: none; }
+    .home-topline { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 20px; }
+    .eyebrow { font-size: 9px; letter-spacing: 1.9px; color: var(--muted); font-weight: 650; }
+    .ready-badge { font-size: 10px; color: #bbc5b6; display: flex; align-items: center; gap: 7px; }
+    .ready-badge i { width: 5px; height: 5px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 10px #c9ff4540; }
+    .welcome-card { position: relative; display: flex; overflow: hidden; border: 1px solid #47533b; border-radius: 17px; background: radial-gradient(ellipse at 90% 10%, #b1d76926, transparent 65%), linear-gradient(120deg,#212820,#171c19); padding: 30px; min-height: 300px; }
+    .hero-copy { position: relative; z-index: 1; flex: 1; }
+    .hero-icon svg { width: 35px; height: 35px; margin-bottom: 16px; }
+    .hero-copy h2 { font-size: clamp(25px, 3vw, 39px); line-height: 1.15; font-weight: 550; letter-spacing: -1.5px; margin: 0 0 15px; }
+    .hero-copy p { font-size: 12px; line-height: 1.8; color: #aab6a3; margin: 0 0 22px; }
+    .primary-button { background: var(--accent-bg); border-color: var(--accent-bg); color: var(--dark-text); padding: 12px 18px; font-size: 12px; font-weight: 700; border-radius: 9px; display: inline-flex; gap: 30px; align-items: center; justify-content: space-between; }
+    .primary-button:hover { background: #ddff86; border-color: #ddff86; }
+    .hero-footnote { display: block; font-size: 9px; color: #87947e; margin-top: 12px; }
+    .orbit-art { position: relative; width: 240px; flex-shrink: 0; align-self: center; height: 230px; }
+    .orbit { position: absolute; border: 1px solid #bfe98224; border-radius: 50%; inset: 13px; transform: rotate(-30deg) scaleX(.65); }
+    .orbit-two { transform: rotate(30deg) scaleX(.65); }
+    .orbit-center { position: absolute; inset: 70px 75px; transform: rotate(-10deg); filter: drop-shadow(0 16px 25px #0006); }
+    .orbit-tag { position: absolute; font-size: 10px; padding: 9px 12px; border: 1px solid #637b4640; border-radius: 8px; background: #252e22; color: #d2ddc7; box-shadow: 0 8px 20px #0003; }
+    .tag-one { top: 30px; left: 0; transform: rotate(-7deg); }.tag-two { bottom: 28px; right: 0; transform: rotate(6deg); }
+    .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 26px 0 14px; }
+    .section-heading h3 { font-size: 13px; font-weight: 500; margin: 0; }.section-heading > span { font-size: 8px; letter-spacing: 1.5px; color: var(--muted); }
+    .guide-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .guide-grid article { padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #ffffff02; }
+    .step-number { font-size: 8px; letter-spacing: 1.3px; color: var(--muted); }.guide-symbol { color: var(--accent); font-size: 24px; margin: 12px 0 9px; }.guide-grid h3 { font-size: 12px; font-weight: 550; margin: 0 0 8px; }.guide-grid p { font-size: 10px; line-height: 1.7; color: var(--muted); margin: 0; }
+    .home-footer { margin-top: 22px; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 10px; color: var(--muted); }.home-footer button, .back-button { background: transparent; border: 0; padding: 4px 0; color: var(--muted); font-size: 11px; }
+    .setup-view { padding-top: 20px; }.setup-heading, .session-setup-form { max-width: 540px; margin-left: auto; margin-right: auto; }.setup-heading { margin-top: 22px; margin-bottom: 24px; }.setup-heading h2 { font-size: 30px; font-weight: 550; letter-spacing: -1px; margin: 8px 0; }.setup-heading p { color: var(--muted); font-size: 12px; }
+    .session-setup-form { display: flex; flex-direction: column; gap: 10px; }.session-setup-form label { font-size: 12px; font-weight: 550; margin-top: 8px; display: flex; justify-content: space-between; }.session-setup-form label span { font-size: 10px; font-weight: 400; color: var(--muted); }
+    .session-setup-form input { width: 100%; background: var(--input); border: 1px solid var(--line); border-radius: 9px; padding: 12px; font-size: 12px; }.session-setup-form textarea { min-height: 100px; max-height: 220px; font-size: 12px; resize: vertical; }.session-setup-form input::placeholder, .session-setup-form textarea::placeholder { color: #737c75; }
+    .resume-upload { display: flex; flex-direction: column; gap: 6px; align-items: center; border: 1px dashed #505d45; background: #c9ff4503; padding: 20px; border-radius: 12px; }.upload-symbol { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: var(--accent); background: #c9ff4510; font-size: 20px; }.resume-upload strong { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }.resume-upload > span:last-child { font-size: 10px; color: var(--muted); }
+    .setup-note { font-size: 10px; line-height: 1.7; color: var(--muted); margin: 4px 0; }.setup-submit { width: 100%; }.session-setup-form #session-setup-status { font-size: 11px; color: var(--danger); margin: 0; min-height: 16px; }
+    .notes-view, .context-view, .summary-view { padding: 24px; }.context-view h2 { font-weight: 550; }.transcript-toolbar { padding: 14px 20px; }.transcript-message { border-radius: 12px; }.settings-nav { background: var(--chrome); }
+    @media (max-width: 850px) { .panel, .panel.settings-mode { grid-template-columns: 64px minmax(0,1fr); }.activity-bar { padding: 18px 7px 10px; }.app-identity { justify-content: center; }.app-identity > span, .nav-caption, .nav-label { display: none; }.activity { justify-content: center; padding: 0; }.account-menu { left: 74px; }.orbit-art { width: 170px; transform: scale(.85); }.orbit-center { inset: 70px 40px; }.home-view, .setup-view { padding: 20px; }.welcome-card { padding: 24px; } }
+    @media (max-width: 650px) { .orbit-art { display: none; }.guide-grid { grid-template-columns: 1fr; }.guide-grid article { display: grid; grid-template-columns: 30px 1fr; column-gap: 12px; }.step-number { grid-column: 1 / -1; margin-bottom: 8px; }.guide-symbol { grid-row: 2 / 4; margin: 0; }.guide-grid p { grid-column: 2; }.section-heading > span, .ready-badge, .hero-footnote { display: none; } header { padding: 12px 16px; gap: 7px; } header #new-chat { font-size: 10px; padding: 8px; }.home-footer { align-items: start; flex-direction: column; }.hero-copy h2 { font-size: 29px; } }
+    @media (prefers-reduced-motion: reduce) { button { transition: none; } }
   </style>
 </head>
 <body>
   <main class="panel">
-    <nav class="activity-bar" aria-label="Views">
-      <button class="activity active" id="show-transcript" type="button" title="Live transcription" aria-label="Live transcription">◉</button>
-      <button class="activity" id="show-notes" type="button" title="Local notepad" aria-label="Local notepad">▤</button>
-      <button class="activity" id="show-context" type="button" title="Model context" aria-label="Model context">◎</button>
-      <button class="activity" id="show-summary" type="button" title="Meeting summary" aria-label="Meeting summary">☷</button>
-      <button class="activity" id="show-account" type="button" title="Account and settings" aria-label="Account and settings" aria-expanded="false">⚙</button>
+    <nav class="activity-bar" aria-label="Views"><div class="app-identity"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#141713"/><ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/><ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/></svg><span>UNYON<small>Conversation copilot</small></span></div><div class="nav-caption">WORKSPACE</div><button class="activity active" id="show-home" type="button" title="Home" aria-label="Home"><span aria-hidden="true">⌂</span><span class="nav-label">Home</span></button>
+      <button class="activity" id="show-transcript" type="button" title="Live transcription" aria-label="Live transcription"><span aria-hidden="true">◉</span><span class="nav-label">Live session</span></button>
+      <button class="activity" id="show-notes" type="button" title="Local notepad" aria-label="Local notepad"><span aria-hidden="true">▤</span><span class="nav-label">Notepad</span></button>
+      <button class="activity" id="show-context" type="button" title="Global context" aria-label="Global context"><span aria-hidden="true">◎</span><span class="nav-label">Global context</span></button>
+      <button class="activity" id="show-summary" type="button" title="Meeting summary" aria-label="Meeting summary"><span aria-hidden="true">☷</span><span class="nav-label">Summary</span></button>
+      <button class="activity" id="show-account" type="button" title="Account and settings" aria-label="Account and settings" aria-expanded="false"><span aria-hidden="true">⚙</span><span class="nav-label">Account</span></button>
       <section class="account-menu" id="account-menu" aria-label="Account menu" hidden>
         <div class="account-name" id="account-name">Local User</div>
         <button id="open-offers" type="button">Recharge &amp; Offers</button>
@@ -265,18 +337,38 @@
     <div class="workspace">
       <header>
         <div class="brand"><h1 id="view-title">Live transcription</h1><span id="status">On-device speech recognition</span></div>
-        <button id="new-chat" type="button" title="Clear chat, context, transcript, answers, and suggestions">New session</button>
+        <button id="new-chat" type="button" title="Create a session with tailored context">＋ Create session</button>
         <button id="session-toggle" class="session-toggle paused" type="button" title="Start your timed session">Start</button>
+        <button id="end-session" type="button" title="End session and delete session context" hidden>End session</button>
         <output id="session-clock" class="session-clock" aria-label="Time remaining">0m 0s</output>
       </header>
+
+      <section class="home-view" id="home-view">
+        <div class="home-topline"><span class="eyebrow">YOUR SPACE TO PREPARE</span><span class="ready-badge"><i></i> Ready when you are</span></div>
+        <div class="welcome-card"><div class="hero-copy"><span class="hero-icon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#141713"/><ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/><ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/></svg></span><h2>A little preparation.<br>A lot more confidence.</h2><p>Bring your context. Stay in the conversation.<br>Let UNYON help with the rest.</p><button class="primary-button" id="home-create" type="button">＋ Create session <span>↗</span></button><span class="hero-footnote">Personalized to you, from the very first question.</span></div><div class="orbit-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit-center"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#141713"/><ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/><ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/></svg></div><span class="orbit-tag tag-one">✧ Your context</span><span class="orbit-tag tag-two">↗ Clear answers</span></div></div>
+        <div class="section-heading"><h3>Make every conversation count</h3><span>THREE SIMPLE STEPS</span></div>
+        <div class="guide-grid"><article><span class="step-number">01 / PREPARE</span><div class="guide-symbol">◎</div><h3>Make it personal</h3><p>Add the company, your resume, and anything you want UNYON to know.</p></article><article><span class="step-number">02 / CONNECT</span><div class="guide-symbol">≋</div><h3>Stay in the moment</h3><p>Start listening for a live transcript and answers grounded in your context.</p></article><article><span class="step-number">03 / REFLECT</span><div class="guide-symbol">↗</div><h3>Take the next step</h3><p>Keep useful notes and revisit the conversation in your summary.</p></article></div>
+        <div class="home-footer"><span>✧ Built around your conversation</span><button id="home-settings" type="button">Configure audio &amp; AI <span>→</span></button></div>
+      </section>
+      <section class="setup-view" id="setup-view" hidden>
+        <button class="back-button" id="setup-back" type="button">← Back to home</button>
+        <div class="setup-heading"><span class="eyebrow">A GOOD CONVERSATION STARTS HERE</span><h2>Create your session</h2><p>A little context helps UNYON give you more relevant answers.</p></div>
+        <form id="session-setup-form" class="session-setup-form">
+          <label for="session-company">Company name <span class="required-label">Required</span></label><input id="session-company" maxlength="200" required placeholder="e.g. Google, Stripe, or your next big opportunity" autocomplete="organization">
+          <label for="session-context">Extra context <span>This session only · Optional</span></label><textarea id="session-context" maxlength="20000" rows="4" placeholder="Tell us about the role, interview, job description, or what you’d like to focus on…"></textarea>
+          <label for="session-resume">Your resume <span>This session only · Optional</span></label><button class="resume-upload" id="session-resume" type="button" disabled><span class="upload-symbol">↑</span><strong id="session-resume-name">Upload your resume</strong><span>PDF, DOCX, or text document · Click to browse</span></button><button class="back-button" id="remove-resume" type="button" hidden>Remove resume</button>
+          <p class="setup-note">◎ These details are used only for this session and deleted when it ends. Your global context stays saved. Your configured AI provider may receive relevant context.</p>
+          <p id="session-setup-status" role="status" aria-live="polite"></p><button class="primary-button setup-submit" id="session-create" type="submit">Create session <span>→</span></button>
+        </form>
+      </section>
       <section class="session-blocker" id="session-blocker" hidden><strong>Session paused</strong><span id="session-blocker-message">Start your session to use this feature.</span><button class="open-recharge" type="button">Recharge &amp; Offers</button></section>
       <section class="notes-view" id="notes-view" hidden>
         <div class="notes-meta" id="notes-status">Saved locally</div>
         <textarea id="notepad" spellcheck="true" placeholder="Write your notes here…" aria-label="Local notepad"></textarea>
       </section>
       <section class="context-view" id="context-view" hidden>
-        <h2>Instructions and reference material</h2>
-        <p>This content is automatically included with each local model request.</p>
+        <h2>Global context</h2>
+        <p>Instructions and reference material saved across sessions. Session-specific details are added separately and deleted when you end the session.</p>
         <textarea id="context-input" placeholder="Add background, instructions, project details, or other context…"></textarea>
         <div class="upload-row">
           <button id="upload-context" type="button" disabled>Add multiple files</button>
@@ -320,11 +412,26 @@
           </section>
           <section id="settings-ai" role="tabpanel" aria-labelledby="settings-tab-ai" hidden>
             <h2>AI &amp; Models</h2>
-            <p class="settings-intro">Choose a local model or download another one for offline use.</p>
+            <p class="settings-intro">Choose cloud AI for online use or a local model for offline use.</p>
+            <div class="setting-row cloud-provider-settings">
+              <div class="setting-heading">Cloud providers</div>
+              <p class="setting-description">Cloud transcription sends enabled microphone/system audio to Groq. Selecting Gemini sends your questions and relevant session/document context to Google. Keys are encrypted on this computer. Free-tier limits apply; paid provider accounts can incur charges.</p>
+              <label for="cloud-transcription">Transcription</label>
+              <select id="cloud-transcription"><option value="local">Local · offline</option><option value="groq">Groq · cloud</option></select>
+              <label for="groq-key">Groq API key</label><input id="groq-key" type="password" autocomplete="off" placeholder="Enter key; blank keeps saved key">
+              <label for="gemini-key">Gemini API key</label><input id="gemini-key" type="password" autocomplete="off" placeholder="Enter key; blank keeps saved key">
+              <label for="groq-model">Groq model</label><select id="groq-model"><option value="whisper-large-v3-turbo">Whisper Large V3 Turbo · budget</option><option value="whisper-large-v3">Whisper Large V3 · accuracy</option></select>
+              <label for="cloud-language">Spoken language</label><select id="cloud-language"><option value="auto">Automatic · Hindi / Hinglish / English</option><option value="hi">Hindi</option><option value="en">English</option></select>
+              <label for="answer-language">Answer language</label><select id="answer-language" disabled><option value="English">English · all questions</option></select>
+              <label for="cloud-segment">Transcription segments</label><select id="cloud-segment"><option value="4">4 seconds · quicker captions</option><option value="10">10 seconds · lower billing overhead</option></select>
+              <p class="setting-description">Groq bills at least 10 seconds per request. Four-second segments cost more per audio minute. Stop cancels pending transcription.</p>
+              <button id="save-cloud" type="button">Save cloud settings</button><button id="clear-cloud-keys" type="button">Remove saved keys</button>
+              <p id="cloud-status" role="status"></p>
+            </div>
             <div class="setting-row">
-              <div class="setting-heading"><label for="model">Local AI model</label></div>
+              <div class="setting-heading"><label for="model">Answering model</label></div>
               <p class="setting-description">The selected model powers interview answers and typed questions.</p>
-              <select id="model" aria-label="Local AI model"></select>
+              <select id="model" aria-label="Answering model"></select>
               <section class="model-download" id="model-download" hidden>
                 <div class="model-download-info"><span id="download-title"></span><span id="download-detail"></span></div>
                 <button id="download-model" type="button">Download</button>
@@ -407,6 +514,7 @@
   </dialog>
   <div class="resize-grip" aria-hidden="true"></div>
   <script src="interview-question-context.js"></script>
+  <script src="session-context.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

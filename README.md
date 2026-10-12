@@ -186,3 +186,45 @@ AI runtime. On macOS, the in-app permission screen requests
 microphone and system-audio access separately. System audio is captured with a
 native Core Audio tap, so no screen/window picker or screen video capture is used.
 After granting macOS permission, fully quit and reopen the app if macOS requests it.
+
+
+## Cloud interview mode (Groq + Gemini)
+
+Settings → AI & Models now offers optional cloud transcription and answering.
+Local mode remains available and does not require provider keys.
+
+1. Create a Groq key in https://console.groq.com/ and a Gemini key in
+   https://aistudio.google.com/. Use the providers' Free plans for testing;
+   this app does not change provider billing plans or guarantee free usage.
+2. Enter both keys in Cloud providers and save. Keys are encrypted with
+   Electron safeStorage in the app's local user-data directory. Blank fields
+   keep saved keys; Remove saved keys deletes both and restores local transcription.
+3. Select Groq transcription and either Whisper Large V3 Turbo (budget) or
+   Large V3 (accuracy). Automatic language detection supports mixed-language
+   testing; Hindi and English can also be selected explicitly.
+4. Select Gemini 3.5 Flash-Lite in the answering-model picker. It powers typed
+   answers, interview answers, suggestions, and ambiguous-question classification.
+   All answers are written in English, regardless of the spoken or typed question language.
+5. Start listening normally. Microphone and system transcripts retain separate
+   speaker labels and use the existing echo filter and recent-session dialogue.
+
+Enabled audio sources are uploaded to Groq. Questions and selected transcript /
+reference excerpts are sent to Google. Typed cloud questions retrieve bounded
+reference excerpts instead of uploading every document. This integration is
+text-only for answering; attached images are not sent to Gemini.
+
+Capture overlap is removed before cloud upload. Four-second segments favor
+responsiveness; ten-second segments reduce billing overhead. Groq bills a
+minimum of ten seconds per request, so shorter segments can cost substantially
+more than the advertised hourly audio rate. Both sources consume provider quotas.
+Silence is skipped when no utterance is pending. Stop aborts in-flight cloud
+requests and discards buffered audio; the final unfinished utterance can be lost.
+Network errors and quota exhaustion appear in the app without automatic provider
+switching or retries. Free-tier Gemini quota may also be consumed by suggestions.
+Existing app login and wallet/session requirements still apply separately from
+provider free-tier quotas.
+
+Validation: `npm test` includes mocked provider tests for Hindi UTF-8 streaming,
+request cancellation, encrypted keys, speaker attribution, capture overlap,
+silence suppression, and quota errors. Live quality and latency must be evaluated
+with real keys and interview recordings; no provider calls are made by the tests.

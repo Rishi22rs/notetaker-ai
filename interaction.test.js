@@ -128,13 +128,15 @@ test('typed interview questions and replies remain in the live conversation cont
   const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
   const htmlSource = fs.readFileSync(require.resolve('./index.html'), 'utf8');
   assert.doesNotMatch(htmlSource, /id="show-chat"/);
-  assert.match(htmlSource, /<nav class="activity-bar"[^>]*>\s*<button[^>]*id="show-transcript"/);
+  assert.match(htmlSource, /id="show-home"/);
+  assert.match(htmlSource, /id="show-transcript"/);
   assert.match(htmlSource, /<!-- Follow-up question suggestions are paused for now\./);
   assert.match(rendererSource, /appendTypedMessage\(userTurn\)/);
   assert.match(rendererSource, /appendTypedMessage\(assistantTurn\)/);
   const functionSource = rendererSource.match(/function interviewChatMessages\(\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(functionSource);
   const messages = vm.runInNewContext(`${functionSource}\ninterviewChatMessages()`, {
+    preferredCodeLanguage: '',
     transcriptContext: [
       { speaker: 'computer', text: 'Tell me about React.' },
       { speaker: 'user', source: 'typed', text: 'Use JavaScript in my answers.' },
@@ -251,4 +253,32 @@ test('starting transcription checks permissions before charging session time', (
   const end = rendererSource.indexOf('async function stopLiveTranscription()', start);
   const source = rendererSource.slice(start, end);
   assert.ok(source.indexOf('await checkAudioPermissions()') < source.indexOf('await ensureUsageSession()'));
+});
+
+ test('code rendering preserves code, provides a language switch, and disables it while streaming', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const functionSource = source.match(/function renderAnswerContent\([\s\S]*?\n\}/)[0];
+  class Element {
+    constructor(tag) { this.tag = tag; this.children = []; this.events = {}; }
+    append(...items) { this.children.push(...items); }
+    replaceChildren() { this.children = []; }
+    setAttribute() {}
+    addEventListener(name, callback) { this.events[name] = callback; }
+  }
+  const root = new Element('div');
+  const saved = {};
+  let chosen;
+  const context = { document: { createElement: tag => new Element(tag) }, codeLanguages: ['Python', 'JavaScript', 'C++'], preferredCodeLanguage: '', localStorage: { setItem: (key, value) => { saved[key] = value; } }, root, onChange: value => { chosen = value; } };
+  const answer = 'Use **binary search**.\n- Sorted input\n```cpp\n#include <vector>\nbool less(int a, int b) { return a < b; }\n```';
+  context.answer = answer;
+  vm.runInNewContext(`${functionSource}\nrenderAnswerContent(root, answer, onChange)`, context);
+  const wrapper = root.children.find(item => item.tag === 'section');
+  assert.equal(wrapper.children[1].children[0].textContent, '#include <vector>\nbool less(int a, int b) { return a < b; }');
+  const select = wrapper.children[0].children[1];
+  assert.equal(select.value, 'C++');
+  select.value = 'JavaScript'; select.events.change();
+  assert.equal(chosen, 'JavaScript');
+  assert.equal(saved['preferred-code-language'], 'JavaScript');
+  vm.runInNewContext('renderAnswerContent(root, answer, onChange, true)', context);
+  assert.equal(root.children.find(item => item.tag === 'section').children[0].children[1].disabled, true);
 });

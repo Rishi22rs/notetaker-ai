@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('overlay', {
   onInteraction(callback) {
     ipcRenderer.on('overlay:interactive', (_event, enabled) => callback(enabled));
   },
+  getCloudSettings: () => ipcRenderer.invoke('cloud:settings'),
+  saveCloudSettings: (value) => ipcRenderer.invoke('cloud:save-settings', value),
   listModels: () => ipcRenderer.invoke('local-ai:models'),
   getSuggestions: (request) => ipcRenderer.invoke('local-ai:suggestions', request),
   detectInterviewQuestion: (request) => ipcRenderer.invoke('interview:detect-question', request),
