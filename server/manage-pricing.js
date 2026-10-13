@@ -11,19 +11,22 @@ async function main() {
   await client.connect();
   try {
     const db = client.db(process.env.MONGODB_DB || 'notetaker');
-    const catalog = db.collection('payment_catalog');
+    const catalog = db.collection('app_config');
     if (command === 'show') {
-      console.log(JSON.stringify({ packs: await db.collection('recharge_plans').find({}).toArray(), customPricing: await catalog.findOne({ _id: 'custom-minute-pricing' }) || DEFAULT_CUSTOM_PRICING }, null, 2)); return;
+      console.log(JSON.stringify({ packs: await db.collection('recharge_plans').find({}).toArray(), customPricing: await catalog.findOne({ _id: 'global' }) || DEFAULT_CUSTOM_PRICING }, null, 2)); return;
     }
     if (command === 'defaults') {
       const plans = db.collection('recharge_plans');
-      for (const plan of DEFAULT_PLANS) await plans.updateOne({ id: plan.id }, { $set: { ...plan, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } }, { upsert: true });
+      for (const plan of DEFAULT_PLANS) {
+        const { originalAmountPaise, ...sale } = plan;
+        await plans.updateOne({ id: plan.id }, { $set: { ...sale, updatedAt: new Date() }, $setOnInsert: { originalAmountPaise, createdAt: new Date() } }, { upsert: true });
+      }
       // Retire only the original, unmodified starter prices. Preserve custom packs.
       for (const [id, amountPaise] of [['seconds_600', 5000], ['seconds_1800', 15000], ['seconds_3600', 30000]]) {
         await plans.updateOne({ id, amountPaise }, { $set: { active: false, updatedAt: new Date() } });
       }
     }
-    await catalog.updateOne({ _id: 'custom-minute-pricing' }, { $set: command === 'disable' ? { enabled: false, updatedAt: new Date() } : { ...pricing, updatedAt: new Date() } }, { upsert: true });
+    await catalog.updateOne({ _id: 'global' }, { $set: command === 'disable' ? { enabled: false, updatedAt: new Date() } : { ...pricing, updatedAt: new Date() } }, { upsert: true });
     console.log('Pricing saved. Reopen Recharge & Offers to load the changes.');
   } finally { await client.close(); }
 }

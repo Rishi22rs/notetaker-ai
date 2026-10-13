@@ -3,10 +3,10 @@ const { ObjectId } = require('mongodb');
 const { hashToken, randomToken } = require('../auth-crypto');
 
 const DEFAULT_PLANS = Object.freeze([
-  { id: 'minutes_100_pack', durationSeconds: 6000, amountPaise: 49900 },
-  { id: 'minutes_300_pack', durationSeconds: 18000, amountPaise: 139900 },
-  { id: 'minutes_1000_pack', durationSeconds: 60000, amountPaise: 399900 }
-].map((plan, index) => ({ ...plan, active: true, sortOrder: index + 1 })));
+  { id: 'minutes_100_pack', durationSeconds: 6000, amountPaise: 49900, originalAmountPaise: null },
+  { id: 'minutes_300_pack', durationSeconds: 18000, amountPaise: 139900, originalAmountPaise: null },
+  { id: 'minutes_1000_pack', durationSeconds: 60000, amountPaise: 399900, originalAmountPaise: null }
+].map((plan, index) => ({ ...plan, active: true, name: ['Starter', 'Plus', 'Max'][index], sortOrder: index + 1 })));
 
 const DEFAULT_CUSTOM_PRICING = Object.freeze({ enabled: true, amountPaisePerMinute: 600, minMinutes: 10, maxMinutes: 10000 });
 
@@ -61,6 +61,7 @@ function createPaymentService({ db, config }) {
   const users = db.collection('users');
   const plansCollection = db.collection('recharge_plans');
   const catalog = db.collection('payment_catalog');
+  const appConfig = db.collection('app_config');
 
   async function ensureIndexes() {
     await Promise.all([
@@ -71,6 +72,11 @@ function createPaymentService({ db, config }) {
       plansCollection.createIndex({ id: 1 }, { unique: true }),
       plansCollection.createIndex({ active: 1, sortOrder: 1 })
     ]);
+    const legacyPricing = await catalog.findOne({ _id: 'custom-minute-pricing' });
+    const { _id: legacyId, ...settings } = legacyPricing || DEFAULT_CUSTOM_PRICING;
+    await appConfig.updateOne({ _id: 'global' }, { $setOnInsert: { ...settings, createdAt: new Date() } }, { upsert: true });
+    await plansCollection.updateMany({ name: { $exists: false } }, { $set: { name: 'Minute pack' } });
+    await plansCollection.updateMany({ originalAmountPaise: { $exists: false } }, { $set: { originalAmountPaise: null } });
     const legacyPlans = await plansCollection.find({ minutes: { $type: 'number' } }).toArray();
     for (const plan of legacyPlans) {
       const durationSeconds = Math.max(1, Math.floor(plan.minutes * 60));
@@ -104,7 +110,7 @@ function createPaymentService({ db, config }) {
   }
 
   async function customPricing() {
-    const value = await catalog.findOne({ _id: 'custom-minute-pricing' });
+    const value = await appConfig.findOne({ _id: 'global' });
     if (!value) return { ...DEFAULT_CUSTOM_PRICING };
     return { enabled: value.enabled === true, amountPaisePerMinute: value.amountPaisePerMinute, minMinutes: value.minMinutes, maxMinutes: value.maxMinutes };
   }
@@ -113,7 +119,7 @@ function createPaymentService({ db, config }) {
     const values = await plansCollection.find({ active: { $ne: false } }).sort({ sortOrder: 1, durationSeconds: 1, _id: 1 }).toArray();
     return values
       .filter((plan) => /^[a-z0-9_-]{3,40}$/i.test(String(plan.id || '')) && Number.isInteger(plan.durationSeconds) && plan.durationSeconds > 0 && Number.isInteger(plan.amountPaise) && plan.amountPaise > 0)
-      .map((plan) => ({ id: plan.id, durationSeconds: plan.durationSeconds, amountPaise: plan.amountPaise }));
+      .map((plan) => ({ id: plan.id, name: typeof plan.name === 'string' && plan.name.trim() ? plan.name.trim().slice(0, 100) : 'Minute pack', durationSeconds: plan.durationSeconds, amountPaise: plan.amountPaise, originalAmountPaise: Number.isSafeInteger(plan.originalAmountPaise) && plan.originalAmountPaise > plan.amountPaise ? plan.originalAmountPaise : null }));
   }
 
   function configured() {
@@ -133,13 +139,21 @@ function createPaymentService({ db, config }) {
     return body;
   }
 
-  async function createOrder(user, planId, minutes) {
+  async function createOrder(user, planId, minutes, expected) {
     if (!configured()) {
       const error = new Error('Payments are not configured yet. Add Razorpay test keys to the backend.');
       error.status = 503;
       throw error;
     }
-    const plan = planId === 'custom_minutes' ? customPlan(await customPricing(), minutes) : await plansCollection.findOne({ id: planId, active: { $ne: false } });
+    const pricing = planId === 'custom_minutes' ? await customPricing() : null;
+    const storedPlan = pricing ? null : await plansCollection.findOne({ id: planId, active: { $ne: false } });
+    if (expected) {
+      const changed = pricing
+        ? !pricing.enabled || ['amountPaisePerMinute', 'minMinutes', 'maxMinutes'].some(key => pricing[key] !== expected[key])
+        : !storedPlan || storedPlan.amountPaise !== expected.amountPaise || storedPlan.durationSeconds !== expected.durationSeconds;
+      if (changed) return { priceUpdated: true };
+    }
+    const plan = pricing ? customPlan(pricing, minutes) : storedPlan;
     if (!plan || !Number.isInteger(plan.durationSeconds) || plan.durationSeconds < 1 || !Number.isInteger(plan.amountPaise) || plan.amountPaise < 1) { const error = new Error('This recharge plan is unavailable.'); error.status = 400; throw error; }
     const discount = await discounts.findOne({ userId: user._id, status: 'active' }, { sort: { createdAt: 1 } });
     const percentOff = Math.min(99, Math.max(0, Number(discount?.percentOff) || 0));

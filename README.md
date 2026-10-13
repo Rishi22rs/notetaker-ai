@@ -270,16 +270,60 @@ latest answer. Existing hide/show and quit shortcuts remain available.
 ## Session history (MongoDB)
 
 The Session history sidebar tab lists recorded sessions newest first, with company,
-extra context, resume filename, date, and billed minutes. The compact list shows session details directly, with long text available on hover. Original PDF/DOCX binaries
-are not stored. New sessions are saved to the authenticated account in the
+extra context, resume filename, date, and billed minutes. The compact list shows session details directly, with long text available on hover. New sessions also store original resume files in MongoDB GridFS (`session_resumes`).
+The Download button saves the original file through a native Save dialog. Older
+records that did not save original bytes cannot recover the file from extracted text.
+The app checks backend storage support before saving a new resume session, so an
+outdated backend cannot silently create a text-only record. New sessions are saved to the authenticated account in the
 `interview_sessions` collection before listening starts. Global context is not
 uploaded into session history.
 
 The updated authentication server must be restarted/deployed with its existing
 `MONGODB_URI` and `MONGODB_DB` configuration. It creates history indexes on startup.
-Authenticated `/session-history` create/list/detail/end endpoints restrict access
+Authenticated `/session-history` create/list/detail/end/download endpoints restrict access
 to the signed-in owner. Duration is computed from linked `usage_sessions`
 `chargedSeconds`; paused time is excluded, and expired audio leases cap charges
 and mark interrupted sessions. End removes active session context while retaining
 the account history. Historical sessions created before this feature cannot be
 reconstructed because their company, context, and resume were not recorded.
+
+### Pack original prices and direct checkout
+
+Each pack has its own Buy button. Custom minutes have a separate live total and
+Continue to payment button. In MongoDB `recharge_plans`, `amountPaise` is the actual
+sale price; optional `originalAmountPaise` is the crossed-out display price. It is
+shown only when it is an integer greater than the sale price. Removing it hides
+the crossed-out price. Checkout never charges the original price.
+
+```sh
+# 100 minutes: display ₹699 crossed out, sell for ₹499.
+npm run plan:add -- minutes_100_pack 6000 49900 1 69900
+# Remove the crossed-out display price.
+npm run plan:add -- minutes_100_pack 6000 49900 1 0
+```
+
+You can edit both fields directly in MongoDB and reopen Recharge & Offers to load
+the changes. Existing payment orders retain their checkout price.
+
+### Global configuration and pack names
+
+`app_config` holds one settings document with `_id: "global"`:
+
+```json
+{
+  "_id": "global",
+  "enabled": true,
+  "amountPaisePerMinute": 600,
+  "minMinutes": 10,
+  "maxMinutes": 10000
+}
+```
+
+Edit these values directly in MongoDB; `600` means ₹6 per minute. Backend startup
+migrates existing custom-minute settings from `payment_catalog` once, preserving
+an existing `app_config` document. Checkout reads current config for each order.
+`recharge_plans.name` is the editable pack title shown on its card.
+
+```sh
+npm run plan:add -- minutes_100_pack 6000 49900 1 69900 "Starter Pack"
+```

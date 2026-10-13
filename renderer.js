@@ -1063,7 +1063,7 @@ resumeButton.addEventListener('click', async () => {
   resumeButton.disabled = true;
   setupStatus.textContent = 'Reading your resume…';
   try {
-    const picked = await window.overlay.pickContextFiles();
+    const picked = await window.overlay.pickContextFiles({ resume: true });
     if (!picked.length) { setupStatus.textContent = ''; return; }
     if (picked.length !== 1) throw new Error('Select one resume for this session.');
     const file = picked[0];
@@ -1202,10 +1202,26 @@ function appendHistorySession(session) {
   cell(session.company, 'history-company');
   cell(new Date(session.createdAt).toLocaleString(), 'history-meta');
   cell(session.extraContext || '—', 'history-context');
-  cell(session.resume?.name || '—', 'history-resume');
+  const resumeTitle = cell(session.resume?.name || '—', 'history-resume');
+  const resumeFile = document.createElement('div'); resumeFile.className = 'history-resume-file';
+  resumeTitle.replaceWith(resumeFile); resumeFile.append(resumeTitle);
   const seconds = Math.max(0, Math.floor(Number(session.consumedSeconds) || 0));
   const usage = cell(`${Math.floor(seconds / 60)}m ${seconds % 60}s`, 'history-usage');
   usage.title = `${Math.floor(seconds / 60)}m ${seconds % 60}s consumed`;
+  if (session.resume) {
+    const download = document.createElement('button'); download.type = 'button'; download.className = 'history-resume-download'; download.append(createAppIcon('download'));
+    download.title = `Download ${session.resume.name}`;
+    download.setAttribute('aria-label', `Download resume for ${session.company}`);
+    download.addEventListener('click', async () => {
+      download.disabled = true; historyStatus.textContent = 'Downloading resume…';
+      try {
+        const result = await window.overlay.downloadSessionResume(session.id);
+        historyStatus.textContent = result.canceled ? '' : 'Resume saved.';
+      } catch (error) { historyStatus.textContent = error.message || 'Could not download the resume.'; }
+      finally { download.disabled = false; }
+    });
+    resumeFile.append(download);
+  }
   historyList.append(row);
 }
 async function loadSessionHistory(reset = true) {
@@ -1373,33 +1389,40 @@ let customMinutePricing = null;
 let paymentsAvailable = false;
 let rechargePacks = [];
 const customMinutes = document.getElementById('custom-minutes');
+let rechargeInProgress = false;
 function updateRechargeQuote() {
-  const custom = rechargePlan.value === 'custom_minutes';
   document.getElementById('custom-minutes-fields').hidden = !customMinutePricing?.enabled;
-  document.getElementById('custom-minutes-fields').classList.toggle('selected', custom);
-  document.getElementById('select-custom-minutes').setAttribute('aria-pressed', String(custom));
-  document.getElementById('select-custom-minutes').textContent = custom ? 'Selected' : 'Choose custom';
-  customMinutes.disabled = !customMinutePricing?.enabled;
-  customMinutes.required = custom;
-  const minutes = customMinutes.valueAsNumber;
+  document.getElementById('jump-to-custom-minutes').hidden = !customMinutePricing?.enabled;
+  customMinutes.disabled = !customMinutePricing?.enabled || rechargeInProgress;
+  const minutes = (/^\d+$/.test(customMinutes.value) ? Number(customMinutes.value) : NaN);
   const valid = customMinutePricing?.enabled && Number.isSafeInteger(minutes) && minutes >= customMinutePricing.minMinutes && minutes <= customMinutePricing.maxMinutes;
-  document.getElementById('custom-minutes-total').textContent = custom && valid
-    ? `Total ₹${(minutes * customMinutePricing.amountPaisePerMinute / 100).toFixed(2)} · ₹${(customMinutePricing.amountPaisePerMinute / 100).toFixed(2)}/minute`
-    : custom ? 'Enter a whole number of minutes within the allowed range.' : '';
+  const isCustom = rechargePlan.value === 'custom_minutes';
+  customMinutes.required = isCustom;
   const selectedPack = rechargePacks.find(plan => plan.id === rechargePlan.value);
-  const total = custom ? (valid ? minutes * customMinutePricing.amountPaisePerMinute : null) : selectedPack?.amountPaise;
+  const total = isCustom ? (valid ? minutes * customMinutePricing.amountPaisePerMinute : null) : selectedPack?.amountPaise;
+  document.getElementById('custom-minutes-total').textContent = valid ? `Total to pay: ${rupees(minutes * customMinutePricing.amountPaisePerMinute)}` : 'Enter a whole number of minutes within the allowed range.';
+  document.getElementById('custom-checkout').hidden = total == null;
   document.getElementById('recharge-total').textContent = total == null ? '—' : rupees(total);
-  document.querySelectorAll('.recharge-pack').forEach(card => {
-    const selected = card.dataset.planId === rechargePlan.value;
-    card.setAttribute('aria-pressed', String(selected));
-    card.querySelector('.pack-select').textContent = selected ? '✓ Selected' : 'Choose pack →';
-  });
-  rechargeSubmit.disabled = !paymentsAvailable || !rechargePlan.value || (custom && !valid);
+  rechargeSubmit.disabled = !paymentsAvailable || total == null || rechargeInProgress;
+  document.querySelectorAll('.pack-buy').forEach(button => { button.disabled = !paymentsAvailable || rechargeInProgress; });
 }
-rechargePlan.addEventListener('change', updateRechargeQuote);
-customMinutes.addEventListener('input', () => { rechargePlan.value = 'custom_minutes'; updateRechargeQuote(); });
-document.getElementById('select-custom-minutes').addEventListener('click', () => {
-  rechargePlan.value = 'custom_minutes'; updateRechargeQuote(); customMinutes.focus();
+customMinutes.addEventListener('beforeinput', event => {
+  if (event.data !== null && /[^0-9]/.test(event.data)) event.preventDefault();
+});
+customMinutes.addEventListener('paste', event => {
+  const text = event.clipboardData?.getData('text') || '';
+  if (!/^[0-9]+$/.test(text)) event.preventDefault();
+});
+customMinutes.addEventListener('input', () => {
+  customMinutes.value = customMinutes.value.replace(/[^0-9]/g, '');
+  rechargePlan.value = 'custom_minutes'; updateRechargeQuote();
+});
+document.getElementById('jump-to-custom-minutes').addEventListener('click', () => {
+  if (!customMinutePricing?.enabled) return;
+  rechargePlan.value = 'custom_minutes';
+  updateRechargeQuote();
+  document.getElementById('custom-minutes-fields').scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
+  customMinutes.focus({ preventScroll: true });
 });
 function rupees(paise) { return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(paise / 100); }
 function renderRechargePacks() {
@@ -1407,23 +1430,42 @@ function renderRechargePacks() {
   container.replaceChildren();
   const bestRate = Math.min(...rechargePacks.map(plan => plan.amountPaise / (plan.durationSeconds / 60)));
   for (const plan of rechargePacks) {
-    const card = document.createElement('button'); card.type = 'button'; card.className = 'recharge-pack'; card.dataset.planId = plan.id;
+    const card = document.createElement('article'); card.className = 'recharge-pack'; card.dataset.planId = plan.id;
     const rate = plan.amountPaise / (plan.durationSeconds / 60);
     const base = customMinutePricing?.enabled ? customMinutePricing.amountPaisePerMinute : 0;
     const savings = base > rate ? Math.floor((1 - rate / base) * 100) : 0;
     for (const [className, text] of [
       ['pack-badge', rate === bestRate && rechargePacks.length > 1 ? 'Best value' : 'Minute pack'],
+      ['pack-name', plan.name || 'Minute pack'],
       ['pack-minutes', `${(plan.durationSeconds / 60).toLocaleString('en-IN', { maximumFractionDigits: 2 })} minutes`],
       ['pack-price', rupees(plan.amountPaise)], ['pack-rate', `${rupees(rate)} / minute`],
-      ['pack-savings', savings ? `Save ${savings}% vs custom minutes` : 'One-time purchase'], ['pack-select', 'Choose pack →']
+      ['pack-savings', savings ? `Save ${savings}% vs custom minutes` : 'One-time purchase']
     ]) { const span = document.createElement('span'); span.className = className; span.textContent = text; card.append(span); }
-    card.addEventListener('click', () => { rechargePlan.value = plan.id; updateRechargeQuote(); });
+    if (rate === bestRate && rechargePacks.length > 1) card.classList.add('best-value');
+    const priceRow = document.createElement('div'); priceRow.className = 'pack-price-row';
+    const price = card.querySelector('.pack-price'); card.insertBefore(priceRow, price); priceRow.append(price);
+    if (Number.isSafeInteger(plan.originalAmountPaise) && plan.originalAmountPaise > plan.amountPaise) {
+      const original = document.createElement('del'); original.className = 'pack-original-price';
+      original.textContent = rupees(plan.originalAmountPaise);
+      original.setAttribute('aria-label', `Original price ${rupees(plan.originalAmountPaise)}`);
+      priceRow.insertBefore(original, price);
+    }
+    const buy = document.createElement('button'); buy.type = 'button'; buy.className = 'pack-buy';
+    buy.textContent = 'Buy';
+    buy.setAttribute('aria-label', `Buy ${plan.durationSeconds / 60} minutes for ${rupees(plan.amountPaise)}`);
+    buy.addEventListener('click', () => { rechargePlan.value = plan.id; updateRechargeQuote(); purchaseRecharge(); });
+    card.append(buy);
     container.append(card);
   }
   if (!rechargePacks.length) { const empty = document.createElement('p'); empty.textContent = 'No minute packs are available right now.'; container.append(empty); }
 }
 
+let paymentPlansLoading = false;
 async function loadPaymentPlans() {
+  if (paymentPlansLoading || rechargeInProgress) return;
+  paymentPlansLoading = true;
+  const previousSelection = rechargePlan.value;
+  const enteredMinutes = customMinutes.value;
   try {
     const result = await window.overlay.getPaymentPlans();
     rechargePlan.replaceChildren(...result.plans.map((plan) => {
@@ -1440,13 +1482,16 @@ async function loadPaymentPlans() {
       option.textContent = `Custom minutes · ₹${(customMinutePricing.amountPaisePerMinute / 100).toFixed(2)}/min`;
       rechargePlan.append(option);
       customMinutes.min = customMinutePricing.minMinutes; customMinutes.max = customMinutePricing.maxMinutes;
-      customMinutes.value = customMinutePricing.minMinutes;
+      customMinutes.value = enteredMinutes;
       document.getElementById('custom-minute-rate').textContent = `${rupees(customMinutePricing.amountPaisePerMinute)} per minute · no pack required`;
       document.getElementById('custom-minute-range').textContent = `Buy ${customMinutePricing.minMinutes.toLocaleString('en-IN')}–${customMinutePricing.maxMinutes.toLocaleString('en-IN')} minutes.`;
     }
+    rechargePlan.value = previousSelection;
+    if (!previousSelection) rechargePlan.selectedIndex = -1;
     renderRechargePacks();
     updateRechargeQuote();
     if (!result.configured) paymentStatus.textContent = 'Payment setup pending';
+    else if (paymentStatus.textContent === 'Loading plans…' || paymentStatus.textContent.startsWith('Could not load plans:') || paymentStatus.textContent === 'Payment setup pending') { paymentStatus.textContent = ''; paymentStatus.className = ''; }
   } catch (error) {
     paymentsAvailable = false;
     rechargeSubmit.disabled = true;
@@ -1454,8 +1499,9 @@ async function loadPaymentPlans() {
     paymentStatus.textContent = error?.message === 'fetch failed'
       ? 'Payment server is unavailable. Start it, then reopen this screen.'
       : `Could not load plans: ${error?.message || 'Unknown error'}`;
-  }
+  } finally { paymentPlansLoading = false; }
 }
+
 
 function couponErrorMessage(error) {
   const raw = String(error?.message || '').replace(/^Error invoking remote method '[^']+': Error:\s*/i, '').trim();
@@ -1478,15 +1524,22 @@ async function watchPayment(id) {
 
 paymentWaitModal.addEventListener('cancel', (event) => event.preventDefault());
 
-rechargeForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  rechargeSubmit.disabled = true;
+async function purchaseRecharge() {
+  if (rechargeInProgress || !paymentsAvailable) return;
+  rechargeInProgress = true;
+  updateRechargeQuote();
   paymentStatus.className = '';
   paymentStatus.textContent = 'Opening secure checkout…';
   paymentWaitMessage.textContent = 'Opening secure checkout…';
   try {
     paymentWaitModal.showModal();
-    const payment = await window.overlay.startRecharge(rechargePlan.value, rechargePlan.value === 'custom_minutes' ? customMinutes.valueAsNumber : undefined);
+    const payment = await window.overlay.startRecharge(rechargePlan.value, rechargePlan.value === 'custom_minutes' ? (/^\d+$/.test(customMinutes.value) ? Number(customMinutes.value) : NaN) : undefined, rechargePlan.value === 'custom_minutes' ? customMinutePricing : rechargePacks.find(plan => plan.id === rechargePlan.value));
+    if (payment.priceUpdated) {
+      paymentWaitModal.close();
+      document.getElementById('pricing-updated-modal').showModal();
+      paymentStatus.textContent = 'Pricing has changed. Refresh before continuing.';
+      return;
+    }
     paymentStatus.textContent = 'Complete payment in your browser…';
     paymentWaitMessage.textContent = 'Complete your payment in the browser. Waiting for confirmation…';
     await watchPayment(payment.paymentId);
@@ -1498,8 +1551,14 @@ rechargeForm.addEventListener('submit', async (event) => {
     paymentStatus.textContent = error.message || 'Could not complete payment.';
   } finally {
     if (paymentWaitModal.open) paymentWaitModal.close();
+    rechargeInProgress = false;
     updateRechargeQuote();
   }
+}
+rechargeForm.addEventListener('submit', event => {
+  event.preventDefault();
+  if (!rechargeForm.reportValidity() || rechargeSubmit.disabled) return;
+  purchaseRecharge();
 });
 
 couponForm.addEventListener('submit', async (event) => {
@@ -1753,8 +1812,7 @@ function renderPermissionList(container, selectedOnly) {
       action.textContent = state === 'checking' ? 'Checking…' : state === 'needs' ? 'Try again' : 'Allow';
       action.disabled = state === 'checking' || transcriptionRunning;
       action.addEventListener('click', () => requestAudioPermission(source));
-      row.append(action);
-    }
+        }
     container.append(row);
   }
 }
@@ -2332,7 +2390,7 @@ setView('home');
 renderStoredTranscript();
 renderSummary();
 refreshModels();
-loadPaymentPlans();
+
 window.overlay.getAuthStatus().then((result) => {
   applyAuthState(result);
   if (result.authenticated) window.overlay.getUsageStatus().then(updateUsageState).catch(() => updateUsageState());
@@ -2379,4 +2437,14 @@ document.getElementById('save-cloud').addEventListener('click', async () => {
 document.getElementById('clear-cloud-keys').addEventListener('click', async () => {
   try { showCloudSettings(await window.overlay.saveCloudSettings({ groqKey: '', geminiKey: '', transcription: 'local' })); await refreshModels(); }
   catch (error) { cloudStatus.textContent = error.message; }
+});
+
+document.getElementById('refresh-updated-pricing').addEventListener('click', async () => {
+  const button = document.getElementById('refresh-updated-pricing'); button.disabled = true;
+  await loadPaymentPlans();
+  button.disabled = false;
+  if (paymentStatus.className !== 'error') {
+    document.getElementById('pricing-updated-modal').close();
+    paymentStatus.textContent = 'Prices refreshed. Review the total before paying.';
+  }
 });

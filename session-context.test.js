@@ -36,3 +36,10 @@ test('a fresh app context has no previous session details', () => {
   const fresh = createSessionContext();
   assert.deepEqual(fresh.combine(), { text: '', files: [] });
 });
+
+test('original resume bytes are excluded from AI context', () => {
+  const scopes = createSessionContext();
+  scopes.set({ text: 'Company: Stripe', files: [{ name: 'Resume.pdf', content: 'Parsed resume', originalBase64: 'cGRm' }] });
+  const file = scopes.combine().files[0];
+  assert.equal(file.content, 'Parsed resume'); assert.equal(file.originalBase64, undefined);
+});

@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('overlay', {
   logout: () => ipcRenderer.invoke('auth:logout'),
   redeemCoupon: (code) => ipcRenderer.invoke('coupon:redeem', code),
   getPaymentPlans: () => ipcRenderer.invoke('payments:plans'),
-  startRecharge: (planId, minutes) => ipcRenderer.invoke('payments:start', planId, minutes),
+  startRecharge: (planId, minutes, expected) => ipcRenderer.invoke('payments:start', planId, minutes, expected),
   getPaymentStatus: (id) => ipcRenderer.invoke('payments:status', id),
   getWallet: () => ipcRenderer.invoke('wallet:get'),
   startUsage: () => ipcRenderer.invoke('usage:start'),
@@ -29,12 +29,13 @@ contextBridge.exposeInMainWorld('overlay', {
   createRecordedSession: (details) => ipcRenderer.invoke('history:create', details),
   endRecordedSession: () => ipcRenderer.invoke('history:end'),
   listSessionHistory: (page) => ipcRenderer.invoke('history:list', page),
+  downloadSessionResume: (id) => ipcRenderer.invoke('history:download-resume', id),
   sessionHistoryDetail: (id) => ipcRenderer.invoke('history:detail', id),
   loadNotes: () => ipcRenderer.invoke('notes:load'),
   saveNotes: (content) => ipcRenderer.invoke('notes:save', content),
   loadContext: () => ipcRenderer.invoke('context:load'),
   saveContext: (value) => ipcRenderer.invoke('context:save', value),
-  pickContextFiles: () => ipcRenderer.invoke('context:pick-files'),
+  pickContextFiles: (options) => ipcRenderer.invoke('context:pick-files', { resume: options?.resume === true }),
   onInteraction(callback) {
     ipcRenderer.on('overlay:interactive', (_event, enabled) => callback(enabled));
   },

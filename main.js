@@ -279,7 +279,7 @@ ipcMain.handle('auth:logout', async () => {
 });
 ipcMain.handle('coupon:redeem', (_event, code) => authClient.redeemCoupon(String(code || '').slice(0, 32)));
 ipcMain.handle('payments:plans', () => authClient.paymentPlans());
-ipcMain.handle('payments:start', (_event, planId, minutes) => authClient.startRecharge(String(planId || '').slice(0, 40), minutes));
+ipcMain.handle('payments:start', (_event, planId, minutes, expected) => authClient.startRecharge(String(planId || '').slice(0, 40), minutes, expected));
 ipcMain.handle('payments:status', (_event, id) => authClient.paymentStatus(String(id || '').slice(0, 40)));
 ipcMain.handle('wallet:get', () => authClient.wallet());
 
@@ -337,13 +337,24 @@ async function endRecordedSession() {
 }
 ipcMain.handle('history:create', async (_event, details) => {
   if (recordedSessionId) await endRecordedSession();
+  if (details?.resume && !details.resume.originalBase64) throw new Error('Original resume bytes were not included. Restart the app and upload the resume again.');
   const record = await authClient.createRecordedSession(details);
+  if (details?.resume && !record.resumeStored) throw new Error('The backend did not save the original resume. Restart the backend before creating another session.');
   recordedSessionId = record.id;
   return record;
 });
 ipcMain.handle('history:end', endRecordedSession);
 ipcMain.handle('history:list', (_event, page) => authClient.listSessionHistory(Math.max(0, Math.floor(Number(page) || 0))));
 ipcMain.handle('history:detail', (_event, id) => authClient.sessionHistoryDetail(String(id || '')));
+ipcMain.handle('history:download-resume', async (_event, id) => {
+  const file = await authClient.downloadSessionResume(String(id || ''));
+  const name = file.name.split(/[\\/]/).pop().replace(/[<>:"|?*\x00-\x1f]/g, '_') || 'resume';
+  const picked = await dialog.showSaveDialog(win, { title: 'Download resume', defaultPath: name });
+  if (picked.canceled || !picked.filePath) return { canceled: true };
+  await fs.writeFile(picked.filePath, file.bytes);
+  return { saved: true };
+});
+
 
 ipcMain.handle('usage:start', () => startUsageMeter());
 ipcMain.handle('usage:stop', () => stopUsageMeter());
@@ -537,7 +548,7 @@ ipcMain.handle('context:save', async (_event, value) => {
   await fs.writeFile(path.join(app.getPath('userData'), 'context.json'), JSON.stringify(safe), 'utf8');
   return true;
 });
-ipcMain.handle('context:pick-files', async () => {
+ipcMain.handle('context:pick-files', async (_event, options = {}) => {
   const result = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'] });
   if (result.canceled) return [];
   const extracted = [];
@@ -556,8 +567,8 @@ ipcMain.handle('context:pick-files', async () => {
         const mime = extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg' : `image/${extension.slice(1)}`;
         extracted.push({ name, kind: 'image', mime, size: stat.size, content: buffer.toString('base64') });
       } else if (extension === '.pdf') {
-        const parsed = await require('pdf-parse')(buffer);
-        extracted.push({ name, kind: 'text', mime: 'application/pdf', size: stat.size, icon, content: parsed.text.slice(0, 500_000) });
+        const content = await require('./pdf-text').extractPdfText(buffer);
+        extracted.push({ name, kind: 'text', mime: 'application/pdf', size: stat.size, icon, content });
       } else if (extension === '.docx') {
         const parsed = await require('mammoth').extractRawText({ buffer });
         extracted.push({ name, kind: 'text', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: stat.size, icon, content: parsed.value.slice(0, 500_000) });
@@ -566,6 +577,7 @@ ipcMain.handle('context:pick-files', async () => {
       } else {
         extracted.push({ name, size: stat.size, icon, error: 'This binary format cannot be converted to model context.' });
       }
+      if (options.resume === true && extracted.at(-1)?.kind === 'text') extracted.at(-1).originalBase64 = buffer.toString('base64');
     } catch (error) {
       extracted.push({ name, size: stat.size, icon, error: `Could not read file: ${error.message}` });
     }

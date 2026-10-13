@@ -113,18 +113,33 @@ function createAuthClient({ serverUrl, userDataPath, openExternal, timeoutMs = 1
     return api(route, { ...options, headers: { authorization: `Bearer ${saved.token}`, ...options.headers } });
   }
 
-  async function startRecharge(planId, minutes) {
-    const result = await authorizedApi('/payments/orders', { method: 'POST', body: JSON.stringify({ planId, minutes }) });
+  async function startRecharge(planId, minutes, expected) {
+    const result = await authorizedApi('/payments/orders', { method: 'POST', body: JSON.stringify({ planId, minutes, expected }) });
+    if (result.priceUpdated) return result;
     await openExternal(result.checkoutUrl);
     return result;
   }
 
+  async function downloadSessionResume(id) {
+    const saved = await readSession();
+    if (!saved?.token) throw new Error('Sign in to download your resume.');
+    const response = await fetch(new URL(`/session-history/${encodeURIComponent(id)}/resume`, serverUrl), { headers: { authorization: `Bearer ${saved.token}` } });
+    if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.error || 'Could not download this resume.'); }
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > 25 * 1024 * 1024) throw new Error('Resume download exceeds the 25 MB limit.');
+    return { name: decodeURIComponent(response.headers.get('x-resume-filename') || 'resume'), bytes };
+  }
+
   return {
-    login, logout, redeemCoupon, status, startRecharge,
+    login, logout, redeemCoupon, status, startRecharge, downloadSessionResume,
     paymentPlans: () => api('/payments/plans'),
     paymentStatus: (id) => authorizedApi(`/payments/${encodeURIComponent(id)}`),
     wallet: () => authorizedApi('/wallet'),
-    createRecordedSession: (details) => authorizedApi('/session-history', { method: 'POST', body: JSON.stringify(details) }),
+    createRecordedSession: async (details) => {
+      const health = await api('/health');
+      if (details?.resume && !health.originalResumeStorage) throw new Error('The backend is running an older version that does not save original resumes. Restart the backend and try again.');
+      return authorizedApi('/session-history', { method: 'POST', body: JSON.stringify(details) });
+    },
     endRecordedSession: (id) => authorizedApi(`/session-history/${encodeURIComponent(id)}/end`, { method: 'POST' }),
     listSessionHistory: (page = 0) => authorizedApi(`/session-history?page=${page}`),
     sessionHistoryDetail: (id) => authorizedApi(`/session-history/${encodeURIComponent(id)}`),

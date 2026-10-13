@@ -4,7 +4,7 @@
     let session = null;
     return {
       set(value) {
-        session = { text: String(value?.text || ''), files: Array.isArray(value?.files) ? [...value.files] : [] };
+        session = { text: String(value?.text || ''), files: Array.isArray(value?.files) ? value.files.map(({ originalBase64, ...file }) => file) : [] };
       },
       clear() { session = null; },
       hasSession() { return session !== null; },

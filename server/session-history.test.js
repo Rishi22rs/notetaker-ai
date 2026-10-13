@@ -5,7 +5,8 @@ const { createUsageService } = require('./usage-meter');
 
 function memoryDb() {
   const stores = new Map(); let next = 0;
-  const matches = (doc, query) => Object.entries(query).every(([key, value]) => value && typeof value === 'object' && '$gte' in value ? doc[key] >= value.$gte : doc[key] === value);
+  const field = (doc, key) => key.split('.').reduce((value, part) => value?.[part], doc);
+  const matches = (doc, query) => Object.entries(query).every(([key, value]) => value && typeof value === 'object' && '$gte' in value ? field(doc, key) >= value.$gte : value && typeof value === 'object' && '$exists' in value ? (field(doc, key) !== undefined) === value.$exists : field(doc, key) === value);
   return { stores, collection(name) {
     if (!stores.has(name)) stores.set(name, []);
     const rows = stores.get(name);
@@ -16,7 +17,7 @@ function memoryDb() {
       find: query => ({ toArray: async () => rows.filter(row => matches(row, query)).map(row => ({ ...row })) }),
       updateOne: async (query, update) => {
         const row = rows.find(row => matches(row, query)); if (!row) return { matchedCount: 0, modifiedCount: 0 };
-        Object.assign(row, update.$set || {}); for (const [key, value] of Object.entries(update.$inc || {})) row[key] = (row[key] || 0) + value;
+        for (const [key, value] of Object.entries(update.$set || {})) { const parts = key.split('.'); const last = parts.pop(); let target = row; for (const part of parts) target = target[part] ||= {}; target[last] = value; } for (const [key, value] of Object.entries(update.$inc || {})) row[key] = (row[key] || 0) + value;
         return { matchedCount: 1, modifiedCount: 1 };
       }
     };
@@ -87,4 +88,36 @@ test('simultaneous history reconciliation and audio heartbeat bill the interval 
   await Promise.all([usage.reconcile(user), usage.heartbeat(user, 'first'), usage.reconcile(user)]);
   assert.equal(db.stores.get('usage_sessions')[0].chargedSeconds, 10);
   assert.equal((await usage.balance(user)).balanceSeconds, 590);
+});
+
+test('original resumes are stored byte-for-byte and download access is owner-scoped', async () => {
+  const { Writable, Readable } = require('node:stream');
+  const db = memoryDb(); let saved; let reads = 0;
+  const bucket = {
+    openUploadStream(name, options) {
+      const chunks = [];
+      const upload = new Writable({ write(chunk, _encoding, done) { chunks.push(Buffer.from(chunk)); done(); } });
+      upload.id = 'resume-file'; upload.on('finish', () => { saved = { bytes: Buffer.concat(chunks), name, options }; }); return upload;
+    },
+    openDownloadStream(id) { reads += 1; assert.equal(id, 'resume-file'); return Readable.from([saved.bytes]); },
+    delete: async () => {}
+  };
+  const service = createSessionHistoryService({ db, resumeBucket: bucket });
+  const bytes = Buffer.from('%PDF-1.7\noriginal resume bytes\n%%EOF');
+  const { id } = await service.create({ _id: 'owner' }, { company: 'Stripe', resume: { name: 'Resume.pdf', content: 'Parsed text', mime: 'application/pdf', originalBase64: bytes.toString('base64') } });
+  assert.deepEqual(saved.bytes, bytes);
+  const record = db.stores.get('interview_sessions')[0];
+  assert.equal(record.resume.downloadable, true); assert.equal(record.resume.originalBase64, undefined);
+  assert.equal(saved.options.metadata.userId, 'owner');
+  await assert.rejects(service.resumeDownload({ _id: 'stranger' }, id), error => error.status === 404); assert.equal(reads, 0);
+  const download = await service.resumeDownload({ _id: 'owner' }, id);
+  const chunks = []; for await (const chunk of download.stream) chunks.push(chunk);
+  assert.deepEqual(Buffer.concat(chunks), bytes); assert.equal(download.name, 'Resume.pdf');
+});
+test('legacy text-only resumes and malformed original uploads return clear errors', async () => {
+  const db = memoryDb(); const service = createSessionHistoryService({ db });
+  const owner = { _id: 'owner' };
+  const { id } = await service.create(owner, { company: 'Stripe', resume: { name: 'CV.pdf', content: 'Text only' } });
+  await assert.rejects(service.resumeDownload(owner, id), /original resume was not saved/);
+  await assert.rejects(service.create(owner, { company: 'Stripe', resume: { content: 'Text', originalBase64: 'bad base64!' } }), error => error.status === 400);
 });

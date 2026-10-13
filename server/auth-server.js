@@ -1,4 +1,6 @@
 const http = require('node:http');
+const { StringDecoder } = require('node:string_decoder');
+const { pipeline: streamPipeline } = require('node:stream/promises');
 const { MongoClient } = require('mongodb');
 const { hashToken, isLoopbackRedirect, randomToken } = require('../auth-crypto');
 const { createPaymentService } = require('./payments');
@@ -23,11 +25,14 @@ async function readJson(request, limit) {
 
 async function readText(request, limit = 1_000_000) {
   let body = '';
+  let bytes = 0;
+  const decoder = new StringDecoder('utf8');
   for await (const chunk of request) {
-    body += chunk;
-    if (body.length > limit) throw Object.assign(new Error('Request body is too large.'), { status: 413 });
+    bytes += chunk.length;
+    body += decoder.write(chunk);
+    if (bytes > limit) throw Object.assign(new Error('Request body is too large.'), { status: 413 });
   }
-  return body;
+  return body + decoder.end();
 }
 
 function publicUser(user) {
@@ -74,7 +79,7 @@ async function createAuthServer(config) {
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url, config.publicUrl);
-      if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true });
+      if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, originalResumeStorage: true });
       if (request.method === 'GET' && url.pathname === '/payments/plans') {
         return sendJson(response, 200, { plans: await paymentService.plans(), customPricing: await paymentService.customPricing(), configured: paymentService.configured() });
       }
@@ -170,13 +175,22 @@ async function createAuthServer(config) {
         const user = await currentUser(request);
         if (!user) return sendJson(response, 401, { error: 'Sign in to access session history.' });
         if (request.method === 'POST' && url.pathname === '/session-history') {
-          return sendJson(response, 201, await historyService.create(user, await readJson(request, 2_500_000)));
+          return sendJson(response, 201, await historyService.create(user, await readJson(request, 40_000_000)));
         }
         if (request.method === 'GET' && url.pathname === '/session-history') {
           await usageService.reconcile(user);
           const page = Math.max(0, Math.min(100000, Math.floor(Number(url.searchParams.get('page')) || 0)));
           const records = await historyService.list(user, page);
           return sendJson(response, 200, { sessions: records.slice(0, 25), hasMore: records.length > 25 });
+        }
+        const downloadMatch = /^\/session-history\/([a-zA-Z0-9-]+)\/resume$/.exec(url.pathname);
+        if (downloadMatch && request.method === 'GET') {
+          const file = await historyService.resumeDownload(user, downloadMatch[1]);
+          const name = encodeURIComponent(file.name).replace(/'/g, '%27');
+          response.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'no-store', 'content-disposition': `attachment; filename*=UTF-8''${name}`, 'x-resume-filename': name });
+          try { await streamPipeline(file.stream, response); }
+          catch (error) { response.destroy(error); }
+          return;
         }
         const match = /^\/session-history\/([a-zA-Z0-9-]+)(\/end)?$/.exec(url.pathname);
         if (match && request.method === 'GET' && !match[2]) {
@@ -220,7 +234,7 @@ async function createAuthServer(config) {
         const user = await currentUser(request);
         if (!user) return sendJson(response, 401, { error: 'Sign in before purchasing minutes.' });
         const body = await readJson(request);
-        return sendJson(response, 201, await paymentService.createOrder(user, String(body.planId || ''), body.minutes));
+        return sendJson(response, 201, await paymentService.createOrder(user, String(body.planId || ''), body.minutes, body.expected));
       }
 
       if (request.method === 'GET' && /^\/payments\/[a-f0-9]{24}$/i.test(url.pathname)) {

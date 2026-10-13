@@ -36,7 +36,7 @@ test('checkout ignores client prices and snapshots backend custom pricing', asyn
   const userId = new (require('mongodb').ObjectId)();
   const pricing = { ...DEFAULT_CUSTOM_PRICING, amountPaisePerMinute: 700 };
   const db = { collection(name) { return {
-    async findOne() { return name === 'payment_catalog' ? pricing : null; },
+    async findOne() { return name === 'app_config' ? pricing : null; },
     async insertOne(value) { saved.push(value); }
   }; } };
   const service = createPaymentService({ db, config: { razorpayKeyId: 'test', razorpayKeySecret: 'test', razorpayWebhookSecret: 'test', publicUrl: 'https://example.com' } });
@@ -57,4 +57,37 @@ test('checkout ignores client prices and snapshots backend custom pricing', asyn
     await assert.rejects(service.createOrder({ _id: userId }, 'custom_minutes', -10), /outside the allowed range/);
     await assert.rejects(service.createOrder({ _id: userId }, 'removed_pack'), /unavailable/);
   } finally { global.fetch = originalFetch; }
+});
+
+test('catalog exposes valid crossed-out prices without changing sale prices', async () => {
+  const { createPaymentService } = require('./payments');
+  const values = [69900, null, 49900, 10000, '69900'].map((originalAmountPaise, i) => ({ id: `pack_${i}`, durationSeconds: 6000, amountPaise: 49900, originalAmountPaise }));
+  const db = { collection() { return { find() { return { sort() { return { async toArray() { return values; } }; } }; } }; } };
+  const plans = await createPaymentService({ db, config: {} }).plans();
+  assert.deepEqual(plans.map(p => p.originalAmountPaise), [69900, null, null, null, null]);
+  assert.ok(plans.every(p => p.amountPaise === 49900));
+});
+
+test('custom config is read fresh from app_config/global on each request', async () => {
+  const { createPaymentService } = require('./payments');
+  let current = { enabled: true, amountPaisePerMinute: 600, minMinutes: 10, maxMinutes: 10000 };
+  const db = { collection(name) { return { async findOne(query) {
+    assert.equal(name, 'app_config'); assert.equal(query._id, 'global'); return { ...current };
+  } }; } };
+  const service = createPaymentService({ db, config: {} });
+  assert.equal((await service.customPricing()).amountPaisePerMinute, 600);
+  current = { enabled: true, amountPaisePerMinute: 800, minMinutes: 20, maxMinutes: 500 };
+  assert.deepEqual(await service.customPricing(), current);
+});
+
+test('changed checkout pricing returns refresh signal without creating payment', async () => {
+  const { createPaymentService } = require('./payments');
+  const db = { collection(name) { return { async findOne() {
+    if (name === 'app_config') return { ...DEFAULT_CUSTOM_PRICING, amountPaisePerMinute: 900 };
+    if (name === 'recharge_plans') return { amountPaise: 59900, durationSeconds: 6000 };
+    throw new Error('Checkout must stop before further operations');
+  } }; } };
+  const service = createPaymentService({ db, config: { razorpayKeyId: 'test', razorpayKeySecret: 'test', razorpayWebhookSecret: 'test' } });
+  assert.deepEqual(await service.createOrder({}, 'custom_minutes', 10, DEFAULT_CUSTOM_PRICING), { priceUpdated: true });
+  assert.deepEqual(await service.createOrder({}, 'pack_test', undefined, { amountPaise: 49900, durationSeconds: 6000 }), { priceUpdated: true });
 });

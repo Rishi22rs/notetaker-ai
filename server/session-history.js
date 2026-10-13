@@ -1,4 +1,15 @@
 const { randomUUID } = require('node:crypto');
+const { GridFSBucket } = require('mongodb');
+const { Readable } = require('node:stream');
+const { pipeline: streamPipeline } = require('node:stream/promises');
+const MAX_RESUME_BYTES = 25 * 1024 * 1024;
+
+function originalBytes(encoded) {
+  if (typeof encoded !== 'string' || !encoded || encoded.length > Math.ceil(MAX_RESUME_BYTES / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) throw Object.assign(new Error('Invalid original resume file (maximum 25 MB).'), { status: 400 });
+  const bytes = Buffer.from(encoded, 'base64');
+  if (!bytes.length || bytes.length > MAX_RESUME_BYTES) throw Object.assign(new Error('Invalid original resume file.'), { status: 400 });
+  return bytes;
+}
 
 function sessionDetails(value = {}) {
   const company = String(value.company || '').trim();
@@ -14,7 +25,9 @@ function sessionDetails(value = {}) {
   return { company, extraContext, resume };
 }
 
-function createSessionHistoryService({ db }) {
+function createSessionHistoryService({ db, resumeBucket }) {
+  let bucket = resumeBucket;
+  const originals = () => bucket ||= new GridFSBucket(db, { bucketName: 'session_resumes' });
   const histories = db.collection('interview_sessions');
   const pipeline = (user, id) => [
     { $match: { userId: user._id, ...(id ? { id } : {}) } },
@@ -32,8 +45,30 @@ function createSessionHistoryService({ db }) {
       const details = sessionDetails(value);
       const now = new Date();
       const record = { id: randomUUID(), userId: user._id, ...details, status: 'ready', createdAt: now, endedAt: null };
-      await histories.insertOne(record);
-      return { id: record.id };
+      let upload;
+      try {
+        const encoded = value.resume?.originalBase64;
+        if (encoded !== undefined) {
+          const bytes = originalBytes(encoded);
+          if (!record.resume) throw Object.assign(new Error('Resume details are missing.'), { status: 400 });
+          upload = originals().openUploadStream(record.resume.name, { metadata: { userId: user._id, sessionId: record.id, mime: record.resume.mime } });
+          await streamPipeline(Readable.from([bytes]), upload);
+          record.resume.fileId = upload.id;
+          record.resume.downloadable = true;
+          record.resume.size = bytes.length;
+        }
+        await histories.insertOne(record);
+      } catch (error) {
+        if (upload) await originals().delete(upload.id).catch(() => {});
+        throw error;
+      }
+      return { id: record.id, resumeStored: !!record.resume?.fileId };
+    },
+    async resumeDownload(user, id) {
+      const record = await histories.findOne({ userId: user._id, id });
+      if (!record) throw Object.assign(new Error('Session not found.'), { status: 404 });
+      if (!record.resume?.fileId) throw Object.assign(new Error('The original resume was not saved for this older session.'), { status: 404 });
+      return { name: record.resume.name, stream: originals().openDownloadStream(record.resume.fileId) };
     },
     async requireOpen(user, id) {
       if (!id) return;

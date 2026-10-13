@@ -350,7 +350,7 @@
     .history-table-scroll { margin: 16px 0; overflow-x: auto; border-top: 1px solid var(--line); }
     .history-table { width: 100%; min-width: 780px; border-collapse: collapse; table-layout: fixed; font-size: 11px; text-align: left; }
     .history-table th { padding: 11px 10px; font-size: 10px; font-weight: 550; color: var(--muted); border-bottom: 1px solid var(--line); }
-    .history-table th:nth-child(1) { width: 17%; }.history-table th:nth-child(2) { width: 22%; }.history-table th:nth-child(3) { width: 29%; }.history-table th:nth-child(4) { width: 20%; }.history-table th:nth-child(5) { width: 12%; }
+    .history-table th:nth-child(1) { width: 17%; }.history-table th:nth-child(2) { width: 22%; }.history-table th:nth-child(3) { width: 25%; }.history-table th:nth-child(4) { width: 24%; }.history-table th:nth-child(5) { width: 12%; }
     .history-item td { padding: 13px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
     .history-item td > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .history-item:hover { background: #ffffff03; }.history-company { font-weight: 600; color: var(--text); }.history-meta, .history-resume { color: var(--muted); }.history-usage { color: var(--accent); font-variant-numeric: tabular-nums; }
@@ -407,7 +407,7 @@
     .recharge-heading p, .custom-minutes-heading p, #custom-minute-range, .recharge-footnote { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
     .offers-view #recharge-plan[hidden], #custom-minutes-fields[hidden] { display: none !important; }
     .recharge-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; }
-    .recharge-pack { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; width: 100%; margin: 0; padding: 18px; text-align: left; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); cursor: pointer; transition: border-color .15s, transform .15s, box-shadow .15s; }
+    .recharge-pack { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; width: 100%; margin: 0; padding: 18px; text-align: left; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); transition: border-color .15s, transform .15s, box-shadow .15s; }
     .recharge-pack:hover { transform: translateY(-2px); border-color: var(--accent-bg); }
     .recharge-pack[aria-pressed="true"] { border-color: var(--accent-bg); box-shadow: 0 0 0 1px var(--accent-bg); background: linear-gradient(135deg, color-mix(in srgb, var(--accent-bg) 12%, var(--surface)), var(--surface)); }
     .pack-badge { min-height: 18px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
@@ -428,6 +428,39 @@
     .recharge-checkout small, .recharge-checkout span { color: var(--muted); font-size: 11px; }
     #recharge-total { font-size: 24px; }
     .offers-view #recharge-submit { min-width: 180px; background: var(--accent-bg); color: var(--dark-text); border-radius: 9px; font-weight: 700; }
+    .pack-original-price { color: var(--muted); font-size: 16px; text-decoration-thickness: 2px; }
+    .pack-buy { width: 100%; margin: auto 0 0; padding: 12px; border-radius: 9px; background: var(--accent-bg); color: var(--dark-text); font-weight: 700; }
+    .pack-buy:disabled { opacity: .5; cursor: not-allowed; }
+    .recharge-packs { gap: 16px; }
+    .recharge-pack { gap: 8px; padding: 22px; min-height: 270px; background: linear-gradient(155deg, #252b23, var(--surface) 65%); border-color: #414a3a; }
+    .recharge-pack.best-value { border-color: var(--accent); box-shadow: inset 0 1px 0 #c9ff4525; }
+    .recharge-pack.best-value .pack-badge { color: var(--accent); }
+    .pack-badge { margin-bottom: 10px; }
+    .pack-minutes { font-size: 23px; }
+    .pack-price-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; margin: 8px 0 2px; }
+    .pack-price { font-size: 32px; }
+    .pack-buy { display: flex; justify-content: center; align-items: center; min-height: 42px; margin-top: 20px; font-size: 12px; border: 1px solid #596746; background: #c9ff4510; color: var(--accent); }
+    .pack-buy:hover { background: #c9ff4522; border-color: var(--accent); }
+    .best-value .pack-buy { background: var(--accent-bg); border-color: var(--accent-bg); color: var(--dark-text); }
+    .offers-view #custom-minutes, .offers-view #coupon-code { appearance: none; box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; background: var(--input); color: var(--text); box-shadow: none; outline: none; height: 48px; padding: 12px 14px; font-size: 15px; }
+    .offers-view #custom-minutes:focus, .offers-view #coupon-code:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #c9ff4514; }
+    #custom-minutes::-webkit-inner-spin-button, #custom-minutes::-webkit-outer-spin-button { appearance: none; margin: 0; }
+    .offers-view .coupon-form { max-width: 820px; background: transparent; }
+    #custom-checkout { max-width: 820px; margin-bottom: 22px; padding: 18px 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+    #custom-checkout[hidden] { display: none; }
+    .offers-view { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+    .offers-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 22px; }
+    #custom-checkout { flex: 0 0 auto; width: calc(100% - 44px); max-width: 820px; margin: 0 22px 16px; padding: 16px 20px; background: #1c211c; border-color: #414a3a; box-shadow: 0 -8px 24px #0002; }
+    @media (max-width: 540px) { #custom-checkout { gap: 10px; padding: 12px 14px; } .offers-view #recharge-submit { min-width: 130px; } }
+    .recharge-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    #jump-to-custom-minutes { width: auto; margin: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); font-size: 11px; white-space: nowrap; }
+    #jump-to-custom-minutes:hover { color: var(--accent); border-color: var(--accent); background: #c9ff4508; }
+    #jump-to-custom-minutes[hidden] { display: none; }
+    #custom-minutes-fields { scroll-margin-top: 18px; }
+    .pack-name { font-size: 16px; font-weight: 650; color: var(--text); overflow-wrap: anywhere; }
+    #pricing-updated-modal { max-width: 380px; padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); }
+    #pricing-updated-modal::backdrop { background: #0009; }
+    .history-resume-file { display: flex; align-items: center; gap: 4px; min-width: 0; }.history-resume-file > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.history-resume-download { display: grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--muted); }.history-resume-download:hover { background: #c9ff4510; color: var(--accent); }.history-resume-download > .app-icon:first-child { width: 14px; height: 14px; margin: 0; }
   </style>
 </head>
 <body>
@@ -571,9 +604,26 @@
         </div>
       </section>
       <section class="offers-view settings-content" id="offers-view" hidden>
+        <div class="offers-scroll">
         <h2>Recharge &amp; Offers</h2>
         <p class="settings-intro">View your usage, redeem a coupon, or add more time.</p>
         <div class="wallet-box"><span class="wallet-label">Available usage</span><span id="wallet-balance">—</span></div>
+        <form class="recharge-form" id="recharge-form">
+          <div class="recharge-heading"><div><h3>More time. More possibilities.</h3><p>Choose a pack or buy exactly the minutes you need.</p></div><button id="jump-to-custom-minutes" type="button" hidden>Add a custom amount</button></div>
+          <select id="recharge-plan" aria-label="Recharge plan" hidden></select>
+          <div id="recharge-packs" class="recharge-packs" aria-label="Minute packs"></div>
+          <div id="custom-minutes-fields" class="custom-minutes-box" hidden>
+            <div class="custom-minutes-heading"><div><h3>Just the minutes you need</h3><p id="custom-minute-rate"></p></div></div>
+            <label for="custom-minutes">Minutes to buy</label>
+            <input id="custom-minutes" type="text" inputmode="numeric" pattern="[0-9]+" autocomplete="off" placeholder="Enter minutes" required disabled>
+            <p id="custom-minute-range"></p>
+            <p id="custom-minutes-total" aria-live="polite"></p>
+
+          </div>
+
+          <p class="recharge-footnote">Unused minutes stay in your wallet. Secure payment with Razorpay.</p>
+          <div id="payment-status" aria-live="polite"></div>
+        </form>
         <form class="coupon-form" id="coupon-form">
           <label for="coupon-code">Have a coupon?</label>
           <div class="coupon-row">
@@ -582,21 +632,8 @@
           </div>
           <div id="coupon-status" aria-live="polite"></div>
         </form>
-        <form class="recharge-form" id="recharge-form">
-          <div class="recharge-heading"><h3>More time. More possibilities.</h3><p>Choose a pack or buy exactly the minutes you need.</p></div>
-          <select id="recharge-plan" aria-label="Recharge plan" hidden></select>
-          <div id="recharge-packs" class="recharge-packs" aria-label="Minute packs"></div>
-          <div id="custom-minutes-fields" class="custom-minutes-box" hidden>
-            <div class="custom-minutes-heading"><div><h3>Just the minutes you need</h3><p id="custom-minute-rate"></p></div><button id="select-custom-minutes" type="button">Choose custom</button></div>
-            <label for="custom-minutes">Minutes to buy</label>
-            <input id="custom-minutes" type="number" min="10" step="1" value="10" required disabled>
-            <p id="custom-minute-range"></p>
-            <p id="custom-minutes-total" aria-live="polite"></p>
-          </div>
-          <div class="recharge-checkout"><div><small>Total to pay</small><strong id="recharge-total">—</strong><span>Available coupons are applied at checkout.</span></div><button id="recharge-submit" type="submit" data-button-icon="wallet">Continue to payment</button></div>
-          <p class="recharge-footnote">Unused minutes stay in your wallet. Secure payment with Razorpay.</p>
-          <div id="payment-status" aria-live="polite"></div>
-        </form>
+        </div>
+          <div class="recharge-checkout" id="custom-checkout" hidden><div><small>Total to pay</small><strong id="recharge-total">—</strong><span>Available coupons are applied at checkout.</span></div><button form="recharge-form" id="recharge-submit" type="submit" data-button-icon="wallet">Continue to payment</button></div>
       </section>
       <section class="summary-view" id="summary-view" hidden>
         <div class="summary-overview"><h2>Meeting overview</h2><p id="summary-overview-text">No conversation yet.</p></div>
@@ -649,9 +686,11 @@
     <p id="payment-wait-message" role="status">Opening secure checkout…</p>
   </dialog>
   <div class="resize-grip" aria-hidden="true"></div>
+<dialog id="pricing-updated-modal" aria-labelledby="pricing-updated-title"><h3 id="pricing-updated-title">Pricing has been updated</h3><p>The price or purchase limits changed. Refresh to review the latest details before paying.</p><button id="refresh-updated-pricing" type="button">Refresh</button></dialog>
   <script src="interview-question-context.js"></script>
   <script src="session-context.js"></script>
   <script src="app-icons.js"></script>
   <script src="renderer.js"></script>
+
 </body>
 </html>
