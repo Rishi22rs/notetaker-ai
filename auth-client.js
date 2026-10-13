@@ -113,8 +113,8 @@ function createAuthClient({ serverUrl, userDataPath, openExternal, timeoutMs = 1
     return api(route, { ...options, headers: { authorization: `Bearer ${saved.token}`, ...options.headers } });
   }
 
-  async function startRecharge(planId) {
-    const result = await authorizedApi('/payments/orders', { method: 'POST', body: JSON.stringify({ planId }) });
+  async function startRecharge(planId, minutes) {
+    const result = await authorizedApi('/payments/orders', { method: 'POST', body: JSON.stringify({ planId, minutes }) });
     await openExternal(result.checkoutUrl);
     return result;
   }
@@ -124,7 +124,11 @@ function createAuthClient({ serverUrl, userDataPath, openExternal, timeoutMs = 1
     paymentPlans: () => api('/payments/plans'),
     paymentStatus: (id) => authorizedApi(`/payments/${encodeURIComponent(id)}`),
     wallet: () => authorizedApi('/wallet'),
-    startUsage: () => authorizedApi('/usage/start', { method: 'POST' }),
+    createRecordedSession: (details) => authorizedApi('/session-history', { method: 'POST', body: JSON.stringify(details) }),
+    endRecordedSession: (id) => authorizedApi(`/session-history/${encodeURIComponent(id)}/end`, { method: 'POST' }),
+    listSessionHistory: (page = 0) => authorizedApi(`/session-history?page=${page}`),
+    sessionHistoryDetail: (id) => authorizedApi(`/session-history/${encodeURIComponent(id)}`),
+    startUsage: (historyId = '') => authorizedApi('/usage/start', { method: 'POST', body: JSON.stringify({ historyId }) }),
     usageHeartbeat: (token) => authorizedApi('/usage/heartbeat', { method: 'POST', body: JSON.stringify({ token }) }),
     stopUsage: (token) => authorizedApi('/usage/stop', { method: 'POST', body: JSON.stringify({ token }) })
   };

@@ -34,10 +34,10 @@ function hasCodingIntent(value) {
 
 function inferType(text) {
   text = normalizeRuleText(text);
-  if (hasAlgorithmPrompt(text)) return 'coding';
+  if (hasCodingIntent(text)) return 'coding';
   if (/\b(tell me about a time|give me an example|conflict|challenge|failure|strength|weakness|leadership|team|stakeholder)\b/i.test(text)) return 'behavioral';
   if (/\b(system design|design (?:a|an|the)|scale|availability|distributed|database|cache|queue|load balanc|architecture)\b/i.test(text)) return 'system_design';
-  if (/\b(code|coding|implement|implementation|algorithm|data structure|complexity|big[- ]?o|array|linked list|tree|graph|dynamic programming|write (?:a |the )?(?:function|method|program|query)|debug|refactor|leetcode|hackerrank)\b/i.test(text)) return 'coding';
+  if (/\b(code|coding|implement|implementation|write (?:a |the )?(?:function|method|program|query)|debug|refactor|leetcode|hackerrank)\b/i.test(text)) return 'coding';
   if (/\b(resume|résumé|project|experience|background|previous role|current role)\b/i.test(text)) return 'resume';
   if (/^(why|can you elaborate|could you clarify|what about|and how|and why)\b/i.test(text)) return 'follow_up';
   if (/\b(api|javascript|typescript|python|java|react|node|sql|http|network|thread|process|memory|security|cloud)\b/i.test(text)) return 'technical';

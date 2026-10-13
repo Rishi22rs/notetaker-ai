@@ -3,6 +3,7 @@ const { MongoClient } = require('mongodb');
 const { hashToken, isLoopbackRedirect, randomToken } = require('../auth-crypto');
 const { createPaymentService } = require('./payments');
 const { createUsageService } = require('./usage-meter');
+const { createSessionHistoryService } = require('./session-history');
 
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -15,16 +16,16 @@ function sendJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
-async function readJson(request) {
-  const body = await readText(request);
+async function readJson(request, limit) {
+  const body = await readText(request, limit);
   return body ? JSON.parse(body) : {};
 }
 
-async function readText(request) {
+async function readText(request, limit = 1_000_000) {
   let body = '';
   for await (const chunk of request) {
     body += chunk;
-    if (body.length > 1_000_000) throw new Error('Request body is too large.');
+    if (body.length > limit) throw Object.assign(new Error('Request body is too large.'), { status: 413 });
   }
   return body;
 }
@@ -45,7 +46,8 @@ async function createAuthServer(config) {
   const wallets = db.collection('wallets');
   const discounts = db.collection('discounts');
   const paymentService = createPaymentService({ db, config });
-  const usageService = createUsageService({ db });
+  const historyService = createSessionHistoryService({ db });
+  const usageService = createUsageService({ db, historyService });
   await Promise.all([
     users.createIndex({ googleId: 1 }, { unique: true }),
     sessions.createIndex({ tokenHash: 1 }, { unique: true }),
@@ -57,6 +59,7 @@ async function createAuthServer(config) {
     wallets.createIndex({ userId: 1 }, { unique: true }),
     discounts.createIndex({ redemptionId: 1 }, { unique: true }),
     paymentService.ensureIndexes(),
+    historyService.ensureIndexes(),
     usageService.ensureIndexes()
   ]);
   const pendingStates = new Map();
@@ -73,7 +76,7 @@ async function createAuthServer(config) {
       const url = new URL(request.url, config.publicUrl);
       if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true });
       if (request.method === 'GET' && url.pathname === '/payments/plans') {
-        return sendJson(response, 200, { plans: await paymentService.plans(), configured: paymentService.configured() });
+        return sendJson(response, 200, { plans: await paymentService.plans(), customPricing: await paymentService.customPricing(), configured: paymentService.configured() });
       }
       if (request.method === 'GET' && url.pathname.startsWith('/checkout/')) {
         return paymentService.showCheckout(decodeURIComponent(url.pathname.slice('/checkout/'.length)), response);
@@ -163,6 +166,30 @@ async function createAuthServer(config) {
         return sendJson(response, 200, { ok: true });
       }
 
+      if (url.pathname === '/session-history' || url.pathname.startsWith('/session-history/')) {
+        const user = await currentUser(request);
+        if (!user) return sendJson(response, 401, { error: 'Sign in to access session history.' });
+        if (request.method === 'POST' && url.pathname === '/session-history') {
+          return sendJson(response, 201, await historyService.create(user, await readJson(request, 2_500_000)));
+        }
+        if (request.method === 'GET' && url.pathname === '/session-history') {
+          await usageService.reconcile(user);
+          const page = Math.max(0, Math.min(100000, Math.floor(Number(url.searchParams.get('page')) || 0)));
+          const records = await historyService.list(user, page);
+          return sendJson(response, 200, { sessions: records.slice(0, 25), hasMore: records.length > 25 });
+        }
+        const match = /^\/session-history\/([a-zA-Z0-9-]+)(\/end)?$/.exec(url.pathname);
+        if (match && request.method === 'GET' && !match[2]) {
+          await usageService.reconcile(user);
+          return sendJson(response, 200, await historyService.detail(user, match[1]));
+        }
+        if (match && request.method === 'POST' && match[2]) {
+          await usageService.endHistory(user, match[1]);
+          return sendJson(response, 200, await historyService.end(user, match[1]));
+        }
+        return sendJson(response, 404, { error: 'Not found.' });
+      }
+
       if (request.method === 'GET' && url.pathname === '/wallet') {
         const user = await currentUser(request);
         return user ? sendJson(response, 200, await usageService.reconcile(user)) : sendJson(response, 401, { error: 'Not signed in.' });
@@ -171,7 +198,8 @@ async function createAuthServer(config) {
       if (request.method === 'POST' && url.pathname === '/usage/start') {
         const user = await currentUser(request);
         if (!user) return sendJson(response, 401, { error: 'Sign in to start usage.' });
-        return sendJson(response, 201, await usageService.start(user, randomToken(24)));
+        const { historyId } = await readJson(request);
+        return sendJson(response, 201, await usageService.start(user, randomToken(24), String(historyId || '')));
       }
 
       if (request.method === 'POST' && url.pathname === '/usage/heartbeat') {
@@ -192,7 +220,7 @@ async function createAuthServer(config) {
         const user = await currentUser(request);
         if (!user) return sendJson(response, 401, { error: 'Sign in before purchasing minutes.' });
         const body = await readJson(request);
-        return sendJson(response, 201, await paymentService.createOrder(user, String(body.planId || '')));
+        return sendJson(response, 201, await paymentService.createOrder(user, String(body.planId || ''), body.minutes));
       }
 
       if (request.method === 'GET' && /^\/payments\/[a-f0-9]{24}$/i.test(url.pathname)) {

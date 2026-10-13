@@ -139,3 +139,9 @@ test('algorithm cues alone do not turn factual statements or candidate speech in
   });
   assert.equal(result.isQuestion, false);
 });
+
+ test('conceptual complexity and data structure questions do not require a code solution', () => {
+  assert.notEqual(inferType('What is time complexity?'), 'coding');
+  assert.notEqual(inferType('What is an array?'), 'coding');
+  assert.equal(inferType('Write a function to find a target in an array'), 'coding');
+});

@@ -12,6 +12,7 @@ let localTranscription;
 let cloudTranscription;
 let transcriptionActive = false;
 const { buildContextMessages } = require('./context-prompt');
+const { usableSpeech } = require('./transcription-audio');
 const { createInterviewSession } = require('./interview-session');
 const { detectQuestion } = require('./question-detector');
 const { retrieveInterviewContext } = require('./context-retriever');
@@ -20,12 +21,16 @@ const { createAudioEchoFilter } = require('./audio-echo-filter');
 
 let win;
 let dragTimer;
+let floatingMode = false;
+let floatingWindowController;
+const { createFloatingWindowController } = require('./floating-window');
 let transcription;
 let interviewSession;
 let localAI;
 let audioEchoFilter;
 let authClient;
 let usageSession;
+let recordedSessionId = null;
 let usageHeartbeatTimer;
 const nativeAudio = process.platform === 'darwin' ? require('./native-system-audio')((bytes) => transcription?.audio('computer', bytes)) : null;
 let browseMode = false;
@@ -57,7 +62,7 @@ function toggleWindowVisibility() {
     return;
   }
   win.setAlwaysOnTop(true, 'screen-saver');
-  if (browseMode) {
+  if (browseMode || floatingMode) {
     win.show();
     setInteractive(win, true);
   } else {
@@ -78,14 +83,14 @@ function enableHoldToDrag(window) {
   dragTimer = setInterval(() => {
     if (window.isDestroyed()) return;
     const held = isDown(0x11) && isDown(0x10); // Ctrl + Shift
-    const enabled = held || browseMode;
+    const enabled = held || browseMode || floatingMode;
     const mouseDown = isDown(0x01);
     if (enabled !== interactive) {
       interactive = enabled;
       setInteractive(window, enabled);
     }
 
-    if (!enabled || !mouseDown) {
+    if (!enabled || !mouseDown || floatingMode) {
       drag = null;
     } else {
       const cursor = screen.getCursorScreenPoint();
@@ -116,6 +121,14 @@ function enableHoldToDrag(window) {
   }, 16);
 }
 
+ipcMain.handle('overlay:window-mode', (event, mode, answerHeight) => {
+  if (!win || event.sender !== win.webContents) throw new Error('Invalid overlay window');
+  const bounds = floatingWindowController.setMode(mode, answerHeight);
+  floatingMode = mode !== 'dashboard';
+  setInteractive(win, floatingMode || browseMode);
+  return bounds;
+});
+
 async function createWindow() {
   if (!['win32', 'darwin'].includes(process.platform)) {
     throw new Error('This overlay currently supports Windows and macOS.');
@@ -130,7 +143,7 @@ async function createWindow() {
   }
   if (!globalShortcut.register('CommandOrControl+Shift+I', () => {
     browseMode = !browseMode;
-    setInteractive(win, browseMode);
+    setInteractive(win, browseMode || floatingMode);
   })) {
     throw new Error('Could not register the interaction shortcut. Free Command/Ctrl+Shift+I and retry.');
   }
@@ -164,6 +177,7 @@ async function createWindow() {
 
   win.setMinimumSize(Math.min(620, area.width), Math.min(400, area.height));
 
+  floatingWindowController = createFloatingWindowController(win, screen);
   win.setMenu(null);
   win.setAlwaysOnTop(true, 'screen-saver');
   if (process.platform === 'darwin') {
@@ -196,7 +210,7 @@ async function createWindow() {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.on('closed', () => {
-    stopUsageMeter();
+    endRecordedSession().catch(error => console.warn('Could not finalize session history:', error.message));
     for (const cancel of activeChats.values()) cancel();
     activeChats.clear();
     clearInterval(dragTimer);
@@ -221,7 +235,16 @@ async function createWindow() {
       transcription.current = backend;
       return backend.start();
     },
-    audio(speaker, bytes) { transcription.current?.audio(speaker, bytes); },
+    audio(speaker, bytes) {
+      if (speaker === 'computer' && transcription.current) {
+        const buffer = Buffer.from(bytes);
+        if (buffer.length && buffer.length % 4 === 0 && usableSpeech(new Float32Array(buffer.buffer, buffer.byteOffset, buffer.length / 4))) {
+          interviewSession?.noteComputerSpeech();
+          if (win && !win.isDestroyed()) win.webContents.send('transcription:event', { type: 'computer-speech-activity' });
+        }
+      }
+      transcription.current?.audio(speaker, bytes);
+    },
     stop() { transcription.current?.stop(); transcription.current = null; transcriptionActive = false; },
     dispose() { localTranscription.dispose(); cloudTranscription.dispose(); }
   };
@@ -250,10 +273,13 @@ ipcMain.handle('auth:status', () => authClient.status());
 ipcMain.handle('auth:login', (event) => authClient.login(() => {
   if (!event.sender.isDestroyed()) event.sender.send('auth:browser-opened');
 }));
-ipcMain.handle('auth:logout', () => authClient.logout());
+ipcMain.handle('auth:logout', async () => {
+  await endRecordedSession();
+  return authClient.logout();
+});
 ipcMain.handle('coupon:redeem', (_event, code) => authClient.redeemCoupon(String(code || '').slice(0, 32)));
 ipcMain.handle('payments:plans', () => authClient.paymentPlans());
-ipcMain.handle('payments:start', (_event, planId) => authClient.startRecharge(String(planId || '').slice(0, 40)));
+ipcMain.handle('payments:start', (_event, planId, minutes) => authClient.startRecharge(String(planId || '').slice(0, 40), minutes));
 ipcMain.handle('payments:status', (_event, id) => authClient.paymentStatus(String(id || '').slice(0, 40)));
 ipcMain.handle('wallet:get', () => authClient.wallet());
 
@@ -273,7 +299,7 @@ async function stopUsageMeter() {
 
 async function startUsageMeter() {
   if (usageSession) return usageSession;
-  const session = await authClient.startUsage();
+  const session = await authClient.startUsage(recordedSessionId || '');
   usageSession = session;
   usageHeartbeatTimer = setInterval(async () => {
     if (!usageSession) return;
@@ -284,6 +310,7 @@ async function startUsageMeter() {
         clearInterval(usageHeartbeatTimer);
         usageHeartbeatTimer = null;
         usageSession = null;
+        recordedSessionId = null;
         transcription?.stop();
         nativeAudio?.stop();
         if (win && !win.isDestroyed()) win.webContents.send('transcription:event', { type: 'error', text: 'Your usage time has ended. Redeem a coupon or recharge to continue.' });
@@ -300,6 +327,23 @@ function requireActiveUsage() {
   error.status = 402;
   throw error;
 }
+
+async function endRecordedSession() {
+  await stopUsageMeter();
+  if (!recordedSessionId) return { ok: true };
+  const result = await authClient.endRecordedSession(recordedSessionId);
+  recordedSessionId = null;
+  return result;
+}
+ipcMain.handle('history:create', async (_event, details) => {
+  if (recordedSessionId) await endRecordedSession();
+  const record = await authClient.createRecordedSession(details);
+  recordedSessionId = record.id;
+  return record;
+});
+ipcMain.handle('history:end', endRecordedSession);
+ipcMain.handle('history:list', (_event, page) => authClient.listSessionHistory(Math.max(0, Math.floor(Number(page) || 0))));
+ipcMain.handle('history:detail', (_event, id) => authClient.sessionHistoryDetail(String(id || '')));
 
 ipcMain.handle('usage:start', () => startUsageMeter());
 ipcMain.handle('usage:stop', () => stopUsageMeter());
@@ -324,7 +368,7 @@ ipcMain.handle('transcription:start', async (_event, sources) => {
   try {
     await transcription?.start();
     transcriptionActive = true;
-    if (nativeAudio && sources?.system) await nativeAudio.start();
+    if (nativeAudio && sources?.system) await nativeAudio.start(false, cloudSettings.get().transcription === 'groq' ? 2 : 1.5);
   } catch (error) {
     nativeAudio?.stop(); transcription?.stop(); await stopUsageMeter(); throw error;
   }
@@ -371,7 +415,7 @@ ipcMain.handle('interview:detect-question', async (_event, request) => {
   return detectQuestion({
     turn,
     recentTurns,
-    classify: model ? (input) => localAI.classifyInterviewTurn({ model, ...input }) : undefined
+    classify: model && !request?.rulesOnly ? (input) => localAI.classifyInterviewTurn({ model, ...input }) : undefined
   });
 });
 ipcMain.handle('interview:retrieve-context', (_event, request) => {

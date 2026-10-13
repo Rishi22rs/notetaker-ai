@@ -29,8 +29,8 @@ function createInterviewSession({
   onTurn,
   // Wait long enough for the interviewer to finish a clause or constraint.
   pauseMs = 2800,
-  computerPauseMs = 6500,
-  questionPauseMs = 6000,
+  computerPauseMs = 3500,
+  questionPauseMs = 3500,
   maxTurnMs = 20_000,
   computerMaxTurnMs = 45_000,
   now = Date.now,
@@ -41,6 +41,7 @@ function createInterviewSession({
 
   let active = null;
   let timer = null;
+  let lastComputerSpeechAt = -Infinity;
 
   function cancelTimer() {
     if (timer !== null) cancel(timer);
@@ -63,7 +64,10 @@ function createInterviewSession({
     const delay = active.speaker === 'computer'
       ? (looksLikeQuestion ? questionPauseMs : computerPauseMs)
       : pauseMs;
-    timer = schedule(() => finalize('pause'), delay);
+    timer = schedule(() => {
+      if (active?.speaker === 'computer' && now() - lastComputerSpeechAt < delay) { armTimer(); return; }
+      finalize('pause');
+    }, delay);
   }
 
   function ingest(event) {
@@ -78,7 +82,7 @@ function createInterviewSession({
 
     if (active && active.speaker !== speaker) finalize('speaker-change');
     const maximumDuration = active?.speaker === 'computer' ? computerMaxTurnMs : maxTurnMs;
-    if (active && capturedAt - active.startedAt >= maximumDuration) finalize('maximum-duration');
+    if (active && active.speaker !== 'computer' && capturedAt - active.startedAt >= maximumDuration) finalize('maximum-duration');
 
     if (!active) {
       active = {
@@ -98,12 +102,18 @@ function createInterviewSession({
     return { ...active, final: false };
   }
 
+  function noteComputerSpeech() {
+    lastComputerSpeechAt = now();
+    if (active?.speaker === 'computer') armTimer();
+  }
+
   function clear() {
     cancelTimer();
     active = null;
+    lastComputerSpeechAt = -Infinity;
   }
 
-  return { ingest, flush: finalize, clear, dispose: clear };
+  return { ingest, noteComputerSpeech, flush: finalize, clear, dispose: clear };
 }
 
 module.exports = { createInterviewSession, mergeTranscriptText };

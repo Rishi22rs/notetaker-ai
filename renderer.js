@@ -4,7 +4,6 @@ const form = document.getElementById('composer');
 const prompt = document.getElementById('prompt');
 const send = document.getElementById('send');
 const newChat = document.getElementById('new-chat');
-const sessionToggle = document.getElementById('session-toggle');
 const sessionClock = document.getElementById('session-clock');
 const sessionBlocker = document.getElementById('session-blocker');
 const sessionBlockerMessage = document.getElementById('session-blocker-message');
@@ -26,8 +25,6 @@ const downloadTitle = document.getElementById('download-title');
 const downloadDetail = document.getElementById('download-detail');
 const downloadModel = document.getElementById('download-model');
 const downloadProgress = document.getElementById('download-progress');
-const showTranscript = document.getElementById('show-transcript');
-const showSummary = document.getElementById('show-summary');
 const transcriptView = document.getElementById('transcript-view');
 const summaryView = document.getElementById('summary-view');
 const summaryOverviewText = document.getElementById('summary-overview-text');
@@ -56,6 +53,7 @@ const couponCode = document.getElementById('coupon-code');
 const couponSubmit = document.getElementById('coupon-submit');
 const couponStatus = document.getElementById('coupon-status');
 const walletBalance = document.getElementById('wallet-balance');
+const headerTimeRemaining = document.getElementById('header-time-remaining');
 const rechargeForm = document.getElementById('recharge-form');
 const rechargePlan = document.getElementById('recharge-plan');
 const rechargeSubmit = document.getElementById('recharge-submit');
@@ -99,6 +97,53 @@ let installedModels = new Map();
 let downloadingModel = null;
 let transcriptionRunning = false;
 let sessionActive = false;
+let floatingView = false;
+let floatingAnswerOpen = false;
+const floatingToolbar = document.getElementById('floating-toolbar');
+const floatingQuestion = document.getElementById('floating-question');
+const floatingQuestionText = document.getElementById('floating-question-text');
+const floatingState = document.getElementById('floating-state');
+const floatingPause = document.getElementById('floating-pause');
+const floatingCollapse = document.getElementById('floating-collapse');
+const returnFloating = document.getElementById('return-floating');
+
+let windowModeQueue = Promise.resolve();
+
+async function setFloatingView(enabled, expanded = floatingAnswerOpen) {
+  const answerHeight = expanded ? 520 : undefined;
+  floatingView = enabled;
+  floatingAnswerOpen = expanded;
+  document.body.classList.toggle('floating-mode', enabled);
+  document.body.classList.toggle('floating-answer-open', enabled && expanded);
+  floatingToolbar.hidden = !enabled;
+  floatingQuestion.hidden = !enabled;
+  floatingCollapse.replaceChildren(createAppIcon(expanded ? 'chevron-up' : 'chevron-down'));
+  floatingCollapse.setAttribute('aria-expanded', String(expanded));
+  setView(enabled ? 'transcript' : 'home');
+  returnFloating.hidden = enabled || !sessionContext.hasSession();
+  windowModeQueue = windowModeQueue.catch(() => {}).then(() => window.overlay.setWindowMode(enabled ? (expanded ? 'answer' : 'floating') : 'dashboard', answerHeight));
+  await windowModeQueue;
+}
+function syncFloatingStatus() {
+  floatingState.textContent = transcriptStatus.textContent;
+  floatingPause.textContent = sessionActive ? 'Pause' : 'Resume';
+  floatingPause.dataset.buttonIcon = sessionActive ? 'pause' : 'play';
+  document.getElementById('floating-clock').textContent = sessionClock.textContent;
+}
+new MutationObserver(syncFloatingStatus).observe(transcriptStatus, { childList: true, characterData: true, subtree: true });
+new MutationObserver(syncFloatingStatus).observe(sessionClock, { childList: true, characterData: true, subtree: true });
+document.getElementById('floating-dashboard').addEventListener('click', () => {
+  setFloatingView(false).catch(error => setStatus(error.message, true));
+});
+returnFloating.addEventListener('click', () => {
+  setFloatingView(true).catch(error => setStatus(error.message, true));
+});
+document.getElementById('floating-end').addEventListener('click', () => document.getElementById('end-session').click());
+floatingCollapse.addEventListener('click', () => {
+  if (!transcriptFeed.querySelector('.floating-current')) return;
+  setFloatingView(true, !floatingAnswerOpen).catch(error => setStatus(error.message, true));
+});
+
 let availableUsageSeconds = 0;
 let usageClockStartedAt = 0;
 let usageClockTimer = null;
@@ -124,10 +169,10 @@ function loadAppearance() {
   try {
     const stored = JSON.parse(localStorage.getItem(APPEARANCE_KEY));
     return {
-      app: Math.max(20, Math.min(100, Number(stored?.app) || 94)),
+      app: Math.max(20, Math.min(100, Number(stored?.app) || 60)),
       text: Math.max(20, Math.min(100, Number(stored?.text) || 100))
     };
-  } catch { return { app: 94, text: 100 }; }
+  } catch { return { app: 60, text: 100 }; }
 }
 
 function applyAppearance(values = loadAppearance()) {
@@ -135,8 +180,8 @@ function applyAppearance(values = loadAppearance()) {
   textOpacity.value = String(values.text);
   appOpacityValue.textContent = `${values.app}%`;
   textOpacityValue.textContent = `${values.text}%`;
-  document.documentElement.style.setProperty('--app-opacity', String(values.app / 100));
-  document.documentElement.style.setProperty('--text-opacity', String(values.text / 100));
+  document.documentElement.style.setProperty('--floating-app-opacity', String(values.app / 100));
+  document.documentElement.style.setProperty('--floating-text-opacity', String(values.text / 100));
   localStorage.setItem(APPEARANCE_KEY, JSON.stringify(values));
 }
 
@@ -146,14 +191,14 @@ function loadTranscriptContext() {
   try {
     const value = JSON.parse(localStorage.getItem(TRANSCRIPT_CONTEXT_KEY));
     return Array.isArray(value) ? value.filter((item) => item && ['user', 'computer', 'assistant'].includes(item.speaker) && typeof item.text === 'string')
-      .slice(-40).map((item) => item.speaker === 'assistant' && item.pending
+      .filter((item, index, items) => item.answer || index >= items.length - 40).map((item) => item.speaker === 'assistant' && item.pending
         ? { ...item, text: item.text || 'Answer interrupted.', pending: false }
         : item) : [];
   } catch { return []; }
 }
 
 function saveTranscriptContext() {
-  transcriptContext = transcriptContext.slice(-40);
+  transcriptContext = transcriptContext.filter((item, index, items) => item.answer || index >= items.length - 40);
   // Retrieved snippets can contain session-only details; never persist them.
   localStorage.setItem(TRANSCRIPT_CONTEXT_KEY, JSON.stringify(transcriptContext.map(({ retrievedContext, ...turn }) => turn)));
 }
@@ -275,7 +320,9 @@ async function renderInterviewQuestionSuggestions(turn, pipelineRevision) {
 }
 
 const codeLanguages = ['Python', 'JavaScript', 'TypeScript', 'Java', 'C++', 'C', 'C#', 'Go', 'Rust', 'Swift', 'Kotlin', 'Ruby', 'PHP', 'SQL', 'Bash'];
-let preferredCodeLanguage = localStorage.getItem('preferred-code-language') || '';
+let preferredCodeLanguage = localStorage.getItem('preferred-code-language-v2') || '';
+if (!codeLanguages.includes(preferredCodeLanguage)) preferredCodeLanguage = '';
+let selectedAnswerId = null;
 
 function showAnswerLoader(element) {
   const loader = document.createElement('span');
@@ -326,7 +373,7 @@ function renderAnswerContent(element, source, onLanguageChange, pending = false)
         select.addEventListener('change', () => {
           if (!select.value) return;
           preferredCodeLanguage = select.value;
-          localStorage.setItem('preferred-code-language', select.value);
+          localStorage.setItem('preferred-code-language-v2', select.value);
           onLanguageChange(select.value);
         });
         toolbar.append(select);
@@ -345,7 +392,7 @@ function renderAnswerContent(element, source, onLanguageChange, pending = false)
         } else {
           list = null;
           if (!line.trim()) continue;
-          const heading = /^(?:#{1,6}\s+|(?:APPROACH|CODE|EXPLANATION|COMPLEXITY|EDGE CASES)$)/.test(line);
+          const heading = /^(?:#{1,6}\s+|(?:SHORT ANSWER|APPROACH|CODE|EXPLANATION|COMPLEXITY|EDGE CASES|KEY POINTS|EXAMPLE|NEXT STEP|SITUATION|TASK|ACTION|RESULT):?$)/.test(line);
           const paragraph = document.createElement(heading ? 'h4' : 'p');
           inline(paragraph, line.replace(/^#{1,6}\s+/, '')); element.append(paragraph);
         }
@@ -358,6 +405,83 @@ function renderInterviewContent(card, value, pending = false) {
   renderAnswerContent(card.querySelector('.interview-answer-text'), value, language => {
     generateInterviewAnswer({ ...card.answerRequest, model: modelSelect.value, codeLanguage: language, type: 'coding' }, card.answerLabel, card.dataset.turnId, card.answerVerbosity || 'concise');
   }, pending);
+}
+
+function compactQuestionSnippet(question) {
+  const clean = String(question || '').replace(/\s+/g, ' ').trim()
+    .replace(/^(?:(?:okay|so|well|haan)[,.:]?\s+)+/i, '')
+    .replace(/^(?:can you|could you|please)\s+/i, '');
+  const sentence = clean.split(/(?<=[?!.])\s/)[0];
+  const words = sentence.split(' ');
+  return words.slice(0, 12).join(' ') + (words.length > 12 ? '…' : '');
+}
+
+function setAnswerSnippet(card, snippet) {
+  card.answerSnippet = compactQuestionSnippet(snippet);
+  const line = card.querySelector('.interview-answer-focus-question');
+  if (line) line.textContent = card.answerSnippet;
+  if (selectedAnswerId === card.dataset.turnId) {
+    floatingQuestionText.textContent = card.answerSnippet;
+    floatingQuestionText.title = card.answerRequest.question;
+  }
+}
+
+function answerHistoryCards() {
+  return [...transcriptFeed.querySelectorAll('.interview-answer')].filter(card => card.dataset.buffered !== 'true');
+}
+
+function selectAnswerCard(card) {
+  if (!card) {
+    selectedAnswerId = null;
+    for (const item of answerHistoryCards()) item.classList.remove('floating-current');
+    updateAnswerNavigation(); return;
+  }
+  transcriptFeed.querySelector('.floating-answer-waiting')?.remove();
+  selectedAnswerId = card.dataset.turnId;
+  for (const item of answerHistoryCards()) item.classList.toggle('floating-current', item === card);
+  floatingQuestionText.textContent = card.answerSnippet || compactQuestionSnippet(card.answerRequest.question);
+  floatingQuestionText.title = card.answerRequest.question;
+  updateAnswerNavigation();
+  if (floatingView) setFloatingView(true, true).catch(error => setStatus(error.message, true));
+
+}
+
+function updateAnswerNavigation() {
+  const cards = answerHistoryCards();
+  const index = cards.findIndex(card => card.dataset.turnId === selectedAnswerId);
+  for (const card of [...cards, document.getElementById('floating-answer-navigation')].filter(Boolean)) {
+    card.querySelector('.answer-previous').disabled = index <= 0;
+    card.querySelector('.answer-next').disabled = index < 0 || index >= cards.length - 1;
+    card.querySelector('.answer-position').textContent = `${index + 1} / ${cards.length}`;
+  }
+}
+
+document.getElementById('floating-answer-navigation').querySelector('.answer-previous').addEventListener('click', () => navigateAnswer(-1));
+document.getElementById('floating-answer-navigation').querySelector('.answer-next').addEventListener('click', () => navigateAnswer(1));
+
+function navigateAnswer(offset) {
+  const cards = answerHistoryCards();
+  const index = cards.findIndex(card => card.dataset.turnId === selectedAnswerId);
+  selectAnswerCard(cards[index + offset]);
+}
+
+function showPendingQuestion(question) {
+  if (floatingView && selectedAnswerId) return;
+  selectAnswerCard(null);
+  floatingQuestionText.textContent = compactQuestionSnippet(question);
+  floatingQuestionText.title = question;
+  let waiting = transcriptFeed.querySelector('.floating-answer-waiting');
+  if (!waiting) {
+    waiting = document.createElement('div');
+    waiting.className = 'floating-answer-waiting';
+    transcriptFeed.append(waiting);
+    waiting.textContent = 'Listening…';
+  }
+  if (floatingView && !floatingAnswerOpen) setFloatingView(true, true).catch(error => setStatus(error.message, true));
+}
+
+function updateLiveQuestionSnippet(value) {
+  if (!selectedAnswerId) floatingQuestionText.textContent = compactQuestionSnippet(value);
 }
 
 function answerCardFor(turnId, question, request, label) {
@@ -391,9 +515,21 @@ function answerCardFor(turnId, question, request, label) {
   const text = document.createElement('div');
   text.className = 'interview-answer-text';
   header.append(title, expand);
-  card.append(header, focus, text);
+  const navigation = document.createElement('nav');
+  navigation.className = 'answer-navigation';
+  navigation.setAttribute('aria-label', 'Question history');
+  const previous = document.createElement('button');
+  previous.type = 'button'; previous.className = 'answer-previous'; previous.textContent = 'Previous'; previous.dataset.buttonIcon = 'chevron-left';
+  previous.addEventListener('click', () => navigateAnswer(-1));
+  const position = document.createElement('span'); position.className = 'answer-position';
+  const next = document.createElement('button');
+  next.type = 'button'; next.className = 'answer-next'; next.textContent = 'Next'; next.dataset.buttonIcon = 'chevron-right';
+  next.addEventListener('click', () => navigateAnswer(1));
+  navigation.append(previous, position, next);
+  card.append(navigation, header, focus, text);
   renderAnsweredQuestion(card, question);
   transcriptFeed.append(card);
+  updateAnswerNavigation();
   return card;
 }
 
@@ -406,7 +542,7 @@ function renderAnsweredQuestion(card, question) {
   focus.append(label);
   const line = document.createElement('div');
   line.className = 'interview-answer-focus-question';
-  line.textContent = question;
+  line.textContent = card.answerSnippet || compactQuestionSnippet(question);
   line.title = question;
   focus.append(line);
 }
@@ -419,54 +555,88 @@ function cancelUnfinishedInterviewAnswer(keepTurnId = null) {
   if (wasGenerating && unfinishedTurnId && unfinishedTurnId !== keepTurnId) {
     const card = [...transcriptFeed.querySelectorAll('.interview-answer')]
       .find((item) => item.dataset.turnId === unfinishedTurnId);
-    if (card?.querySelector('.interview-answer-text.pending')) card.remove();
+    if (card?.querySelector('.interview-answer-text.pending')) {
+      card.remove();
+      if (selectedAnswerId === unfinishedTurnId) selectAnswerCard(null);
+      updateAnswerNavigation();
+    }
   }
   activeInterviewAnswerTurnId = null;
 }
 
-function generateInterviewAnswer(request, label, turnId, verbosity = 'concise') {
+function generateInterviewAnswer(request, label, turnId, verbosity = floatingView ? 'detailed' : 'concise') {
   request = { ...request, codeLanguage: request.codeLanguage || preferredCodeLanguage };
+  automaticAnswerActive = false;
   cancelUnfinishedInterviewAnswer(turnId);
   activeInterviewAnswerTurnId = turnId;
+  const previousCard = answerHistoryCards().find(item => item.dataset.turnId === selectedAnswerId);
   const card = answerCardFor(turnId, request.question, request, label);
+  if (!floatingView) selectAnswerCard(card);
+  else if (card !== previousCard) card.dataset.buffered = 'true';
+  updateAnswerNavigation();
   card.answerVerbosity = verbosity;
   const text = card.querySelector('.interview-answer-text');
   const expand = card.querySelector('.expand-interview-answer');
-  showAnswerLoader(text);
+  if (!floatingView) showAnswerLoader(text);
   text.classList.add('pending');
   expand.hidden = true;
-  // Bring the answer into view once, then leave scrolling under user control
-  // while the response continues streaming.
-  requestAnimationFrame(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+
   let rawAnswer = '';
-  const cleanAnswer = () => rawAnswer
+  const cleanAnswer = () => {
+    let answer = rawAnswer;
+    const snippet = answer.match(/^\s*ANSWERING:\s*([^\n]*)\n/i);
+    if (snippet) {
+      setAnswerSnippet(card, snippet[1]);
+      answer = answer.slice(snippet[0].length);
+    } else if (/^\s*(?:A|AN|ANS|ANSW|ANSWE|ANSWER|ANSWERI|ANSWERIN|ANSWERING)(?::[^\n]*)?$/i.test(answer)) {
+      return '';
+    }
+    return answer
     .replace(/^\s*(question type|answer length|candidate profile|relevant references|recent dialogue|current interviewer question)\s*:\s*.*$/gim, '')
     .trimStart();
+  };
   transcriptStatus.textContent = verbosity === 'detailed' ? `Expanding answer · ${label}` : `Answering · ${label}`;
   cancelInterviewAnswer = window.overlay.generateInterviewAnswer({ ...request, verbosity }, {
     onChunk(chunk) {
       if (activeInterviewAnswerTurnId !== turnId) return;
       rawAnswer += chunk;
-      renderInterviewContent(card, cleanAnswer(), true);
+      if (!floatingView) renderInterviewContent(card, cleanAnswer(), true);
     },
     onDone() {
       if (activeInterviewAnswerTurnId !== turnId) return;
-      cancelInterviewAnswer = null;
-      text.classList.remove('pending');
-      renderInterviewContent(card, cleanAnswer());
-      expand.hidden = verbosity === 'detailed';
-      const turn = transcriptContext.find((item) => item.id === turnId);
-      if (turn) {
-        turn.answer = { text: cleanAnswer(), verbosity, label, question: request.question, codeLanguage: request.codeLanguage };
-        saveTranscriptContext();
-      }
-      transcriptStatus.textContent = `${verbosity === 'detailed' ? 'Expanded answer' : 'Answer'} ready · ${label}`;
+      automaticAnswerActive = false;
+      const answer = cleanAnswer();
+      const revealAnswer = () => {
+        if (activeInterviewAnswerTurnId !== turnId) return;
+        cancelInterviewAnswer = null;
+        text.classList.remove('pending');
+        renderInterviewContent(card, answer);
+        expand.hidden = verbosity === 'detailed';
+        const turn = transcriptContext.find((item) => item.id === turnId);
+        if (turn) {
+          turn.answer = { text: answer, verbosity, label, question: request.question, codeLanguage: request.codeLanguage, snippet: card.answerSnippet || compactQuestionSnippet(request.question) };
+          saveTranscriptContext();
+        }
+        transcriptStatus.textContent = `${verbosity === 'detailed' ? 'Expanded answer' : 'Answer'} ready · ${label}`;
+      };
+      if (floatingView) {
+        delete card.dataset.buffered;
+        selectAnswerCard(card);
+        showAnswerLoader(text);
+        const revealTimer = setTimeout(revealAnswer, 2000);
+        cancelInterviewAnswer = () => {
+          clearTimeout(revealTimer);
+          if (previousCard?.isConnected && selectedAnswerId === turnId) selectAnswerCard(previousCard);
+        };
+      } else revealAnswer();
     },
     onError(error) {
       if (activeInterviewAnswerTurnId !== turnId) return;
       cancelInterviewAnswer = null;
+      automaticAnswerActive = false;
       text.classList.remove('pending');
-      text.textContent = `Could not generate an answer: ${error}`;
+      if (floatingView && card !== previousCard) { card.remove(); updateAnswerNavigation(); }
+      else if (!floatingView) text.textContent = `Could not generate an answer: ${error}`;
       transcriptStatus.textContent = 'Answer generation failed';
     }
   });
@@ -503,6 +673,7 @@ async function answerTranscriptTurnManually(bubble, textElement, button) {
     if (!detection) {
       detection = await window.overlay.detectInterviewQuestion({
         model: modelSelect.value,
+        rulesOnly: true,
         turn: { ...turn, text: question },
         recentTurns: recentDialogueTurns().slice(-6)
       }).catch(() => ({ type: 'general' }));
@@ -518,7 +689,8 @@ async function answerTranscriptTurnManually(bubble, textElement, button) {
     turn.text = question;
     turn.retrievedContext = retrievedContext;
     saveTranscriptContext();
-    generateInterviewAnswer({ model: modelSelect.value, question, type, retrievedContext }, type.replace('_', ' '), turn.id);
+    generateInterviewAnswer({ model: modelSelect.value, question, type, retrievedContext }, type.replace('_', ' '), turn.id, 'concise');
+    lastInterviewQuestion = { turnId: turn.id, text: question, at: Date.now() };
     button.textContent = 'Answer latest question';
     button.title = 'Answer the latest interviewer question using system audio';
   } catch (error) {
@@ -589,6 +761,7 @@ function appendStoredTurn(turn) {
     const answeredQuestion = turn.answer.question || turn.text;
     const request = { model: modelSelect.value, question: answeredQuestion, codeLanguage: turn.answer.codeLanguage, type: turn.detection?.type || 'general', retrievedContext: turn.retrievedContext || {} };
     const card = answerCardFor(turn.id, answeredQuestion, request, turn.answer.label || 'general');
+    setAnswerSnippet(card, turn.answer.snippet || answeredQuestion);
     card.answerVerbosity = turn.answer.verbosity;
     renderInterviewContent(card, turn.answer.text);
     card.querySelector('.expand-interview-answer').hidden = turn.answer.verbosity === 'detailed';
@@ -604,7 +777,7 @@ function appendTypedMessage(turn) {
   if (turn.speaker === 'assistant') renderTypedAnswer(element, turn);
   else element.textContent = turn.text;
   transcriptFeed.append(element);
-  transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
+
   return element;
 }
 
@@ -612,6 +785,7 @@ function renderStoredTranscript() {
   if (!transcriptContext.length) return;
   transcriptFeed.replaceChildren();
   for (const turn of transcriptContext) appendStoredTurn(turn);
+  selectAnswerCard(answerHistoryCards().at(-1));
 }
 
 function renderSummary() {
@@ -724,7 +898,7 @@ function interviewChatMessages() {
   const dialogue = transcriptContext.filter((turn) => !turn.pending && String(turn.text || '').trim()).slice(-18);
   const messages = [{
     role: 'system',
-    content: 'You are a private interview copilot helping a candidate in a live interview. System audio is the interviewer; microphone audio is the candidate; typed messages are the candidate speaking to you, not interviewer questions. Answer the latest typed request directly. Use the recent interview conversation as context when relevant. Never invent candidate experience. Start with a direct answer, use simple words and short paragraphs, and use 3–5 bullets when useful. Add relevant examples or next steps without repetition. For coding questions give a brief approach, complete fenced code with a language tag, explain the important parts and why they work, show usage and expected output when helpful, and cover complexity and meaningful edge cases. Explain every line only if requested.'
+    content: 'You are a private interview copilot helping a candidate in a live interview. System audio is the interviewer; microphone audio is the candidate; typed messages are the candidate speaking to you, not interviewer questions. Answer the latest typed request directly. Use the recent interview conversation as context when relevant. Never invent candidate experience. For interview questions, answer as the interviewee in first person, ready to speak aloud. Do not describe the interviewer or give coaching about what to say. Start with SHORT ANSWER, giving a direct response in one or two sentences. Then use KEY POINTS and an EXAMPLE or NEXT STEP when useful. Use simple words, short paragraphs, and 3–5 bullets when useful. Add relevant examples or next steps without repetition. For coding questions start with SHORT ANSWER, then use sections APPROACH, CODE, EXPLANATION, COMPLEXITY, EDGE CASES, and EXAMPLE when useful. Give a brief approach, complete fenced code with a language tag, explain the important parts and why they work, show usage and expected output when helpful, and cover complexity and meaningful edge cases. Explain every line only if requested.'
   }];
   for (const turn of dialogue) {
     const text = String(turn.text).slice(0, 2000);
@@ -804,7 +978,7 @@ form.addEventListener('submit', (event) => {
       if (activeTypedAnswerId !== assistantTurn.id) return;
       assistantTurn.text += chunk;
       renderTypedAnswer(answerElement, assistantTurn);
-      transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
+
     },
     onDone() { finishGeneration(assistantTurn); },
     onError(error) { finishGeneration(assistantTurn, error); }
@@ -923,6 +1097,7 @@ setupForm.addEventListener('submit', async (event) => {
       const wallet = await window.overlay.stopUsage();
       updateUsageState({ active: false, ...wallet });
     }
+    await window.overlay.createRecordedSession({ company, extraContext: setupContext.value.trim(), resume: stagedResume });
     clearSessionContext();
     sessionContext.set(nextContext);
     cancelGeneration?.();
@@ -939,12 +1114,19 @@ setupForm.addEventListener('submit', async (event) => {
     promptSuggestions.replaceChildren();
     setupStatus.textContent = '';
     setView('transcript');
-    transcriptStatus.textContent = `${company} session ready · Press Start to begin`;
+    transcriptStatus.textContent = `${company} session ready`;
+    floatingQuestionText.textContent = 'Listening for the interviewer’s question…';
+    floatingAnswerOpen = false;
     setupForm.reset();
     stagedResume = null;
     renderStagedResume();
+    await startLiveTranscription();
   } catch (error) {
-    setView('setup');
+    if (sessionContext.hasSession()) {
+      setView('transcript');
+      transcriptStatus.textContent = error.message || 'Could not start listening. Try Start listening again.';
+      if (floatingView) await setFloatingView(false);
+    } else setView('setup');
     setupStatus.textContent = error.message || 'Could not create the session. Please try again.';
   } finally {
     creatingSession = false;
@@ -958,10 +1140,15 @@ setupForm.addEventListener('submit', async (event) => {
 
 function clearSessionContext() {
   sessionContext.clear();
+  returnFloating.hidden = true;
+  floatingQuestionText.textContent = 'Listening for the interviewer’s question…';
+  floatingAnswerOpen = false;
+  if (floatingView) setFloatingView(false, false).catch(error => setStatus(error.message, true));
   cancelGeneration?.();
   cancelGeneration = null;
   cancelInterviewAnswer?.();
   cancelInterviewAnswer = null;
+  activeInterviewAnswerTurnId = null;
   clearTimeout(answerStartTimer);
   answerStartTimer = null;
   interviewPipelineRevision += 1;
@@ -982,6 +1169,7 @@ endSession.addEventListener('click', async () => {
   try {
     if (transcriptionRunning) await stopLiveTranscription();
     const wallet = await window.overlay.stopUsage();
+    await window.overlay.endRecordedSession();
     clearSessionContext();
     stagedResume = null;
     setupForm.reset();
@@ -993,7 +1181,54 @@ endSession.addEventListener('click', async () => {
   finally { endSession.disabled = false; }
 });
 
+const historyView = document.getElementById('history-view');
+const showHistory = document.getElementById('show-history');
+const historyList = document.getElementById('history-list');
+const historyStatus = document.getElementById('history-status');
+const historyMore = document.getElementById('history-more');
+let historyPage = 0;
+let historyRevision = 0;
+function appendHistorySession(session) {
+  const row = document.createElement('tr'); row.className = 'history-item';
+  const cell = (value, className = '') => {
+    const element = document.createElement('td');
+    element.className = className;
+    const content = document.createElement('span');
+    content.textContent = value;
+    content.title = value;
+    element.append(content); row.append(element);
+    return content;
+  };
+  cell(session.company, 'history-company');
+  cell(new Date(session.createdAt).toLocaleString(), 'history-meta');
+  cell(session.extraContext || '—', 'history-context');
+  cell(session.resume?.name || '—', 'history-resume');
+  const seconds = Math.max(0, Math.floor(Number(session.consumedSeconds) || 0));
+  const usage = cell(`${Math.floor(seconds / 60)}m ${seconds % 60}s`, 'history-usage');
+  usage.title = `${Math.floor(seconds / 60)}m ${seconds % 60}s consumed`;
+  historyList.append(row);
+}
+async function loadSessionHistory(reset = true) {
+  const revision = ++historyRevision;
+  if (reset) { historyPage = 0; historyList.replaceChildren(); }
+  historyStatus.textContent = 'Loading session history…'; historyMore.disabled = true;
+  try {
+    const result = await window.overlay.listSessionHistory(historyPage);
+    if (revision !== historyRevision) return;
+    result.sessions.forEach(appendHistorySession);
+    historyMore.hidden = !result.hasMore; historyPage += 1;
+    historyStatus.textContent = historyList.children.length ? '' : 'No sessions yet. Create a session from Home to get started.';
+  } catch (error) { if (revision === historyRevision) historyStatus.textContent = error.message || 'Could not load session history. Try Refresh.'; }
+  finally { historyMore.disabled = false; }
+}
+showHistory.addEventListener('click', () => { setView('history'); loadSessionHistory(); });
+document.getElementById('history-refresh').addEventListener('click', () => loadSessionHistory());
+historyMore.addEventListener('click', () => loadSessionHistory(false));
+
 function setView(view) {
+  const historyOpen = view === 'history';
+  historyView.hidden = !historyOpen;
+  showHistory.classList.toggle('active', historyOpen);
   status.dataset.error = 'false';
   const homeOpen = view === 'home';
   const setupOpen = view === 'setup';
@@ -1015,23 +1250,22 @@ function setView(view) {
   form.hidden = !transcriptOpen || !sessionActive;
   promptSuggestions.hidden = !transcriptOpen;
   modelSelect.hidden = !settingsOpen;
-  newChat.hidden = settingsOpen || offersOpen || setupOpen || homeOpen;
-  sessionToggle.hidden = settingsOpen || offersOpen || setupOpen || homeOpen;
-  sessionClock.hidden = settingsOpen || offersOpen || setupOpen || homeOpen;
+  newChat.hidden = settingsOpen || offersOpen || setupOpen || homeOpen || historyOpen;
+  sessionClock.hidden = settingsOpen || offersOpen || setupOpen || homeOpen || historyOpen;
   endSession.hidden = !sessionContext.hasSession() && !sessionActive;
+  returnFloating.hidden = floatingView || !sessionContext.hasSession();
   const blockedScreen = !sessionActive && transcriptOpen;
   sessionBlocker.hidden = !blockedScreen;
   sessionBlockerMessage.textContent = 'Start your session to use live transcription and interview answers.';
   updateModelSelection();
   showNotes.classList.toggle('active', notesOpen);
   showContext.classList.toggle('active', contextOpen);
-  showTranscript.classList.toggle('active', transcriptOpen);
-  showSummary.classList.toggle('active', summaryOpen);
-  showAccount.classList.toggle('active', settingsOpen || offersOpen);
+  showAccount.classList.toggle('active', settingsOpen);
+  openOffers.classList.toggle('active', offersOpen);
   panel.classList.toggle('settings-mode', settingsOpen || offersOpen);
   panel.classList.toggle('offers-mode', offersOpen);
-  viewTitle.textContent = homeOpen ? 'Home' : setupOpen ? 'New session' : settingsOpen ? 'Settings' : offersOpen ? 'Recharge & Offers' : notesOpen ? 'Notepad' : contextOpen ? 'Global context' : summaryOpen ? 'Meeting summary' : 'Live transcription';
-  status.textContent = homeOpen ? 'Your next conversation starts here' : setupOpen ? 'Tailor your conversation copilot' : settingsOpen ? 'Appearance is saved locally' : offersOpen ? 'Manage your local account usage' : notesOpen || contextOpen ? 'Stored only on this computer' : summaryOpen ? 'Conversation saved locally' : 'On-device speech recognition and interview answers';
+  viewTitle.textContent = historyOpen ? 'Session history' : homeOpen ? 'Home' : setupOpen ? 'New session' : settingsOpen ? 'Settings' : offersOpen ? 'Recharge & Offers' : notesOpen ? 'Notepad' : contextOpen ? 'Global context' : summaryOpen ? 'Meeting summary' : 'Live transcription';
+  status.textContent = historyOpen ? 'Saved to your account' : homeOpen ? 'Your next conversation starts here' : setupOpen ? 'Tailor your conversation copilot' : settingsOpen ? 'Appearance is saved locally' : offersOpen ? 'Manage your local account usage' : notesOpen || contextOpen ? 'Stored only on this computer' : summaryOpen ? 'Conversation saved locally' : 'On-device speech recognition and interview answers';
   if (notesOpen) notepad.focus();
   if (contextOpen) contextInput.focus();
   else if (!notesOpen) renderPromptSuggestions();
@@ -1051,27 +1285,29 @@ function setSettingsTab(tab) {
   updateModelSelection();
 }
 
+function renderUsageClock() {
+  const elapsed = sessionActive ? Math.floor((Date.now() - usageClockStartedAt) / 1000) : 0;
+  const remaining = Math.max(0, availableUsageSeconds - elapsed);
+  sessionClock.textContent = formatUsage(remaining);
+  headerTimeRemaining.textContent = `${formatUsage(remaining)} left`;
+}
+
 function updateUsageState(value = {}) {
   sessionActive = Boolean(value.active);
   if (Number.isFinite(Number(value.balanceSeconds))) availableUsageSeconds = Math.max(0, Math.floor(Number(value.balanceSeconds)));
   usageClockStartedAt = sessionActive ? Date.now() : 0;
   clearInterval(usageClockTimer);
   usageClockTimer = null;
-  const renderUsageClock = () => {
-    const elapsed = sessionActive ? Math.floor((Date.now() - usageClockStartedAt) / 1000) : 0;
-    sessionClock.textContent = formatUsage(Math.max(0, availableUsageSeconds - elapsed));
-  };
   renderUsageClock();
   if (sessionActive) usageClockTimer = setInterval(renderUsageClock, 1000);
-  sessionToggle.textContent = sessionActive ? 'Pause' : 'Start';
-  sessionToggle.classList.toggle('running', sessionActive);
-  sessionToggle.classList.toggle('paused', !sessionActive);
-  sessionToggle.title = sessionActive ? 'Pause your timed session' : 'Start your timed session';
+  syncFloatingStatus();
   walletBalance.textContent = formatUsage(availableUsageSeconds);
   updateModelSelection();
-  const view = !homeView.hidden ? 'home' : !setupView.hidden ? 'setup' : !offersView.hidden ? 'offers' : !settingsView.hidden ? 'settings' : !notesView.hidden ? 'notes' : !contextView.hidden ? 'context' : !summaryView.hidden ? 'summary' : 'transcript';
+  const view = !historyView.hidden ? 'history' : !homeView.hidden ? 'home' : !setupView.hidden ? 'setup' : !offersView.hidden ? 'offers' : !settingsView.hidden ? 'settings' : !notesView.hidden ? 'notes' : !contextView.hidden ? 'context' : !summaryView.hidden ? 'summary' : 'transcript';
   setView(view);
 }
+
+document.getElementById('header-add-time').addEventListener('click', openRechargeOffers);
 
 async function openRechargeOffers() {
   setView('offers');
@@ -1086,34 +1322,33 @@ async function ensureUsageSession() {
   updateUsageState({ active: true, ...session });
 }
 
-sessionToggle.addEventListener('click', async () => {
-  sessionToggle.disabled = true;
+floatingPause.addEventListener('click', async () => {
+  floatingPause.disabled = true;
   try {
     if (sessionActive) {
       if (transcriptionRunning) await stopLiveTranscription();
       const wallet = await window.overlay.stopUsage();
       updateUsageState({ active: false, ...wallet });
     } else {
-      await ensureUsageSession();
+      if (floatingView) await startLiveTranscription();
+      else await ensureUsageSession();
     }
   } catch (error) {
     updateUsageState({ active: false });
     setStatus(error.message || 'Recharge to continue.', true);
     await openRechargeOffers();
-  } finally { sessionToggle.disabled = false; }
+  } finally { floatingPause.disabled = false; }
 });
 
-document.querySelectorAll('.open-recharge').forEach((button) => button.addEventListener('click', openRechargeOffers));
 
 showNotes.addEventListener('click', () => setView('notes'));
 showContext.addEventListener('click', () => setView('context'));
-showTranscript.addEventListener('click', () => setView('transcript'));
-showSummary.addEventListener('click', () => { renderSummary(); setView('summary'); });
 showAccount.addEventListener('click', (event) => {
   event.stopPropagation();
   const open = accountMenu.hidden;
   accountMenu.hidden = !open;
   showAccount.setAttribute('aria-expanded', String(open));
+  if (open) openSettings.focus();
 });
 accountMenu.addEventListener('click', (event) => event.stopPropagation());
 function formatUsage(seconds) {
@@ -1128,8 +1363,64 @@ async function refreshWallet() {
     const wallet = await window.overlay.getWallet();
     availableUsageSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0));
     walletBalance.textContent = formatUsage(availableUsageSeconds);
+    usageClockStartedAt = sessionActive ? Date.now() : 0;
+    renderUsageClock();
     return wallet;
-  } catch { walletBalance.textContent = 'Unavailable'; }
+  } catch { walletBalance.textContent = 'Unavailable'; headerTimeRemaining.textContent = 'Time unavailable'; }
+}
+
+let customMinutePricing = null;
+let paymentsAvailable = false;
+let rechargePacks = [];
+const customMinutes = document.getElementById('custom-minutes');
+function updateRechargeQuote() {
+  const custom = rechargePlan.value === 'custom_minutes';
+  document.getElementById('custom-minutes-fields').hidden = !customMinutePricing?.enabled;
+  document.getElementById('custom-minutes-fields').classList.toggle('selected', custom);
+  document.getElementById('select-custom-minutes').setAttribute('aria-pressed', String(custom));
+  document.getElementById('select-custom-minutes').textContent = custom ? 'Selected' : 'Choose custom';
+  customMinutes.disabled = !customMinutePricing?.enabled;
+  customMinutes.required = custom;
+  const minutes = customMinutes.valueAsNumber;
+  const valid = customMinutePricing?.enabled && Number.isSafeInteger(minutes) && minutes >= customMinutePricing.minMinutes && minutes <= customMinutePricing.maxMinutes;
+  document.getElementById('custom-minutes-total').textContent = custom && valid
+    ? `Total ₹${(minutes * customMinutePricing.amountPaisePerMinute / 100).toFixed(2)} · ₹${(customMinutePricing.amountPaisePerMinute / 100).toFixed(2)}/minute`
+    : custom ? 'Enter a whole number of minutes within the allowed range.' : '';
+  const selectedPack = rechargePacks.find(plan => plan.id === rechargePlan.value);
+  const total = custom ? (valid ? minutes * customMinutePricing.amountPaisePerMinute : null) : selectedPack?.amountPaise;
+  document.getElementById('recharge-total').textContent = total == null ? '—' : rupees(total);
+  document.querySelectorAll('.recharge-pack').forEach(card => {
+    const selected = card.dataset.planId === rechargePlan.value;
+    card.setAttribute('aria-pressed', String(selected));
+    card.querySelector('.pack-select').textContent = selected ? '✓ Selected' : 'Choose pack →';
+  });
+  rechargeSubmit.disabled = !paymentsAvailable || !rechargePlan.value || (custom && !valid);
+}
+rechargePlan.addEventListener('change', updateRechargeQuote);
+customMinutes.addEventListener('input', () => { rechargePlan.value = 'custom_minutes'; updateRechargeQuote(); });
+document.getElementById('select-custom-minutes').addEventListener('click', () => {
+  rechargePlan.value = 'custom_minutes'; updateRechargeQuote(); customMinutes.focus();
+});
+function rupees(paise) { return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(paise / 100); }
+function renderRechargePacks() {
+  const container = document.getElementById('recharge-packs');
+  container.replaceChildren();
+  const bestRate = Math.min(...rechargePacks.map(plan => plan.amountPaise / (plan.durationSeconds / 60)));
+  for (const plan of rechargePacks) {
+    const card = document.createElement('button'); card.type = 'button'; card.className = 'recharge-pack'; card.dataset.planId = plan.id;
+    const rate = plan.amountPaise / (plan.durationSeconds / 60);
+    const base = customMinutePricing?.enabled ? customMinutePricing.amountPaisePerMinute : 0;
+    const savings = base > rate ? Math.floor((1 - rate / base) * 100) : 0;
+    for (const [className, text] of [
+      ['pack-badge', rate === bestRate && rechargePacks.length > 1 ? 'Best value' : 'Minute pack'],
+      ['pack-minutes', `${(plan.durationSeconds / 60).toLocaleString('en-IN', { maximumFractionDigits: 2 })} minutes`],
+      ['pack-price', rupees(plan.amountPaise)], ['pack-rate', `${rupees(rate)} / minute`],
+      ['pack-savings', savings ? `Save ${savings}% vs custom minutes` : 'One-time purchase'], ['pack-select', 'Choose pack →']
+    ]) { const span = document.createElement('span'); span.className = className; span.textContent = text; card.append(span); }
+    card.addEventListener('click', () => { rechargePlan.value = plan.id; updateRechargeQuote(); });
+    container.append(card);
+  }
+  if (!rechargePacks.length) { const empty = document.createElement('p'); empty.textContent = 'No minute packs are available right now.'; container.append(empty); }
 }
 
 async function loadPaymentPlans() {
@@ -1138,12 +1429,26 @@ async function loadPaymentPlans() {
     rechargePlan.replaceChildren(...result.plans.map((plan) => {
       const option = document.createElement('option');
       option.value = plan.id;
-      option.textContent = `${formatUsage(plan.durationSeconds)} · ₹${(plan.amountPaise / 100).toFixed(0)}`;
+      option.textContent = `${formatUsage(plan.durationSeconds)} · ₹${(plan.amountPaise / 100).toFixed(2)} · ₹${(plan.amountPaise / 100 / (plan.durationSeconds / 60)).toFixed(2)}/min`;
       return option;
     }));
-    rechargeSubmit.disabled = !result.configured;
+    rechargePacks = result.plans;
+    customMinutePricing = result.customPricing;
+    paymentsAvailable = result.configured;
+    if (customMinutePricing?.enabled) {
+      const option = document.createElement('option'); option.value = 'custom_minutes';
+      option.textContent = `Custom minutes · ₹${(customMinutePricing.amountPaisePerMinute / 100).toFixed(2)}/min`;
+      rechargePlan.append(option);
+      customMinutes.min = customMinutePricing.minMinutes; customMinutes.max = customMinutePricing.maxMinutes;
+      customMinutes.value = customMinutePricing.minMinutes;
+      document.getElementById('custom-minute-rate').textContent = `${rupees(customMinutePricing.amountPaisePerMinute)} per minute · no pack required`;
+      document.getElementById('custom-minute-range').textContent = `Buy ${customMinutePricing.minMinutes.toLocaleString('en-IN')}–${customMinutePricing.maxMinutes.toLocaleString('en-IN')} minutes.`;
+    }
+    renderRechargePacks();
+    updateRechargeQuote();
     if (!result.configured) paymentStatus.textContent = 'Payment setup pending';
   } catch (error) {
+    paymentsAvailable = false;
     rechargeSubmit.disabled = true;
     paymentStatus.className = 'error';
     paymentStatus.textContent = error?.message === 'fetch failed'
@@ -1181,7 +1486,7 @@ rechargeForm.addEventListener('submit', async (event) => {
   paymentWaitMessage.textContent = 'Opening secure checkout…';
   try {
     paymentWaitModal.showModal();
-    const payment = await window.overlay.startRecharge(rechargePlan.value);
+    const payment = await window.overlay.startRecharge(rechargePlan.value, rechargePlan.value === 'custom_minutes' ? customMinutes.valueAsNumber : undefined);
     paymentStatus.textContent = 'Complete payment in your browser…';
     paymentWaitMessage.textContent = 'Complete your payment in the browser. Waiting for confirmation…';
     await watchPayment(payment.paymentId);
@@ -1193,7 +1498,7 @@ rechargeForm.addEventListener('submit', async (event) => {
     paymentStatus.textContent = error.message || 'Could not complete payment.';
   } finally {
     if (paymentWaitModal.open) paymentWaitModal.close();
-    rechargeSubmit.disabled = false;
+    updateRechargeQuote();
   }
 });
 
@@ -1220,12 +1525,16 @@ function applyAuthState(result) {
   loginGate.hidden = authenticated;
   if (authenticated) {
     accountName.textContent = result.user?.name || result.user?.email || 'Signed in';
+    document.getElementById('account-email').textContent = result.user?.email || 'Signed in to UNYON';
+    document.getElementById('account-avatar').textContent = accountName.textContent.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
     refreshWallet();
   }
   return authenticated;
 }
 
 async function clearLocalUserWorkspace() {
+  historyRevision += 1;
+  historyList.replaceChildren();
   clearSessionContext();
   stagedResume = null;
   setupForm.reset();
@@ -1314,6 +1623,7 @@ document.addEventListener('click', () => {
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
+    if (!accountMenu.hidden) showAccount.focus();
     accountMenu.hidden = true;
     showAccount.setAttribute('aria-expanded', 'false');
   }
@@ -1346,6 +1656,8 @@ toggleSystemAudio.addEventListener('click', () => {
 
 updateAudioSourceButtons();
 
+let audioWindowSeconds = 2;
+
 function beginAudioCapture(stream, speaker) {
   const audioTrack = stream.getAudioTracks()[0];
   if (!audioTrack) { stream.getTracks().forEach((track) => track.stop()); throw new Error(`${speaker === 'user' ? 'Microphone' : 'Computer'} audio was not shared.`); }
@@ -1363,9 +1675,9 @@ function beginAudioCapture(stream, speaker) {
     const copy = new Float32Array(input);
     chunks.push(copy);
     sampleCount += copy.length;
-    // Two-second windows with overlap preserve words that straddle
+    // Local 1.5-second windows with overlap preserve words that straddle
     // chunk boundaries; the backend's VAD removes non-speech inside them.
-    if (sampleCount < context.sampleRate * 2) return;
+    if (sampleCount < context.sampleRate * audioWindowSeconds) return;
     const merged = new Float32Array(sampleCount);
     let offset = 0;
     for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length; }
@@ -1424,7 +1736,7 @@ function renderPermissionList(container, selectedOnly) {
     const mark = document.createElement('span');
     mark.className = 'permission-mark';
     mark.setAttribute('aria-hidden', 'true');
-    mark.textContent = state === 'ready' ? '✓' : '·';
+    mark.append(createAppIcon(state === 'ready' ? 'check' : 'info'));
     const copy = document.createElement('div');
     copy.className = 'permission-copy';
     const title = document.createElement('strong');
@@ -1572,6 +1884,8 @@ async function startLiveTranscription() {
     permissionStreams.user = null;
   }
   const results = await Promise.allSettled(requested.map(([, capture]) => capture));
+  const audioSettings = await window.overlay.getCloudSettings().catch(() => null);
+  audioWindowSeconds = audioSettings?.transcription === 'groq' ? 2 : 1.5;
   transcriptionRunning = true;
   updateAudioSourceButtons();
   const errors = [];
@@ -1605,7 +1919,8 @@ async function startLiveTranscription() {
     throw error;
   }
   toggleTranscription.textContent = 'Stop listening';
-  transcriptStatus.textContent = errors.length ? `Partial capture · ${errors.join(' · ')}` : 'Loading local model…';
+  transcriptStatus.textContent = errors.length ? `Partial capture · ${errors.join(' · ')}` : 'Listening for a question…';
+  if (sessionContext.hasSession()) await setFloatingView(true);
 }
 
 async function stopLiveTranscription() {
@@ -1647,6 +1962,10 @@ function resetTranscriptHistory() {
   transcriptFeed.replaceChildren();
   lastCaption = null;
   transcriptContext = [];
+  selectedAnswerId = null;
+  latestComputerSpeechAt = 0;
+  automaticAnswerActive = false;
+  floatingQuestionText.textContent = 'Waiting for a question…';
   localStorage.removeItem(TRANSCRIPT_CONTEXT_KEY);
   renderSummary();
   renderPromptSuggestions();
@@ -1655,6 +1974,16 @@ function resetTranscriptHistory() {
   empty.textContent = transcriptionRunning ? 'Listening…' : 'Start listening for live local captions.';
   transcriptFeed.append(empty);
 }
+
+const floatingAnswerNow = document.getElementById('floating-answer-now');
+floatingAnswerNow.addEventListener('click', async () => {
+  const live = lastCaption?.speaker === 'computer' && lastCaption.text ? lastCaption : null;
+  const target = selectLatestInterviewerQuestion(transcriptContext, live?.text.textContent || '', live?.capturedAt || 0);
+  if (!target) { transcriptStatus.textContent = 'Waiting for a spoken question…'; return; }
+  const bubble = live?.bubble || { dataset: {} };
+  await answerTranscriptTurnManually(bubble, live?.text || { textContent: target.text }, floatingAnswerNow);
+  floatingAnswerNow.textContent = 'Answer now';
+});
 
 clearTranscript.addEventListener('click', resetTranscriptHistory);
 
@@ -1693,12 +2022,28 @@ function isRepeatedQuestion(previous, incoming) {
   return shorter.length >= longer.length * 0.8 && longer.includes(shorter);
 }
 
+let latestComputerSpeechAt = 0;
+let automaticAnswerActive = false;
+const INTERVIEWER_QUIET_MS = 3500;
+
 window.overlay.onTranscription((event) => {
+  if (event.type === 'computer-speech-activity') {
+    latestComputerSpeechAt = Date.now();
+    if (automaticAnswerActive) {
+      pendingComputerContinuation = { text: lastInterviewQuestion?.text || '', at: Date.now() };
+      cancelUnfinishedInterviewAnswer();
+      automaticAnswerActive = false;
+      interviewPipelineRevision += 1;
+      transcriptStatus.textContent = 'Listening · interviewer still speaking…';
+    }
+    return;
+  }
   if (event.type === 'status' || event.type === 'ready' || event.type === 'warning' || event.type === 'error') {
     transcriptStatus.textContent = event.text;
   }
   if (event.type === 'interview-turn') {
     if (event.turn.speaker === 'computer') {
+      updateLiveQuestionSnippet(event.turn.text);
       if (pendingComputerContinuation && Date.now() - pendingComputerContinuation.at < 25_000) {
         event.turn.text = mergeCaptionText(pendingComputerContinuation.text, event.turn.text);
       }
@@ -1720,6 +2065,7 @@ window.overlay.onTranscription((event) => {
       clearTimeout(answerStartTimer);
       answerStartTimer = null;
       cancelUnfinishedInterviewAnswer();
+      showPendingQuestion(turn.text);
       const pipelineRevision = ++interviewPipelineRevision;
       transcriptStatus.textContent = 'Understanding interviewer…';
       window.overlay.detectInterviewQuestion({
@@ -1741,6 +2087,14 @@ window.overlay.onTranscription((event) => {
             isRepeatedQuestion(lastInterviewQuestion.text, turn.text);
           const answerTurnId = duplicate ? lastInterviewQuestion.turnId : turn.id;
           const answerQuestion = duplicate ? mergeCaptionText(lastInterviewQuestion.text, turn.text) : turn.text;
+          const priorAnswer = transcriptContext.find(item => item.id === answerTurnId)?.answer;
+          if (duplicate && priorAnswer && isRepeatedQuestion(priorAnswer.question, answerQuestion)) {
+            const answeredCard = answerHistoryCards().find(card => card.dataset.turnId === answerTurnId);
+            if (answeredCard) selectAnswerCard(answeredCard);
+            transcriptStatus.textContent = 'Answer ready';
+            return;
+          }
+          updateLiveQuestionSnippet(answerQuestion);
           lastInterviewQuestion = { turnId: answerTurnId, text: answerQuestion, at: now };
           activeInterviewAnswerTurnId = answerTurnId;
           const suggestionTurn = transcriptContext.find((item) => item.id === answerTurnId) || turn;
@@ -1762,13 +2116,25 @@ window.overlay.onTranscription((event) => {
           // just after a spoken pause, before the local model starts writing.
           answerStartTimer = setTimeout(() => {
             if (pipelineRevision !== interviewPipelineRevision) return;
-            generateInterviewAnswer({
+            function beginWhenQuiet() {
+              if (pipelineRevision !== interviewPipelineRevision) return;
+              const remainingQuiet = INTERVIEWER_QUIET_MS - (Date.now() - latestComputerSpeechAt);
+              if (remainingQuiet > 0) {
+                transcriptStatus.textContent = 'Listening · waiting for the question to finish…';
+                answerStartTimer = setTimeout(beginWhenQuiet, remainingQuiet);
+                return;
+              }
+              answerStartTimer = null;
+              generateInterviewAnswer({
               model: modelSelect.value,
               question: answerQuestion,
               type: detection.type,
               retrievedContext
             }, label, answerTurnId);
-          }, 1000);
+              automaticAnswerActive = true;
+            }
+            beginWhenQuiet();
+          }, 200);
         } else {
           transcriptStatus.textContent = 'Listening · no question detected';
         }
@@ -1800,6 +2166,10 @@ window.overlay.onTranscription((event) => {
       transcriptStatus.textContent = 'Interviewer continuing…';
     }
   }
+  if (event.speaker === 'computer') {
+    if (!latestComputerTurnEndedAt || capturedAt > latestComputerTurnEndedAt + 250) showPendingQuestion(event.text);
+    else updateLiveQuestionSnippet(event.text);
+  }
   // Your microphone transcript remains in the local meeting record and
   // Summary view, but is intentionally not rendered in Live transcription.
   if (event.speaker === 'user') {
@@ -1807,13 +2177,16 @@ window.overlay.onTranscription((event) => {
     return;
   }
   transcriptFeed.querySelector('.transcript-empty')?.remove();
-  if (lastCaption && lastCaption.speaker === event.speaker &&
+  const startsNewQuestion = event.speaker === 'computer' && latestComputerTurnEndedAt &&
+    capturedAt > latestComputerTurnEndedAt + 250 && window.interviewQuestionContext.looksLikeInterviewerQuestion(event.text);
+  if (!startsNewQuestion && lastCaption && lastCaption.speaker === event.speaker &&
       capturedAt - lastCaption.capturedAt <= CAPTION_PAUSE_MS &&
       lastCaption.bubble.isConnected) {
     lastCaption.text.textContent = mergeCaptionText(lastCaption.text.textContent, event.text);
+    updateLiveQuestionSnippet(lastCaption.text.textContent);
     lastCaption.capturedAt = capturedAt;
     scrollCaptionToLatest(lastCaption.bubble);
-    if (event.speaker === 'computer') transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
+
     return;
   }
   const bubble = document.createElement('div');
@@ -1835,7 +2208,7 @@ window.overlay.onTranscription((event) => {
   addManualAnswerButton(bubble, text);
   lastCaption = { speaker: event.speaker, capturedAt, bubble, text };
   scrollCaptionToLatest(bubble);
-  if (event.speaker === 'computer') transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
+
 });
 window.overlay.onUsageUpdate((update) => {
   // An inactive server heartbeat means the metered session has ended.
@@ -1904,7 +2277,8 @@ function renderContextFiles() {
     const remove = document.createElement('button');
     remove.className = 'remove-file';
     remove.type = 'button';
-    remove.textContent = '×';
+    remove.append(createAppIcon('close'));
+    remove.setAttribute('aria-label', `Remove ${file.name}`);
     remove.title = `Remove ${file.name}`;
     remove.addEventListener('click', () => {
       if (index >= 0) { contextState.files.splice(index, 1); saveContextSoon(); }

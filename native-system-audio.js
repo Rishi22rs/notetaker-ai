@@ -7,7 +7,7 @@ const { app } = require('electron');
 module.exports = function createSystemAudio(onAudio) {
   let child;
   function stop() { child?.kill('SIGTERM'); child = null; }
-  function start(probe = false) {
+  function start(probe = false, windowSeconds = 2) {
     stop();
     return new Promise((resolve, reject) => {
       const executable = app.isPackaged
@@ -41,7 +41,7 @@ module.exports = function createSystemAudio(onAudio) {
       process.stdout.on('data', (bytes) => {
         if (probe || child !== process) return;
         pending = Buffer.concat([pending, bytes]);
-        const size = 16000 * 2 * 2;
+        const size = Math.round(16000 * 2 * windowSeconds);
         const overlap = Math.round(16000 * 2 * 0.5);
         while (pending.length >= size) {
           const floats = new Float32Array(size / 2);

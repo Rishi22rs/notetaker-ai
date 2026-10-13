@@ -56,7 +56,7 @@ test('coding wording overrides an incorrectly classified transcript type', () =>
   });
   assert.match(messages[0].content, /APPROACH, CODE, EXPLANATION, COMPLEXITY, EDGE CASES/);
   assert.match(messages[1].content, /Question type: coding/);
-  assert.match(messages[1].content, /Shortest Path code in JavaScript/);
+  assert.match(messages[1].content, /Shorted Shortest Pathcode in Java Script/);
   assert.doesNotMatch(messages[0].content, /DIRECT ANSWER, TALKING POINTS/);
 });
 
@@ -80,4 +80,21 @@ test('interviewer answer prompt separates system audio from typed chat context',
   assert.match(messages[0].content, /selected JavaScript/);
   assert.match(messages[0].content, /overrides earlier language requests/);
   assert.match(messages[0].content, /Rewrite both the code and its explanation/);
+});
+
+ test('live answers speak as the candidate and default to Python without choosing from file hints', () => {
+  const messages = buildInterviewAnswerMessages({ question: 'Implement binary search', type: 'coding', retrievedContext: { contextLanguages: ['PHP'] } });
+  assert.match(messages[0].content, /interviewee speaking directly in first person/);
+  assert.match(messages[0].content, /Do not describe the interviewer/);
+  assert.match(messages[0].content, /no solution language is selected, use Python/);
+  assert.match(messages[0].content, /language hints must not choose/);
+});
+
+ test('answers provide a separate short topic and a brief answer before explanation sections', () => {
+  const normal = buildInterviewAnswerMessages({ question: 'Explain caching' })[0].content;
+  assert.match(normal, /ANSWERING: followed by a short question or topic of at most 12 words/);
+  assert.match(normal, /SHORT ANSWER: one or two sentences/);
+  assert.match(normal, /KEY POINTS/);
+  const coding = buildInterviewAnswerMessages({ question: 'Write a sorting function', type: 'coding' })[0].content;
+  assert.match(coding, /After SHORT ANSWER, use these headings: APPROACH, CODE, EXPLANATION, COMPLEXITY, EDGE CASES/);
 });

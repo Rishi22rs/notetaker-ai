@@ -3,10 +3,21 @@ const { ObjectId } = require('mongodb');
 const { hashToken, randomToken } = require('../auth-crypto');
 
 const DEFAULT_PLANS = Object.freeze([
-  { id: 'seconds_600', durationSeconds: 600, amountPaise: 5000 },
-  { id: 'seconds_1800', durationSeconds: 1800, amountPaise: 15000 },
-  { id: 'seconds_3600', durationSeconds: 3600, amountPaise: 30000 }
+  { id: 'minutes_100_pack', durationSeconds: 6000, amountPaise: 49900 },
+  { id: 'minutes_300_pack', durationSeconds: 18000, amountPaise: 139900 },
+  { id: 'minutes_1000_pack', durationSeconds: 60000, amountPaise: 399900 }
 ].map((plan, index) => ({ ...plan, active: true, sortOrder: index + 1 })));
+
+const DEFAULT_CUSTOM_PRICING = Object.freeze({ enabled: true, amountPaisePerMinute: 600, minMinutes: 10, maxMinutes: 10000 });
+
+function customPlan(pricing, minutes) {
+  if (!pricing?.enabled || ![pricing.amountPaisePerMinute, pricing.minMinutes, pricing.maxMinutes, minutes].every(Number.isSafeInteger) ||
+      pricing.amountPaisePerMinute < 1 || pricing.minMinutes < 1 || pricing.maxMinutes < pricing.minMinutes ||
+      minutes < pricing.minMinutes || minutes > pricing.maxMinutes || !Number.isSafeInteger(minutes * pricing.amountPaisePerMinute) || minutes * pricing.amountPaisePerMinute > 100000000) {
+    const error = new Error('Custom minutes are unavailable or outside the allowed range.'); error.status = 400; throw error;
+  }
+  return { id: 'custom_minutes', durationSeconds: minutes * 60, amountPaise: minutes * pricing.amountPaisePerMinute };
+}
 
 function durationLabel(durationSeconds) {
   const seconds = Math.max(0, Math.floor(Number(durationSeconds) || 0));
@@ -92,6 +103,12 @@ function createPaymentService({ db, config }) {
     }
   }
 
+  async function customPricing() {
+    const value = await catalog.findOne({ _id: 'custom-minute-pricing' });
+    if (!value) return { ...DEFAULT_CUSTOM_PRICING };
+    return { enabled: value.enabled === true, amountPaisePerMinute: value.amountPaisePerMinute, minMinutes: value.minMinutes, maxMinutes: value.maxMinutes };
+  }
+
   async function plans() {
     const values = await plansCollection.find({ active: { $ne: false } }).sort({ sortOrder: 1, durationSeconds: 1, _id: 1 }).toArray();
     return values
@@ -116,13 +133,13 @@ function createPaymentService({ db, config }) {
     return body;
   }
 
-  async function createOrder(user, planId) {
+  async function createOrder(user, planId, minutes) {
     if (!configured()) {
       const error = new Error('Payments are not configured yet. Add Razorpay test keys to the backend.');
       error.status = 503;
       throw error;
     }
-    const plan = await plansCollection.findOne({ id: planId, active: { $ne: false } });
+    const plan = planId === 'custom_minutes' ? customPlan(await customPricing(), minutes) : await plansCollection.findOne({ id: planId, active: { $ne: false } });
     if (!plan || !Number.isInteger(plan.durationSeconds) || plan.durationSeconds < 1 || !Number.isInteger(plan.amountPaise) || plan.amountPaise < 1) { const error = new Error('This recharge plan is unavailable.'); error.status = 400; throw error; }
     const discount = await discounts.findOne({ userId: user._id, status: 'active' }, { sort: { createdAt: 1 } });
     const percentOff = Math.min(99, Math.max(0, Number(discount?.percentOff) || 0));
@@ -220,7 +237,7 @@ function createPaymentService({ db, config }) {
     return { balanceSeconds: Math.max(0, Number(value?.balanceSeconds) || 0) };
   }
 
-  return { configured, createOrder, ensureIndexes, plans, processWebhook, showCheckout, status, verifyCheckout, wallet };
+  return { configured, customPricing, createOrder, ensureIndexes, plans, processWebhook, showCheckout, status, verifyCheckout, wallet };
 }
 
-module.exports = { createPaymentService, DEFAULT_PLANS, secureEqual, signature };
+module.exports = { createPaymentService, DEFAULT_PLANS, DEFAULT_CUSTOM_PRICING, customPlan, secureEqual, signature };

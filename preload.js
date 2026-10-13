@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('overlay', {
   platform: process.platform,
+  setWindowMode: (mode, answerHeight) => ipcRenderer.invoke('overlay:window-mode', mode, answerHeight),
   getUserName: () => ipcRenderer.invoke('profile:name'),
   getAuthStatus: () => ipcRenderer.invoke('auth:status'),
   loginWithGoogle: () => ipcRenderer.invoke('auth:login'),
@@ -9,7 +10,7 @@ contextBridge.exposeInMainWorld('overlay', {
   logout: () => ipcRenderer.invoke('auth:logout'),
   redeemCoupon: (code) => ipcRenderer.invoke('coupon:redeem', code),
   getPaymentPlans: () => ipcRenderer.invoke('payments:plans'),
-  startRecharge: (planId) => ipcRenderer.invoke('payments:start', planId),
+  startRecharge: (planId, minutes) => ipcRenderer.invoke('payments:start', planId, minutes),
   getPaymentStatus: (id) => ipcRenderer.invoke('payments:status', id),
   getWallet: () => ipcRenderer.invoke('wallet:get'),
   startUsage: () => ipcRenderer.invoke('usage:start'),
@@ -25,6 +26,10 @@ contextBridge.exposeInMainWorld('overlay', {
   sendTranscriptionAudio: (speaker, audio) => ipcRenderer.send('transcription:audio', { speaker, audio }),
   onTranscription(callback) { ipcRenderer.on('transcription:event', (_event, value) => callback(value)); },
   onUsageUpdate(callback) { ipcRenderer.on('usage:update', (_event, value) => callback(value)); },
+  createRecordedSession: (details) => ipcRenderer.invoke('history:create', details),
+  endRecordedSession: () => ipcRenderer.invoke('history:end'),
+  listSessionHistory: (page) => ipcRenderer.invoke('history:list', page),
+  sessionHistoryDetail: (id) => ipcRenderer.invoke('history:detail', id),
   loadNotes: () => ipcRenderer.invoke('notes:load'),
   saveNotes: (content) => ipcRenderer.invoke('notes:save', content),
   loadContext: () => ipcRenderer.invoke('context:load'),

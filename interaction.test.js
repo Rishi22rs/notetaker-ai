@@ -101,7 +101,7 @@ test('only the latest computer line has an answer action below it', () => {
 test('live answer waits for continuation and cancels when interviewer resumes', () => {
   const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
   assert.match(source, /const CAPTION_PAUSE_MS = 7000/);
-  assert.match(source, /answerStartTimer = setTimeout\(\(\) => \{[\s\S]*?\}, 1000\)/);
+  assert.match(source, /answerStartTimer = setTimeout\(\(\) => \{[\s\S]*?\}, 200\)/);
   assert.match(source, /event\.speaker === 'computer' && latestComputerTurnEndedAt && capturedAt > latestComputerTurnEndedAt/);
   assert.match(source, /pendingComputerContinuation/);
 });
@@ -112,6 +112,8 @@ test('interrupted AI answer cards are removed instead of left empty', () => {
   assert.ok(functionSource);
   let removed = false;
   const result = vm.runInNewContext(`${functionSource}\ncancelUnfinishedInterviewAnswer(); activeInterviewAnswerTurnId`, {
+    selectedAnswerId: null,
+    updateAnswerNavigation() {},
     activeInterviewAnswerTurnId: 'old-question',
     cancelInterviewAnswer() {},
     transcriptFeed: { querySelectorAll: () => [{
@@ -129,7 +131,7 @@ test('typed interview questions and replies remain in the live conversation cont
   const htmlSource = fs.readFileSync(require.resolve('./index.html'), 'utf8');
   assert.doesNotMatch(htmlSource, /id="show-chat"/);
   assert.match(htmlSource, /id="show-home"/);
-  assert.match(htmlSource, /id="show-transcript"/);
+  assert.doesNotMatch(htmlSource, /id="show-transcript"/);
   assert.match(htmlSource, /<!-- Follow-up question suggestions are paused for now\./);
   assert.match(rendererSource, /appendTypedMessage\(userTurn\)/);
   assert.match(rendererSource, /appendTypedMessage\(assistantTurn\)/);
@@ -167,8 +169,8 @@ test('account menu exposes locally persisted independent appearance controls', (
   assert.doesNotMatch(headerMarkup, /id="model"/);
   assert.match(rendererSource, /modelSelect\.hidden = !settingsOpen/);
   assert.match(rendererSource, /local-ai-appearance-v1/);
-  assert.match(rendererSource, /--app-opacity/);
-  assert.match(rendererSource, /--text-opacity/);
+  assert.match(rendererSource, /--floating-app-opacity/);
+  assert.match(rendererSource, /--floating-text-opacity/);
   assert.match(htmlSource, /\.interview-questions[^}]+var\(--app-opacity\)/s);
   assert.match(htmlSource, /\.question-suggestion-group[^}]+var\(--app-opacity\)/s);
   assert.match(htmlSource, /\.interview-question-suggestion[^}]+var\(--app-opacity\)/s);
@@ -186,7 +188,7 @@ test('logout clears user workspace data before ending the session', () => {
   assert.match(rendererSource, /await clearLocalUserWorkspace\(\);\s*applyAuthState\(await window\.overlay\.logout\(\)\)/s);
 });
 
-test('account popover opens a dedicated recharge and offers screen', () => {
+test('sidebar opens a dedicated recharge and offers screen', () => {
   const rendererSource = fs.readFileSync(require.resolve('./renderer'), 'utf8');
   const htmlSource = fs.readFileSync(require.resolve('./index.html'), 'utf8');
   const serverSource = fs.readFileSync(require.resolve('./server/auth-server'), 'utf8');
@@ -220,7 +222,7 @@ test('dedicated offers screen provides server-defined recharge plans and wallet 
   assert.match(htmlSource, /id="wallet-balance"/);
   assert.match(htmlSource, /id="recharge-plan"/);
   assert.match(rendererSource, /window\.overlay\.getPaymentPlans\(\)/);
-  assert.match(rendererSource, /window\.overlay\.startRecharge\(rechargePlan\.value\)/);
+  assert.match(rendererSource, /window\.overlay\.startRecharge\(rechargePlan\.value,/);
   assert.match(rendererSource, /result\.status === 'credited'/);
 });
 
@@ -278,7 +280,85 @@ test('starting transcription checks permissions before charging session time', (
   assert.equal(select.value, 'C++');
   select.value = 'JavaScript'; select.events.change();
   assert.equal(chosen, 'JavaScript');
-  assert.equal(saved['preferred-code-language'], 'JavaScript');
+  assert.equal(saved['preferred-code-language-v2'], 'JavaScript');
   vm.runInNewContext('renderAnswerContent(root, answer, onChange, true)', context);
   assert.equal(root.children.find(item => item.tag === 'section').children[0].children[1].disabled, true);
+});
+
+ test('answer navigation follows question history and disables Next on the latest answer', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const functionSource = ['updateAnswerNavigation', 'navigateAnswer'].map(name => source.match(new RegExp(`function ${name}\\([^]*?\\n\\}`))[0]).join('\n');
+  const cards = ['one', 'two', 'three'].map(id => {
+    const controls = { '.answer-previous': {}, '.answer-next': {}, '.answer-position': {} };
+    return { dataset: { turnId: id }, controls, querySelector: selector => controls[selector] };
+  });
+  const context = { document: { getElementById: () => null }, selectedAnswerId: 'three', answerHistoryCards: () => cards, selectAnswerCard: card => { if (card) context.selectedAnswerId = card.dataset.turnId; } };
+  vm.runInNewContext(`${functionSource}\nupdateAnswerNavigation()`, context);
+  assert.equal(cards[2].controls['.answer-next'].disabled, true);
+  assert.equal(cards[2].controls['.answer-previous'].disabled, false);
+  assert.equal(cards[2].controls['.answer-position'].textContent, '3 / 3');
+  vm.runInNewContext('navigateAnswer(-1); updateAnswerNavigation()', context);
+  assert.equal(context.selectedAnswerId, 'two');
+  assert.equal(cards[1].controls['.answer-next'].disabled, false);
+  vm.runInNewContext('navigateAnswer(-1); updateAnswerNavigation()', context);
+  assert.equal(context.selectedAnswerId, 'one');
+  assert.equal(cards[0].controls['.answer-previous'].disabled, true);
+  vm.runInNewContext('navigateAnswer(1); navigateAnswer(1); updateAnswerNavigation()', context);
+  assert.equal(context.selectedAnswerId, 'three');
+  assert.equal(cards[2].controls['.answer-next'].disabled, true);
+});
+
+ test('question snippets are short and floating navigation lives outside the answer feed', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const html = fs.readFileSync(require.resolve('./index.html'), 'utf8');
+  const snippetFunction = source.match(/function compactQuestionSnippet\([\s\S]*?\n\}/)[0];
+  const snippet = vm.runInNewContext(`${snippetFunction}\ncompactQuestionSnippet(question)`, {
+    question: 'Okay, can you explain how caching works and how you would use it in a distributed system with multiple regions and failures?'
+  });
+  assert.ok(snippet.split(' ').length <= 12);
+  assert.ok(snippet.startsWith('explain how caching'));
+  assert.ok(html.indexOf('id="floating-answer-navigation"') < html.indexOf('id="transcript-feed"'));
+  assert.match(html, /floating-mode \.interview-answer > \.answer-navigation \{ display: none/);
+});
+
+ test('cancelled current answer clears selection instead of falling back to old history', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const fn = source.match(/function cancelUnfinishedInterviewAnswer\([\s\S]*?\n\}/)[0];
+  let selected = 'unchanged';
+  const context = { selectedAnswerId: 'pending', activeInterviewAnswerTurnId: 'pending', cancelInterviewAnswer() {}, updateAnswerNavigation() {}, selectAnswerCard: card => { selected = card; }, transcriptFeed: { querySelectorAll: () => [{ dataset: { turnId: 'pending' }, querySelector: () => ({}), remove() {} }] } };
+  vm.runInNewContext(`${fn}\ncancelUnfinishedInterviewAnswer()`, context);
+  assert.equal(selected, null);
+});
+ test('answer rendering uses stable window height and leaves scroll position under user control', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const html = fs.readFileSync(require.resolve('./index.html'), 'utf8');
+  const generation = source.match(/function generateInterviewAnswer\([\s\S]*?\n\}/)[0];
+  const selection = source.match(/function selectAnswerCard\([\s\S]*?\n\}/)[0];
+  assert.doesNotMatch(generation, /scrollIntoView|scrollTop/);
+  assert.doesNotMatch(selection, /scrollIntoView|scrollTop/);
+  assert.doesNotMatch(source, /transcriptFeed\.scrollTop\s*=/);
+  assert.match(source, /const answerHeight = expanded \? 520 : undefined/);
+  assert.match(html, /overflow-anchor: none/);
+});
+
+ test('automatic answers wait for quiet in system audio and stop if speech resumes', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  assert.match(source, /event.type === 'computer-speech-activity'/);
+  assert.match(source, /latestComputerSpeechAt = Date.now\(\)/);
+  assert.match(source, /const remainingQuiet = INTERVIEWER_QUIET_MS - \(Date.now\(\) - latestComputerSpeechAt\)/);
+  assert.match(source, /answerStartTimer = setTimeout\(beginWhenQuiet, remainingQuiet\)/);
+  assert.match(source, /if \(automaticAnswerActive\) \{[\s\S]*?cancelUnfinishedInterviewAnswer\(\)/);
+});
+
+ test('new speech keeps the previous floating answer visible until its replacement is ready', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const fn = source.match(/function showPendingQuestion\([\s\S]*?\n\}/)[0];
+  let cleared = false;
+  vm.runInNewContext(`${fn}\nshowPendingQuestion('What is a closure?')`, {
+    floatingView: true, selectedAnswerId: 'previous-answer', selectAnswerCard() { cleared = true; }
+  });
+  assert.equal(cleared, false);
+  const generation = source.match(/function generateInterviewAnswer\([\s\S]*?\n\}/)[0];
+  assert.match(generation, /if \(!floatingView\) renderInterviewContent\(card, cleanAnswer\(\), true\)/);
+  assert.match(generation, /setTimeout\(revealAnswer, 2000\)/);
 });

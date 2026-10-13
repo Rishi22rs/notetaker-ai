@@ -6,7 +6,7 @@ function cleanQuestionText(value) {
 function looksLikeInterviewerQuestion(value) {
   const text = cleanQuestionText(value);
   if (!text || /^(?:hi|hello|okay|ok|sure|thanks|thank you)[.!]?$/i.test(text)) return false;
-  return /\?|\b(?:what|why|how|when|where|who|which|can you|could you|would you|should we|do you|did you|tell me|explain|describe|compare|design|implement|write|show me|walk me through)\b/i.test(text);
+  return /\?|\b(?:what|why|how|when|where|who|which|can you|could you|would you|should we|do you|did you|tell me|explain|describe|compare|design|implement|write|solve|given|show me|walk me through)\b/i.test(text);
 }
 
 function summarizeQuestionParts(value) {
@@ -29,11 +29,11 @@ function selectLatestInterviewerQuestion(turns, liveText = '', liveCapturedAt = 
   const latest = computerTurns.at(-1);
   const live = cleanQuestionText(liveText);
   const confirmedIndex = confirmed ? computerTurns.indexOf(confirmed) : -1;
-  if (latest && computerTurns.length - 1 > confirmedIndex && looksLikeInterviewerQuestion(latest.text))
-    return { turn: latest, text: cleanQuestionText(latest.text) };
-  if (looksLikeInterviewerQuestion(live) && Number(liveCapturedAt) > (Number(latest?.endedAt) || Number(latest?.startedAt) || 0) + 500 &&
+  if (looksLikeInterviewerQuestion(live) && Number(liveCapturedAt) > (Number(latest?.endedAt) || Number(latest?.startedAt) || 0) + 250 &&
     cleanQuestionText(latest?.text).toLowerCase() !== live.toLowerCase())
     return { turn: null, text: live };
+  if (latest && computerTurns.length - 1 > confirmedIndex && looksLikeInterviewerQuestion(latest.text))
+    return { turn: latest, text: cleanQuestionText(latest.text) };
   if (confirmed) return { turn: confirmed, text: cleanQuestionText(confirmed.text) };
   if (looksLikeInterviewerQuestion(live)) return { turn: null, text: live };
   return null;

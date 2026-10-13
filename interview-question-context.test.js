@@ -36,3 +36,13 @@ test('multi-part interviewer questions are summarized as separate points', () =>
   assert.deepEqual(summarizeQuestionParts('1. Explain the API 2. How would you scale it?'),
     ['Explain the API', 'How would you scale it?']);
 });
+
+ test('Answer now selects newer live speech ahead of an older undetected question', () => {
+  const old = { speaker: 'computer', text: 'What is React?', endedAt: 1000 };
+  assert.deepEqual(selectLatestInterviewerQuestion([old], 'How do closures work?', 2000), { turn: null, text: 'How do closures work?' });
+});
+ test('an algorithm prompt in the latest live speech does not fall back to an old question', () => {
+  const old = { speaker: 'computer', text: 'What is React?', endedAt: 1000, detection: { isQuestion: true } };
+  const latest = 'Given an array, find two numbers that sum to the target';
+  assert.equal(selectLatestInterviewerQuestion([old], latest, 2000).text, latest);
+});

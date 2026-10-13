@@ -105,7 +105,29 @@ the future payment checkout flow.
 ## Razorpay test payments
 
 Recharge plans are defined on the backend so the desktop client cannot choose its
-own amount: 10 minutes for ₹50, 30 minutes for ₹150, and 60 minutes for ₹300.
+own amount. Default packs are 100 minutes for ₹499, 300 minutes for ₹1,399,
+and 1,000 minutes for ₹3,999. Custom purchases cost ₹6/minute (minimum 10).
+Prices are calculated again on the server when creating an order; clients never supply amounts.
+
+Backend catalog management (requires the backend MongoDB credentials):
+
+```sh
+# Apply the agreed pricing to an existing database; preserve other custom packs.
+npm run pricing:manage -- defaults
+# Change custom-minute rate to ₹6/min, minimum 10 and maximum 10,000 minutes.
+npm run pricing:manage -- set 600 10 10000
+npm run pricing:manage -- disable
+npm run pricing:manage -- show
+# Add or edit a pack: ID, duration in seconds, price in paise, optional sort order.
+npm run plan:add -- weekend_pack 12000 89900 4
+npm run plan:remove -- weekend_pack
+```
+
+Reopen Recharge & Offers to fetch catalog changes without a desktop release.
+Fresh databases receive the defaults once. Existing databases retain their catalog
+until you explicitly apply `defaults`. Removing every pack does not reseed it.
+Existing payment orders keep their original amount and purchased duration.
+
 Add Razorpay **Test Mode** credentials to `.env`:
 
 ```dotenv
@@ -228,3 +250,36 @@ Validation: `npm test` includes mocked provider tests for Hindi UTF-8 streaming,
 request cancellation, encrypted keys, speaker attribution, capture overlap,
 silence suppression, and quota errors. Live quality and latency must be evaluated
 with real keys and interview recordings; no provider calls are made by the tests.
+
+
+## Floating interview session
+
+Create a session from Home with company details, optional extra context, and a
+resume. Once audio permissions are ready, the app starts listening and switches
+to a compact floating toolbar and live interviewer question strip. Drag the
+UNYON icon or toolbar background to move it. When a question finishes, a detailed
+answer appears below it; longer answers scroll inside the panel.
+
+The home icon opens the dashboard without ending the session. Floating view
+returns to the overlay. Pause retains session context, Resume starts listening
+again, and End clears session-only details and restores the dashboard. Global
+context remains saved across sessions. The chevron collapses or expands the
+latest answer. Existing hide/show and quit shortcuts remain available.
+
+
+## Session history (MongoDB)
+
+The Session history sidebar tab lists recorded sessions newest first, with company,
+extra context, resume filename, date, and billed minutes. The compact list shows session details directly, with long text available on hover. Original PDF/DOCX binaries
+are not stored. New sessions are saved to the authenticated account in the
+`interview_sessions` collection before listening starts. Global context is not
+uploaded into session history.
+
+The updated authentication server must be restarted/deployed with its existing
+`MONGODB_URI` and `MONGODB_DB` configuration. It creates history indexes on startup.
+Authenticated `/session-history` create/list/detail/end endpoints restrict access
+to the signed-in owner. Duration is computed from linked `usage_sessions`
+`chargedSeconds`; paused time is excluded, and expired audio leases cap charges
+and mark interrupted sessions. End removes active session context while retaining
+the account history. Historical sessions created before this feature cannot be
+reconstructed because their company, context, and resume were not recorded.

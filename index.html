@@ -6,7 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
   <title>UNYON · Your conversation copilot</title>
   <style>
-    :root { color-scheme: dark; --app-opacity: .94; --text-opacity: 1; --bg: rgb(17 19 23 / var(--app-opacity)); --surface: rgb(32 35 41 / var(--app-opacity)); --chrome: rgb(24 26 31 / var(--app-opacity)); --input: rgb(21 23 27 / var(--app-opacity)); --user-surface: rgb(45 68 58 / var(--app-opacity)); --accent-bg: rgb(131 225 180 / var(--app-opacity)); --line: #353941; --text: rgb(244 245 247 / var(--text-opacity)); --muted: rgb(156 163 173 / var(--text-opacity)); --accent: rgb(131 225 180 / var(--text-opacity)); --dark-text: rgb(16 37 27 / var(--text-opacity)); --danger: rgb(255 158 158 / var(--text-opacity)); }
+    :root { color-scheme: dark; --app-opacity: 1; --text-opacity: 1; --floating-app-opacity: .6; --floating-text-opacity: 1; --bg: rgb(17 19 23 / var(--app-opacity)); --surface: rgb(32 35 41 / var(--app-opacity)); --chrome: rgb(24 26 31 / var(--app-opacity)); --input: rgb(21 23 27 / var(--app-opacity)); --user-surface: rgb(45 68 58 / var(--app-opacity)); --accent-bg: rgb(131 225 180 / var(--app-opacity)); --line: #353941; --text: rgb(244 245 247 / var(--text-opacity)); --muted: rgb(156 163 173 / var(--text-opacity)); --accent: rgb(131 225 180 / var(--text-opacity)); --dark-text: rgb(16 37 27 / var(--text-opacity)); --danger: rgb(255 158 158 / var(--text-opacity)); }
     * { box-sizing: border-box; }
     html, body { margin: 0; width: 100%; height: 100%; background: transparent; }
     body { padding: 8px; font: 14px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--text); }
@@ -53,9 +53,6 @@
     select, button { border: 1px solid var(--line); border-radius: 7px; background: var(--surface); padding: 7px 9px; }
     select { width: clamp(110px, 30%, 180px); min-width: 0; flex: 0 1 180px; }
     header > button { flex: 0 0 auto; }
-    .session-toggle { min-width: 64px; font-weight: 700; }
-    .session-toggle.paused { color: var(--dark-text); border-color: var(--accent-bg); background: var(--accent-bg); }
-    .session-toggle.running { color: #fff; border-color: #a64e4e; background: #8d3e3e; }
     .session-clock { min-width: 58px; color: var(--accent); font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 700; white-space: nowrap; }
     .workspace { position: relative; }
     .session-blocker { position: absolute; z-index: 100; inset: 64px 0 0; padding: 24px; display: grid; place-content: center; justify-items: center; gap: 8px; background: rgb(17 19 23 / calc(var(--app-opacity) + .04)); color: var(--muted); text-align: center; }
@@ -115,6 +112,7 @@
     .offers-view .coupon-row, .offers-view .recharge-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: 10px; min-width: 0; }
     .offers-view #coupon-code, .offers-view #recharge-plan { display: block; width: 100%; min-width: 0; height: 42px; padding: 9px 11px; }
     .offers-view #coupon-submit, .offers-view #recharge-submit { width: auto; min-width: 76px; height: 42px; margin: 0; padding: 0 14px; text-align: center; }
+    #custom-minutes { width: 100%; height: 42px; padding: 9px 11px; }
     .offers-view #coupon-status, .offers-view #payment-status { margin: 0; }
     .settings-view h2 { margin: 0 0 5px; font-size: 17px; }
     .settings-intro { margin: 0 0 22px; color: var(--muted); font-size: 12px; }
@@ -283,6 +281,9 @@
     .home-view, .setup-view { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 26px 30px; }
     #end-session[hidden], #composer[hidden], .home-view[hidden], .setup-view[hidden], [hidden].back-button { display: none; }
     .home-topline { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 20px; }
+    .home-topline h2 { margin: 0 0 9px; font-size: clamp(19px, 2.4vw, 27px); line-height: 1.2; font-weight: 550; letter-spacing: -.7px; }
+    .home-topline > .primary-button { flex-shrink: 0; gap: 14px; }
+    @media (max-width: 650px) { .home-topline { align-items: flex-start; }.home-topline > .primary-button { padding: 10px; font-size: 10px; gap: 6px; }.home-topline h2 { font-size: 19px; } }
     .eyebrow { font-size: 9px; letter-spacing: 1.9px; color: var(--muted); font-weight: 650; }
     .ready-badge { font-size: 10px; color: #bbc5b6; display: flex; align-items: center; gap: 7px; }
     .ready-badge i { width: 5px; height: 5px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 10px #c9ff4540; }
@@ -315,53 +316,170 @@
     @media (max-width: 850px) { .panel, .panel.settings-mode { grid-template-columns: 64px minmax(0,1fr); }.activity-bar { padding: 18px 7px 10px; }.app-identity { justify-content: center; }.app-identity > span, .nav-caption, .nav-label { display: none; }.activity { justify-content: center; padding: 0; }.account-menu { left: 74px; }.orbit-art { width: 170px; transform: scale(.85); }.orbit-center { inset: 70px 40px; }.home-view, .setup-view { padding: 20px; }.welcome-card { padding: 24px; } }
     @media (max-width: 650px) { .orbit-art { display: none; }.guide-grid { grid-template-columns: 1fr; }.guide-grid article { display: grid; grid-template-columns: 30px 1fr; column-gap: 12px; }.step-number { grid-column: 1 / -1; margin-bottom: 8px; }.guide-symbol { grid-row: 2 / 4; margin: 0; }.guide-grid p { grid-column: 2; }.section-heading > span, .ready-badge, .hero-footnote { display: none; } header { padding: 12px 16px; gap: 7px; } header #new-chat { font-size: 10px; padding: 8px; }.home-footer { align-items: start; flex-direction: column; }.hero-copy h2 { font-size: 29px; } }
     @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+
+    .floating-toolbar[hidden], .floating-question[hidden], #return-floating[hidden] { display: none; }
+    body.floating-mode { padding: 6px; }
+    .floating-mode .panel { display: block; border-radius: 12px; background: transparent; border: 0; box-shadow: none; }
+    .floating-mode .activity-bar, .floating-mode .workspace > header, .floating-mode .transcript-toolbar, .floating-mode #composer, .floating-mode #prompt-suggestions, .floating-mode .session-blocker, .floating-mode .resize-grip { display: none !important; }
+    .floating-mode .workspace { height: 100%; gap: 6px; }
+    .floating-toolbar { display: flex; align-items: center; gap: 8px; height: 44px; flex: 0 0 44px; border: 1px solid #4c5549; border-radius: 10px; padding: 6px 9px; background: var(--chrome); -webkit-app-region: drag; }
+    .floating-toolbar button { -webkit-app-region: no-drag; padding: 5px 8px; font-size: 11px; white-space: nowrap; }
+    .floating-drag { display: flex; gap: 8px; align-items: center; cursor: grab; }.floating-drag svg { width: 26px; height: 26px; }.floating-drag > span { color: var(--muted); font-size: 20px; }
+    .floating-state { flex: 1; min-width: 0; color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.floating-toolbar output { color: var(--accent); font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .floating-question { display: flex; flex-direction: column; gap: 4px; min-height: 44px; max-height: 56px; flex-shrink: 0; padding: 8px 13px; border: 1px solid #414a3e; border-radius: 9px; background: var(--bg); overflow-y: auto; }.floating-question-label { font-size: 8px; letter-spacing: 1.4px; color: var(--accent); }#floating-question-text { font-size: 12px; line-height: 1.45; }
+    .floating-mode .transcript-view { display: none; }.floating-mode.floating-answer-open .transcript-view { display: flex; flex: 1; overflow: hidden; border-radius: 10px; border: 1px solid #414a3e; background: var(--bg); }
+    .floating-mode .transcript-content { flex: 1; overflow-y: auto; padding: 0; }.floating-mode #transcript-feed { padding: 0; }.floating-mode .caption-turn, .floating-mode .transcript-empty, .floating-mode .transcript-message, .floating-mode .interview-answer { display: none; }.floating-mode .interview-answer.floating-current { display: block; border: 0; background: transparent; margin: 0; padding: 13px 16px; }.floating-mode .interview-answer-focus { display: none; }.floating-mode .interview-answer-text { font-size: 13px; line-height: 1.65; }.floating-mode .interview-answer-header { margin-bottom: 12px; }.floating-mode .interview-answer-header > span { color: var(--accent); }
+
+    body.floating-mode, .floating-preview-window {
+      --app-opacity: var(--floating-app-opacity, .6); --text-opacity: var(--floating-text-opacity, 1);
+      --bg: rgb(17 19 20 / var(--app-opacity)); --surface: rgb(28 31 30 / var(--app-opacity)); --chrome: rgb(20 22 22 / var(--app-opacity)); --input: rgb(23 26 25 / var(--app-opacity));
+      --user-surface: rgb(45 68 58 / var(--app-opacity)); --accent-bg: rgb(201 255 69 / var(--app-opacity)); --text: rgb(244 245 247 / var(--text-opacity)); --muted: rgb(150 159 151 / var(--text-opacity)); --accent: rgb(201 255 69 / var(--text-opacity)); --dark-text: rgb(27 37 11 / var(--text-opacity)); --danger: rgb(255 158 158 / var(--text-opacity));
+      color: var(--text);
+    }
+    .appearance-preview-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 24px 0 12px; }.appearance-preview-heading h3 { font-size: 13px; font-weight: 550; margin: 0; }.appearance-preview-heading > span { font-size: 10px; color: var(--muted); }
+    .appearance-preview-stage { position: relative; padding: 25px 16px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: radial-gradient(ellipse at 15% 0%, #8897b8, transparent 60%), linear-gradient(130deg, #5a7087, #9589a0 55%, #cda58b); }
+    .preview-desktop { position: absolute; inset: 18px 30px; border: 1px solid #ffffff70; border-radius: 10px; padding: 18px; background: #f8fafbc7; color: #3f4d60; font-size: 11px; }.preview-desktop span { display: block; margin-bottom: 25px; font-weight: 650; }.preview-desktop div { height: 10px; width: 80%; background: #8895a333; border-radius: 4px; margin: 14px 0; }.preview-desktop div:last-child { width: 55%; }
+    .floating-preview-window { position: relative; display: flex; flex-direction: column; gap: 6px; }
+    .floating-preview-window .floating-toolbar { -webkit-app-region: no-drag; gap: 7px; }.floating-preview-window .floating-drag { cursor: default; }.floating-preview-window svg { opacity: var(--text-opacity); }
+    .preview-chip { font-size: 10px; border: 1px solid #50584b; background: var(--surface); color: var(--text); padding: 5px 7px; border-radius: 7px; }.preview-time { color: var(--accent); font-size: 10px; white-space: nowrap; }.preview-question-text { font-size: 12px; line-height: 1.45; }
+    .preview-answer { border: 1px solid #414a3e; border-radius: 10px; background: var(--bg); padding: 14px 16px; }.preview-answer strong { font-size: 11px; color: var(--accent); }.preview-answer p { margin: 12px 0 0; font-size: 12px; line-height: 1.6; }
+    @media (max-width: 650px) { .appearance-preview-heading { align-items: start; flex-direction: column; gap: 4px; }.appearance-preview-stage { padding: 18px 8px; }.floating-preview-window .floating-drag > span, .floating-preview-window .preview-time { display: none; } }
+
+    .history-view { flex: 1; min-height: 0; overflow-y: auto; padding: 26px 30px; }.history-view[hidden], #history-more[hidden] { display: none; }
+    .history-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }.history-heading h2 { margin: 0; font-size: 25px; font-weight: 550; letter-spacing: -.6px; }.history-heading p, #history-status, #history-detail-meta { color: var(--muted); font-size: 12px; }.history-heading button { font-size: 11px; }
+    .history-table-scroll { margin: 16px 0; overflow-x: auto; border-top: 1px solid var(--line); }
+    .history-table { width: 100%; min-width: 780px; border-collapse: collapse; table-layout: fixed; font-size: 11px; text-align: left; }
+    .history-table th { padding: 11px 10px; font-size: 10px; font-weight: 550; color: var(--muted); border-bottom: 1px solid var(--line); }
+    .history-table th:nth-child(1) { width: 17%; }.history-table th:nth-child(2) { width: 22%; }.history-table th:nth-child(3) { width: 29%; }.history-table th:nth-child(4) { width: 20%; }.history-table th:nth-child(5) { width: 12%; }
+    .history-item td { padding: 13px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    .history-item td > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-item:hover { background: #ffffff03; }.history-company { font-weight: 600; color: var(--text); }.history-meta, .history-resume { color: var(--muted); }.history-usage { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+      .answer-navigation { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; }
+    .answer-navigation button { padding: 5px 9px; font-size: 11px; }
+    .answer-navigation button:disabled { opacity: .35; filter: blur(.35px); cursor: default; }
+    .answer-position { font-size: 10px; color: var(--muted); }
+    #floating-question-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .floating-question { overflow: hidden; }
+      #floating-answer-navigation { display: none; }
+    .floating-mode #floating-answer-navigation { display: flex; flex: 0 0 auto; margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--chrome); }
+    .floating-mode .interview-answer > .answer-navigation { display: none; }
+    .interview-answer > .answer-navigation { margin: 0 0 10px; position: sticky; top: 0; z-index: 1; background: var(--bg); }
+    #floating-question-text { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .floating-question { min-height: 0; max-height: none; }
+      .floating-answer-waiting { display: none; }
+    .floating-mode .floating-answer-waiting { display: block; padding: 16px; }
+    .floating-mode .transcript-view, .floating-mode .transcript-content { min-height: 0; }
+    .floating-mode .floating-question { flex: 0 0 auto; }
+    #transcript-feed { overflow-anchor: none; scroll-behavior: auto; }
+    .header-wallet { display: flex; align-items: center; gap: 9px; flex-shrink: 0; padding: 5px 6px 5px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }.header-wallet output { color: var(--accent); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }.header-wallet button { width: 27px; height: 27px; padding: 0; border-radius: 6px; font-size: 18px; background: var(--accent-bg); color: var(--dark-text); border-color: var(--accent-bg); }
+    #open-offers { gap: 8px; padding-left: 8px; padding-right: 8px; }
+    #open-offers .nav-label { font-size: 10.5px; white-space: nowrap; }
+
+    .app-icon { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; vertical-align: middle; pointer-events: none; }
+    button > .app-icon:first-child, .back-button > .app-icon, .home-footer > span > .app-icon, .setup-note > .app-icon { margin-right: 7px; }
+    .activity > .app-icon { width: 19px; height: 19px; margin: 0 !important; }
+    .activity.active .app-icon { stroke-width: 2; }.guide-symbol .app-icon { width: 26px; height: 26px; }.upload-symbol .app-icon { width: 19px; height: 19px; }
+    .floating-drag > .app-icon { width: 16px; height: 20px; color: var(--muted); stroke-width: 3; }
+    .floating-drag > svg:not(.app-icon) { width: 26px; height: 26px; }
+    .floating-toolbar button > .app-icon { width: 14px; height: 14px; }
+    #floating-dashboard > .app-icon, #floating-collapse > .app-icon, .remove-file > .app-icon { margin: 0; }
+    .floating-toolbar .floating-drag { gap: 7px; }.preview-chip > .app-icon { width: 14px; height: 14px; }
+    .primary-button > .app-icon:first-child { margin: 0; }.primary-button { gap: 9px; }.primary-button > span:last-child { margin-left: auto; }
+    .setting-heading .app-icon, .settings-tab .app-icon { color: var(--muted); }
+    .floating-preview-window .app-icon { opacity: 1; }
+    .floating-mode .floating-drag > svg:not(.app-icon) { opacity: var(--text-opacity); }
+    @media (max-width: 650px) { .floating-toolbar button[data-button-icon] > .app-icon { display: none; } }
+
+    .account-menu { width: min(288px, calc(100vw - 96px)); padding: 0; border: 1px solid #3b423b; border-radius: 14px; background: #191d19; box-shadow: 0 18px 48px #0007, 0 2px 8px #0004; overflow: auto; max-height: calc(100vh - 32px); }
+    .account-profile { display: flex; align-items: center; gap: 11px; padding: 18px 16px; background: linear-gradient(135deg,#c9ff4508,transparent); border-bottom: 1px solid var(--line); }.account-avatar { flex: 0 0 38px; height: 38px; display: grid; place-items: center; border: 1px solid #c9ff4533; border-radius: 12px; background: #c9ff4510; color: var(--accent); font-size: 13px; font-weight: 650; letter-spacing: .4px; }.account-profile-copy { min-width: 0; }
+    .account-menu .account-name { padding: 0; margin: 0; border: 0; font-size: 13px; font-weight: 550; line-height: 1.4; }.account-email { font-size: 10px; color: var(--muted); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .account-menu-group { padding: 9px 8px; }.account-menu-group + .account-menu-group { border-top: 1px solid var(--line); }.account-menu-caption { display: block; padding: 3px 10px 7px; color: var(--muted); font-size: 8px; font-weight: 550; letter-spacing: 1.6px; }
+    .account-menu button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; margin: 0; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; font-size: 12px; font-weight: 450; color: var(--text); }.account-menu button > .app-icon:first-child { margin: 0; width: 16px; height: 16px; color: var(--muted); }
+    .account-menu button:not(:disabled):hover { background: #c9ff450b; border-color: #c9ff451a; color: var(--accent); }.account-menu button:not(:disabled):hover > .app-icon { color: var(--accent); }.account-menu button:disabled { opacity: .4; }.account-menu-arrow { margin-left: auto; color: var(--muted); }.account-menu-arrow .app-icon { width: 13px; height: 13px; }
+    .account-menu .logout { border-color: transparent; color: #e69d98; }.account-menu .logout > .app-icon:first-child { color: #e69d98; }.account-menu .logout:not(:disabled):hover { border-color: #e69d9820; background: #e69d980c; color: #f5b3ae; }.account-menu-footer { padding-top: 7px; padding-bottom: 7px; }
+    #show-account[aria-expanded="true"] { color: var(--accent); background: #c9ff4510; border-color: #c9ff4520; }
+    #header-add-time { display: grid; place-items: center; }
+    #header-add-time > .app-icon { margin: 0; width: 15px; height: 15px; }
+
+    .offers-view .recharge-form { max-width: 820px; padding: 22px; gap: 20px; }
+    .recharge-heading h3, .custom-minutes-heading h3 { margin: 0 0 6px; font-size: 18px; }
+    .recharge-heading p, .custom-minutes-heading p, #custom-minute-range, .recharge-footnote { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .offers-view #recharge-plan[hidden], #custom-minutes-fields[hidden] { display: none !important; }
+    .recharge-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; }
+    .recharge-pack { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; width: 100%; margin: 0; padding: 18px; text-align: left; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); cursor: pointer; transition: border-color .15s, transform .15s, box-shadow .15s; }
+    .recharge-pack:hover { transform: translateY(-2px); border-color: var(--accent-bg); }
+    .recharge-pack[aria-pressed="true"] { border-color: var(--accent-bg); box-shadow: 0 0 0 1px var(--accent-bg); background: linear-gradient(135deg, color-mix(in srgb, var(--accent-bg) 12%, var(--surface)), var(--surface)); }
+    .pack-badge { min-height: 18px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
+    .recharge-pack[aria-pressed="true"] .pack-badge { color: var(--text); }
+    .pack-minutes { font-size: 21px; font-weight: 750; }
+    .pack-price { font-size: 29px; font-weight: 750; letter-spacing: -.04em; }
+    .pack-rate { color: var(--muted); font-size: 12px; }
+    .pack-savings { font-size: 11px; color: var(--muted); }
+    .pack-select { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); width: 100%; font-size: 12px; font-weight: 700; }
+    .custom-minutes-box { padding: 18px; border: 1px solid var(--line); border-radius: 14px; display: grid; gap: 10px; }
+    .custom-minutes-box.selected { border-color: var(--accent-bg); }
+    .custom-minutes-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    #select-custom-minutes { margin: 0; width: auto; padding: 9px 14px; }
+    #custom-minutes { max-width: 220px; border-radius: 8px; }
+    #custom-minutes-total { margin: 0; font-size: 15px; font-weight: 700; }
+    .recharge-checkout { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; padding-top: 18px; border-top: 1px solid var(--line); }
+    .recharge-checkout div { display: grid; gap: 5px; }
+    .recharge-checkout small, .recharge-checkout span { color: var(--muted); font-size: 11px; }
+    #recharge-total { font-size: 24px; }
+    .offers-view #recharge-submit { min-width: 180px; background: var(--accent-bg); color: var(--dark-text); border-radius: 9px; font-weight: 700; }
   </style>
 </head>
 <body>
   <main class="panel">
-    <nav class="activity-bar" aria-label="Views"><div class="app-identity"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#141713"/><ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/><ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/></svg><span>UNYON<small>Conversation copilot</small></span></div><div class="nav-caption">WORKSPACE</div><button class="activity active" id="show-home" type="button" title="Home" aria-label="Home"><span aria-hidden="true">⌂</span><span class="nav-label">Home</span></button>
-      <button class="activity" id="show-transcript" type="button" title="Live transcription" aria-label="Live transcription"><span aria-hidden="true">◉</span><span class="nav-label">Live session</span></button>
-      <button class="activity" id="show-notes" type="button" title="Local notepad" aria-label="Local notepad"><span aria-hidden="true">▤</span><span class="nav-label">Notepad</span></button>
-      <button class="activity" id="show-context" type="button" title="Global context" aria-label="Global context"><span aria-hidden="true">◎</span><span class="nav-label">Global context</span></button>
-      <button class="activity" id="show-summary" type="button" title="Meeting summary" aria-label="Meeting summary"><span aria-hidden="true">☷</span><span class="nav-label">Summary</span></button>
-      <button class="activity" id="show-account" type="button" title="Account and settings" aria-label="Account and settings" aria-expanded="false"><span aria-hidden="true">⚙</span><span class="nav-label">Account</span></button>
+    <nav class="activity-bar" aria-label="Views"><div class="app-identity"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#141713"/><ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/><ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/></svg><span>UNYON<small>Conversation copilot</small></span></div><div class="nav-caption">WORKSPACE</div><button class="activity active" id="show-home" type="button" title="Home" aria-label="Home"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10 12 3l9 7"/><path d="M5 9v11h5v-6h4v6h5V9"/></svg><span class="nav-label">Home</span></button>
+      <button class="activity" id="show-notes" type="button" title="Local notepad" aria-label="Local notepad"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3h12v18H6z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg><span class="nav-label">Notepad</span></button>
+      <button class="activity" id="show-context" type="button" title="Global context" aria-label="Global context"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 5h6l2 2h8v13H4z"/><path d="M8 12h8M8 16h5"/></svg><span class="nav-label">Global context</span></button>
+      <button class="activity" id="show-history" type="button" title="Session history" aria-label="Session history"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 11a9 9 0 1 1 2.6 7.4"/><path d="M3 4v7h7"/><path d="M12 7v5l3 2"/></svg><span class="nav-label">Session history</span></button>
+      <button class="activity" id="open-offers" type="button" title="Recharge &amp; Offers" aria-label="Recharge &amp; Offers"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 6h14V4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16V8H5a2 2 0 0 1-2-2"/><path d="M16 12h5v4h-5z"/></svg><span class="nav-label">Recharge &amp; Offers</span></button>
+      <button class="activity" id="show-account" type="button" title="Account and settings" aria-label="Account and settings" aria-controls="account-menu" aria-expanded="false"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg><span class="nav-label">Account</span></button>
       <section class="account-menu" id="account-menu" aria-label="Account menu" hidden>
-        <div class="account-name" id="account-name">Local User</div>
-        <button id="open-offers" type="button">Recharge &amp; Offers</button>
-        <button type="button" disabled>Privacy Policy</button>
-        <button type="button" disabled>Terms &amp; Conditions</button>
-        <button id="open-settings" type="button">Settings</button>
-        <button class="logout" id="logout" type="button">Log out</button>
+        <div class="account-profile"><div class="account-avatar" id="account-avatar" aria-hidden="true">U</div><div class="account-profile-copy"><div class="account-name" id="account-name">Local User</div><div class="account-email" id="account-email">Your UNYON workspace</div></div></div>
+        <div class="account-menu-group"><span class="account-menu-caption">WORKSPACE</span><button id="open-settings" type="button" data-button-icon="settings">Settings<span class="account-menu-arrow" aria-hidden="true"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></button></div>
+        <div class="account-menu-group"><span class="account-menu-caption">LEGAL</span><button type="button" data-button-icon="info" disabled>Privacy Policy</button><button type="button" data-button-icon="notes" disabled>Terms &amp; Conditions</button></div>
+        <div class="account-menu-group account-menu-footer"><button class="logout" id="logout" type="button" data-button-icon="logout">Log out</button></div>
       </section>
     </nav>
-    <div class="workspace">
+    <div class="workspace"><div class="floating-toolbar" id="floating-toolbar" hidden>
+        <span class="floating-drag" title="Drag to move"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#141713"/><ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/><ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/></svg><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 5h.01M16 5h.01M8 12h.01M16 12h.01M8 19h.01M16 19h.01"/></svg></span>
+        <span class="floating-state" id="floating-state">Listening…</span>
+        <button id="floating-pause" type="button" data-button-icon="pause">Pause</button><output id="floating-clock">0m 0s</output>
+        <button id="floating-dashboard" type="button" title="Open dashboard" aria-label="Open dashboard"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10 12 3l9 7"/><path d="M5 9v11h5v-6h4v6h5V9"/></svg></button><button id="floating-collapse" type="button" title="Collapse or expand answer" aria-expanded="false" aria-label="Collapse or expand answer"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg></button><button id="floating-end" type="button" title="End session" data-button-icon="stop">End</button>
+      </div><nav class="answer-navigation" id="floating-answer-navigation" aria-label="Question history"><button class="answer-previous" data-button-icon="chevron-left" type="button" disabled>Previous</button><span class="answer-position">0 / 0</span><button id="floating-answer-now" type="button" data-button-icon="sparkles">Answer now</button><button class="answer-next" data-button-icon="chevron-right" type="button" disabled>Next</button></nav><div class="floating-question" id="floating-question" hidden><span class="floating-question-label">ANSWERING</span><span id="floating-question-text">Listening for the interviewer’s question…</span></div>
       <header>
         <div class="brand"><h1 id="view-title">Live transcription</h1><span id="status">On-device speech recognition</span></div>
-        <button id="new-chat" type="button" title="Create a session with tailored context">＋ Create session</button>
-        <button id="session-toggle" class="session-toggle paused" type="button" title="Start your timed session">Start</button>
-        <button id="end-session" type="button" title="End session and delete session context" hidden>End session</button>
+        <button id="new-chat" type="button" title="Create a session with tailored context"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>Create session</button>
+        <button id="return-floating" type="button" title="Return to floating session" hidden data-button-icon="monitor">Floating view</button><button id="end-session" type="button" title="End session and delete session context" hidden data-button-icon="stop">End session</button>
         <output id="session-clock" class="session-clock" aria-label="Time remaining">0m 0s</output>
+        <div class="header-wallet"><output id="header-time-remaining" aria-label="Usage time remaining">Loading…</output><button id="header-add-time" type="button" title="Add minutes" aria-label="Add minutes — open Recharge and Offers"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg></button></div>
       </header>
 
       <section class="home-view" id="home-view">
-        <div class="home-topline"><span class="eyebrow">YOUR SPACE TO PREPARE</span><span class="ready-badge"><i></i> Ready when you are</span></div>
-        <div class="welcome-card"><div class="hero-copy"><span class="hero-icon"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#141713"/><ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/><ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/></svg></span><h2>A little preparation.<br>A lot more confidence.</h2><p>Bring your context. Stay in the conversation.<br>Let UNYON help with the rest.</p><button class="primary-button" id="home-create" type="button">＋ Create session <span>↗</span></button><span class="hero-footnote">Personalized to you, from the very first question.</span></div><div class="orbit-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit-center"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#141713"/><ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/><ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/></svg></div><span class="orbit-tag tag-one">✧ Your context</span><span class="orbit-tag tag-two">↗ Clear answers</span></div></div>
-        <div class="section-heading"><h3>Make every conversation count</h3><span>THREE SIMPLE STEPS</span></div>
-        <div class="guide-grid"><article><span class="step-number">01 / PREPARE</span><div class="guide-symbol">◎</div><h3>Make it personal</h3><p>Add the company, your resume, and anything you want UNYON to know.</p></article><article><span class="step-number">02 / CONNECT</span><div class="guide-symbol">≋</div><h3>Stay in the moment</h3><p>Start listening for a live transcript and answers grounded in your context.</p></article><article><span class="step-number">03 / REFLECT</span><div class="guide-symbol">↗</div><h3>Take the next step</h3><p>Keep useful notes and revisit the conversation in your summary.</p></article></div>
-        <div class="home-footer"><span>✧ Built around your conversation</span><button id="home-settings" type="button">Configure audio &amp; AI <span>→</span></button></div>
+        <div class="home-topline"><div><h2>Make every conversation count</h2><span class="eyebrow">THREE SIMPLE STEPS</span></div><button class="primary-button" id="home-create" type="button"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>Create session <svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 18 18 6M7 6h11v11"/></svg></button></div>
+        <div class="guide-grid"><article><span class="step-number">01 / PREPARE</span><div class="guide-symbol"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 5h6l2 2h8v13H4z"/><path d="M8 12h8M8 16h5"/></svg></div><h3>Make it personal</h3><p>Add the company, your resume, and anything you want UNYON to know.</p></article><article><span class="step-number">02 / CONNECT</span><div class="guide-symbol"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 10v4M8 6v12M12 3v18M16 7v10M20 10v4"/></svg></div><h3>Stay in the moment</h3><p>Start listening for a live transcript and answers grounded in your context.</p></article><article><span class="step-number">03 / REFLECT</span><div class="guide-symbol"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 18 18 6M7 6h11v11"/></svg></div><h3>Take the next step</h3><p>Keep useful notes and revisit the conversation in your summary.</p></article></div>
+        <div class="home-footer"><span><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/></svg>Built around your conversation</span><button id="home-settings" type="button">Configure audio &amp; AI <svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 12h16M14 6l6 6-6 6"/></svg></button></div>
       </section>
       <section class="setup-view" id="setup-view" hidden>
-        <button class="back-button" id="setup-back" type="button">← Back to home</button>
+        <button class="back-button" id="setup-back" type="button"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 12H4M10 6l-6 6 6 6"/></svg>Back to home</button>
         <div class="setup-heading"><span class="eyebrow">A GOOD CONVERSATION STARTS HERE</span><h2>Create your session</h2><p>A little context helps UNYON give you more relevant answers.</p></div>
         <form id="session-setup-form" class="session-setup-form">
           <label for="session-company">Company name <span class="required-label">Required</span></label><input id="session-company" maxlength="200" required placeholder="e.g. Google, Stripe, or your next big opportunity" autocomplete="organization">
           <label for="session-context">Extra context <span>This session only · Optional</span></label><textarea id="session-context" maxlength="20000" rows="4" placeholder="Tell us about the role, interview, job description, or what you’d like to focus on…"></textarea>
-          <label for="session-resume">Your resume <span>This session only · Optional</span></label><button class="resume-upload" id="session-resume" type="button" disabled><span class="upload-symbol">↑</span><strong id="session-resume-name">Upload your resume</strong><span>PDF, DOCX, or text document · Click to browse</span></button><button class="back-button" id="remove-resume" type="button" hidden>Remove resume</button>
-          <p class="setup-note">◎ These details are used only for this session and deleted when it ends. Your global context stays saved. Your configured AI provider may receive relevant context.</p>
-          <p id="session-setup-status" role="status" aria-live="polite"></p><button class="primary-button setup-submit" id="session-create" type="submit">Create session <span>→</span></button>
+          <label for="session-resume">Your resume <span>This session only · Optional</span></label><button class="resume-upload" id="session-resume" type="button" disabled><span class="upload-symbol"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 16V3M7 8l5-5 5 5"/><path d="M4 15v6h16v-6"/></svg></span><strong id="session-resume-name">Upload your resume</strong><span>PDF, DOCX, or text document · Click to browse</span></button><button class="back-button" id="remove-resume" type="button" hidden data-button-icon="close">Remove resume</button>
+          <p class="setup-note"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/><path d="M12 11v6M12 7h.01"/></svg>These details personalize this session and are saved to your account’s MongoDB session history, including your resume’s readable text. Ending the session clears active context; the history record remains. Your AI provider may receive relevant context.</p>
+          <p id="session-setup-status" role="status" aria-live="polite"></p><button class="primary-button setup-submit" id="session-create" type="submit">Create session <svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 12h16M14 6l6 6-6 6"/></svg></button>
         </form>
       </section>
-      <section class="session-blocker" id="session-blocker" hidden><strong>Session paused</strong><span id="session-blocker-message">Start your session to use this feature.</span><button class="open-recharge" type="button">Recharge &amp; Offers</button></section>
+      <section class="session-blocker" id="session-blocker" hidden><strong>Session paused</strong><span id="session-blocker-message">Start your session to use this feature.</span></section>
+      <section class="history-view" id="history-view" hidden>
+        <div class="history-heading"><div><h2>Session history</h2><p>Your past conversations, context, and usage in one place.</p></div><button id="history-refresh" type="button" data-button-icon="refresh">Refresh</button></div>
+        <p id="history-status" role="status" aria-live="polite"></p><div class="history-table-scroll"><table class="history-table"><thead><tr><th scope="col">Company</th><th scope="col">Date</th><th scope="col">Extra context</th><th scope="col">Resume</th><th scope="col">Consumed</th></tr></thead><tbody id="history-list"></tbody></table></div><button id="history-more" type="button" hidden data-button-icon="chevron-down">Load more sessions</button>
+      </section>
       <section class="notes-view" id="notes-view" hidden>
         <div class="notes-meta" id="notes-status">Saved locally</div>
         <textarea id="notepad" spellcheck="true" placeholder="Write your notes here…" aria-label="Local notepad"></textarea>
@@ -371,8 +489,8 @@
         <p>Instructions and reference material saved across sessions. Session-specific details are added separately and deleted when you end the session.</p>
         <textarea id="context-input" placeholder="Add background, instructions, project details, or other context…"></textarea>
         <div class="upload-row">
-          <button id="upload-context" type="button" disabled>Add multiple files</button>
-          <button id="clear-context-files" type="button">Clear files</button>
+          <button id="upload-context" type="button" disabled data-button-icon="upload">Add multiple files</button>
+          <button id="clear-context-files" type="button" data-button-icon="close">Clear files</button>
           <span id="context-save-status">Saved locally</span>
         </div>
         <p class="upload-hint">Select several files at once with Command/Shift on macOS or Ctrl/Shift on Windows. You can also add more files later.</p>
@@ -381,31 +499,42 @@
       <section class="settings-view" id="settings-view" hidden>
         <nav class="settings-nav" aria-label="Settings sections" role="tablist">
           <div class="settings-nav-title">Settings</div>
-          <button class="settings-tab" id="settings-tab-appearance" type="button" role="tab" aria-selected="true" aria-controls="settings-appearance">Appearance</button>
-          <button class="settings-tab" id="settings-tab-audio" type="button" role="tab" aria-selected="false" aria-controls="settings-audio">Audio</button>
-          <button class="settings-tab" id="settings-tab-ai" type="button" role="tab" aria-selected="false" aria-controls="settings-ai">AI &amp; Models</button>
+          <button class="settings-tab" id="settings-tab-appearance" type="button" role="tab" aria-selected="true" aria-controls="settings-appearance" data-button-icon="monitor">Appearance</button>
+          <button class="settings-tab" id="settings-tab-audio" type="button" role="tab" aria-selected="false" aria-controls="settings-audio" data-button-icon="audio">Audio</button>
+          <button class="settings-tab" id="settings-tab-ai" type="button" role="tab" aria-selected="false" aria-controls="settings-ai" data-button-icon="sparkles">AI &amp; Models</button>
         </nav>
         <div class="settings-content">
           <section id="settings-appearance" role="tabpanel" aria-labelledby="settings-tab-appearance">
             <h2>Appearance</h2>
-            <p class="settings-intro">Changes are applied immediately and saved on this computer.</p>
+            <p class="settings-intro">Adjust the floating window using the live preview below. Your dashboard and settings stay fully opaque.</p>
             <div class="setting-row">
-              <div class="setting-heading"><label for="app-opacity">App transparency</label><output class="setting-value" id="app-opacity-value">94%</output></div>
-              <p class="setting-description">Changes panels and backgrounds without fading the text.</p>
-              <input id="app-opacity" type="range" min="20" max="100" step="1" value="94">
+              <div class="setting-heading"><label for="app-opacity">Floating window transparency</label><output class="setting-value" id="app-opacity-value">60%</output></div>
+              <p class="setting-description">Changes only the floating window’s backgrounds. Lower values make them more transparent.</p>
+              <input id="app-opacity" type="range" min="20" max="100" step="1" value="60">
             </div>
             <div class="setting-row">
               <div class="setting-heading"><label for="text-opacity">Text transparency</label><output class="setting-value" id="text-opacity-value">100%</output></div>
-              <p class="setting-description">Changes text visibility independently of the app background.</p>
+              <p class="setting-description">Changes only floating-window text, independently of its background.</p>
               <input id="text-opacity" type="range" min="20" max="100" step="1" value="100">
             </div>
+            <div class="appearance-preview-heading"><h3>Floating window preview</h3><span>Sample · No audio capture</span></div>
+            <div class="appearance-preview-stage" role="img" aria-label="Sample floating window over a desktop background. Background and text transparency update as you adjust the sliders.">
+              <div class="preview-desktop" aria-hidden="true"><span>Interview preparation</span><div></div><div></div><div></div></div>
+              <div class="floating-preview-window" id="floating-preview" aria-hidden="true">
+                <div class="floating-toolbar"><span class="floating-drag"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#141713"/><ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/><ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/></svg><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 5h.01M16 5h.01M8 12h.01M16 12h.01M8 19h.01M16 19h.01"/></svg></span><span class="floating-state">Listening…</span><span class="preview-chip">Pause</span><span class="preview-time">24m 30s</span><span class="preview-chip"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10 12 3l9 7"/><path d="M5 9v11h5v-6h4v6h5V9"/></svg></span></div>
+                <div class="floating-question"><span class="floating-question-label">ANSWERING</span><span class="preview-question-text">Why would you be a good fit for this role?</span></div>
+                <div class="preview-answer"><strong>AI ANSWER</strong><p>My experience aligns with the role, and I enjoy turning complex problems into clear, reliable solutions.</p><p>I’d bring a thoughtful approach, strong collaboration, and a focus on delivering value.</p></div>
+              </div>
+            </div>
+            <p class="setting-description">This is a sample preview. Both settings are saved and applied to your floating sessions.</p>
+
           </section>
           <section id="settings-audio" role="tabpanel" aria-labelledby="settings-tab-audio" hidden>
             <h2>Audio</h2>
             <p class="settings-intro">Choose what the app listens to. Both sources are on by default.</p>
             <div class="audio-sources" aria-label="Audio sources">
-              <div class="audio-source-row"><div class="audio-source-copy"><strong>Microphone</strong><span>Your voice, with echo protection.</span></div><button class="audio-toggle" id="toggle-microphone" type="button" aria-pressed="true">On</button></div>
-              <div class="audio-source-row"><div class="audio-source-copy"><strong>System audio</strong><span>The interviewer's voice from your computer.</span></div><button class="audio-toggle" id="toggle-system-audio" type="button" aria-pressed="true">On</button></div>
+              <div class="audio-source-row"><div class="audio-source-copy"><strong>Microphone</strong><span>Your voice, with echo protection.</span></div><button class="audio-toggle" id="toggle-microphone" type="button" aria-pressed="true" data-button-icon="microphone">On</button></div>
+              <div class="audio-source-row"><div class="audio-source-copy"><strong>System audio</strong><span>The interviewer's voice from your computer.</span></div><button class="audio-toggle" id="toggle-system-audio" type="button" aria-pressed="true" data-button-icon="monitor">On</button></div>
             </div>
             <h2 class="audio-permission-heading">Permissions</h2>
             <div class="permission-checklist" id="settings-permission-list"></div>
@@ -425,7 +554,7 @@
               <label for="answer-language">Answer language</label><select id="answer-language" disabled><option value="English">English · all questions</option></select>
               <label for="cloud-segment">Transcription segments</label><select id="cloud-segment"><option value="4">4 seconds · quicker captions</option><option value="10">10 seconds · lower billing overhead</option></select>
               <p class="setting-description">Groq bills at least 10 seconds per request. Four-second segments cost more per audio minute. Stop cancels pending transcription.</p>
-              <button id="save-cloud" type="button">Save cloud settings</button><button id="clear-cloud-keys" type="button">Remove saved keys</button>
+              <button id="save-cloud" type="button" data-button-icon="save">Save cloud settings</button><button id="clear-cloud-keys" type="button" data-button-icon="close">Remove saved keys</button>
               <p id="cloud-status" role="status"></p>
             </div>
             <div class="setting-row">
@@ -434,7 +563,7 @@
               <select id="model" aria-label="Answering model"></select>
               <section class="model-download" id="model-download" hidden>
                 <div class="model-download-info"><span id="download-title"></span><span id="download-detail"></span></div>
-                <button id="download-model" type="button">Download</button>
+                <button id="download-model" type="button" data-button-icon="download">Download</button>
                 <div class="progress-track"><div id="download-progress"></div></div>
               </section>
             </div>
@@ -449,16 +578,23 @@
           <label for="coupon-code">Have a coupon?</label>
           <div class="coupon-row">
             <input id="coupon-code" type="text" maxlength="32" autocomplete="off" placeholder="CODE" aria-label="Coupon code">
-            <button id="coupon-submit" type="submit">Apply</button>
+            <button id="coupon-submit" type="submit" data-button-icon="check">Apply</button>
           </div>
           <div id="coupon-status" aria-live="polite"></div>
         </form>
         <form class="recharge-form" id="recharge-form">
-          <label for="recharge-plan">Recharge minutes</label>
-          <div class="recharge-row">
-            <select id="recharge-plan" aria-label="Recharge plan"></select>
-            <button id="recharge-submit" type="submit">Pay</button>
+          <div class="recharge-heading"><h3>More time. More possibilities.</h3><p>Choose a pack or buy exactly the minutes you need.</p></div>
+          <select id="recharge-plan" aria-label="Recharge plan" hidden></select>
+          <div id="recharge-packs" class="recharge-packs" aria-label="Minute packs"></div>
+          <div id="custom-minutes-fields" class="custom-minutes-box" hidden>
+            <div class="custom-minutes-heading"><div><h3>Just the minutes you need</h3><p id="custom-minute-rate"></p></div><button id="select-custom-minutes" type="button">Choose custom</button></div>
+            <label for="custom-minutes">Minutes to buy</label>
+            <input id="custom-minutes" type="number" min="10" step="1" value="10" required disabled>
+            <p id="custom-minute-range"></p>
+            <p id="custom-minutes-total" aria-live="polite"></p>
           </div>
+          <div class="recharge-checkout"><div><small>Total to pay</small><strong id="recharge-total">—</strong><span>Available coupons are applied at checkout.</span></div><button id="recharge-submit" type="submit" data-button-icon="wallet">Continue to payment</button></div>
+          <p class="recharge-footnote">Unused minutes stay in your wallet. Secure payment with Razorpay.</p>
           <div id="payment-status" aria-live="polite"></div>
         </form>
       </section>
@@ -468,8 +604,8 @@
       </section>
       <section class="transcript-view" id="transcript-view">
         <div class="transcript-toolbar">
-          <button id="toggle-transcription" type="button">Start listening</button>
-          <button id="clear-transcript" type="button">Clear</button>
+          <button id="toggle-transcription" type="button" data-button-icon="audio">Start listening</button>
+          <button id="clear-transcript" type="button" data-button-icon="close">Clear</button>
           <span id="transcript-status">Stopped</span>
         </div>
         <div class="transcript-content">
@@ -515,6 +651,7 @@
   <div class="resize-grip" aria-hidden="true"></div>
   <script src="interview-question-context.js"></script>
   <script src="session-context.js"></script>
+  <script src="app-icons.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>
