@@ -73,7 +73,7 @@ test('Groq keeps speakers, removes capture overlap, skips silence and leaves mix
     backend.audio('computer',speech(2)); backend.audio('computer',speech(2)); backend.audio('computer',speech(2));
     await tick(); await tick();
     assert.equal(requests.length,1); assert.equal(requests[0].body.get('language'),null);
-    assert.equal(requests[0].body.get('file').size,44 + 16000*2*5);
+    assert.equal(requests[0].body.get('file').size,44 + 16000*2*4);
     assert.equal(events.find(event=>event.type==='transcript').speaker,'computer');
   } finally {backend.stop();}
 });
@@ -94,4 +94,19 @@ test('WAV encodes clipped signed PCM samples and the expected sample rate', () =
  test('Gemini 404 identifies unavailable model access', async () => {
   const ai = createCloudAI({ getSettings: () => ({geminiKey:'key'}), fetchImpl: async () => ({ok:false,status:404}) });
   await assert.rejects(ai.complete({messages:[]}), /model is unavailable/);
+});
+
+test('cloud-only models preserve chat, suggestions and classification', async () => {
+  const { createCloudModels } = require('./cloud-models');
+  const requests = [];
+  const models = createCloudModels({ cloudAI: {
+    chat: request => { requests.push(request); return () => {}; },
+    complete: async request => request.messages[0].content.includes('autocomplete') ? JSON.stringify({ suggestions: ['What next?', 'Not a question'] }) : JSON.stringify({ isQuestion: true, type: 'technical' })
+  } });
+  assert.ok((await models.listModels()).every(model => model.cloud));
+  assert.deepEqual(await models.suggest({ draft: 'How', context: { text: '', files: [] } }), ['What next?']);
+  assert.equal((await models.classifyInterviewTurn({ turn: { text: 'What is React?' } })).isQuestion, true);
+  const cancel = models.chat({ messages: [{ role: 'user', content: 'Hello' }] });
+  assert.equal(typeof cancel, 'function');
+  assert.equal(requests.length, 1);
 });

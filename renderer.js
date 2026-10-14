@@ -20,11 +20,6 @@ const clearContextFiles = document.getElementById('clear-context-files');
 const contextFilesElement = document.getElementById('context-files');
 const contextSaveStatus = document.getElementById('context-save-status');
 const promptSuggestions = document.getElementById('prompt-suggestions');
-const modelDownload = document.getElementById('model-download');
-const downloadTitle = document.getElementById('download-title');
-const downloadDetail = document.getElementById('download-detail');
-const downloadModel = document.getElementById('download-model');
-const downloadProgress = document.getElementById('download-progress');
 const transcriptView = document.getElementById('transcript-view');
 const summaryView = document.getElementById('summary-view');
 const summaryOverviewText = document.getElementById('summary-overview-text');
@@ -94,7 +89,6 @@ let contextSaveQueue = Promise.resolve();
 let suggestionTimer = null;
 let suggestionRevision = 0;
 let installedModels = new Map();
-let downloadingModel = null;
 let transcriptionRunning = false;
 let sessionActive = false;
 let floatingView = false;
@@ -158,11 +152,7 @@ let activeInterviewAnswerTurnId = null;
 let lastInterviewQuestion = null;
 let latestComputerTurnEndedAt = 0;
 let pendingComputerContinuation = null;
-const recommendedModels = [
-  { name: 'qwen2.5-1.5b-instruct-q4_k_m', label: 'Qwen 2.5 1.5B Instruct', description: 'Balanced · Recommended', size: 1_117_320_736, vision: false },
-  { name: 'qwen2.5-0.5b-instruct-q4_k_m', label: 'Qwen 2.5 0.5B Instruct', description: 'Fastest · Basic answers', size: 491_400_032, vision: false },
-  { name: 'qwen2.5-3b-instruct-q4_k_m', label: 'Qwen 2.5 3B Instruct', description: 'Higher quality · 8 GB+ RAM', size: 2_104_932_768, vision: false }
-];
+const recommendedModels = [];
 document.body.classList.add(`platform-${window.overlay.platform}`);
 
 function loadAppearance() {
@@ -203,7 +193,8 @@ function saveTranscriptContext() {
   localStorage.setItem(TRANSCRIPT_CONTEXT_KEY, JSON.stringify(transcriptContext.map(({ retrievedContext, ...turn }) => turn)));
 }
 
-function setStatus(text, error = false) { status.textContent = text; status.dataset.error = String(error); }
+function isRateLimitNotice(value) { return /rate[ -]?limit|free-tier limit reached|HTTP 429/i.test(String(value?.message || value || '')); }
+function setStatus(text, error = false) { if (isRateLimitNotice(text)) return; status.textContent = text; status.dataset.error = String(error); }
 
 function contextLabel() {
   const context = effectiveContext();
@@ -636,7 +627,7 @@ function generateInterviewAnswer(request, label, turnId, verbosity = floatingVie
       automaticAnswerActive = false;
       text.classList.remove('pending');
       if (floatingView && card !== previousCard) { card.remove(); updateAnswerNavigation(); }
-      else if (!floatingView) text.textContent = `Could not generate an answer: ${error}`;
+      else if (!floatingView) text.textContent = isRateLimitNotice(error) ? 'Answer unavailable. You can try again.' : `Could not generate an answer: ${error}`;
       transcriptStatus.textContent = 'Answer generation failed';
     }
   });
@@ -824,7 +815,7 @@ async function refreshModels() {
     installedModels = new Map(models.map((item) => [item.name, item]));
     modelSelect.replaceChildren();
     const installedGroup = document.createElement('optgroup');
-    installedGroup.label = 'Installed';
+    installedGroup.label = 'Cloud models';
     for (const item of models) {
       const option = document.createElement('option');
       option.value = item.name;
@@ -850,17 +841,16 @@ async function refreshModels() {
     const savedModel = localStorage.getItem('local-ai-model');
     const previous = savedModel === 'cloud:gemini-2.5-flash-lite' ? 'cloud:gemini-3.5-flash-lite' : savedModel;
     if (previous && models.some((item) => item.name === previous)) modelSelect.value = previous;
-    else { const local = models.find(item => !item.cloud); if (local) modelSelect.value = local.name; }
-    if (!models.length) setStatus('Download the local model to get started');
-    else setStatus(modelSelect.value.startsWith('cloud:') ? 'Cloud AI selected · internet required' : 'Local AI ready · offline');
+    else if (models.length) modelSelect.value = models[0].name;
+    setStatus('Cloud AI selected · internet required');
     updateModelSelection();
   } catch {
     modelSelect.replaceChildren();
     const option = document.createElement('option');
-    option.textContent = 'Local AI unavailable';
+    option.textContent = 'Cloud AI unavailable';
     modelSelect.append(option);
     send.disabled = true;
-    setStatus('The bundled local AI runtime could not be loaded', true);
+    setStatus('Cloud AI settings could not be loaded', true);
   }
 }
 
@@ -871,23 +861,10 @@ function formatBytes(bytes) {
 }
 
 function updateModelSelection() {
-  const option = modelSelect.selectedOptions[0];
-  const installed = option?.dataset.installed === 'true';
-  const settingsOpen = !settingsView.hidden;
-  send.disabled = !installed || Boolean(downloadingModel) || !sessionActive;
-  if (installed) {
-    modelDownload.hidden = true;
-    localStorage.setItem('local-ai-model', modelSelect.value);
-    return;
-  }
-  if (modelSelect.value.startsWith('cloud:')) { modelDownload.hidden = true; setStatus('Add a Gemini API key in AI & Models settings', true); return; }
-  const info = recommendedModels.find((item) => item.name === modelSelect.value);
-  modelDownload.hidden = !settingsOpen;
-  downloadTitle.textContent = info?.label || modelSelect.value;
-  downloadDetail.textContent = `${info?.description ? `${info.description} · ` : ''}${formatBytes(info?.size)}${info?.vision ? ' · Supports images' : ' · Text only'}`;
-  downloadProgress.style.width = '0%';
-  downloadModel.disabled = Boolean(downloadingModel);
-  downloadModel.textContent = downloadingModel ? 'Downloading…' : 'Download';
+  const ready = modelSelect.selectedOptions[0]?.dataset.installed === 'true';
+  send.disabled = !ready || !sessionActive;
+  if (ready) localStorage.setItem('local-ai-model', modelSelect.value);
+  else setStatus('Add a Gemini API key in AI & Models settings', true);
 }
 
 function recentDialogueTurns() {
@@ -934,6 +911,7 @@ function renderTypedAnswer(element, turn) {
 }
 
 function finishGeneration(turn, error = '') {
+  if (isRateLimitNotice(error)) error = 'Answer unavailable. You can try again.';
   if (activeTypedAnswerId !== turn.id) return;
   if (error && !turn.text) turn.text = error === 'Stopped' ? 'Answer stopped.' : `Could not answer: ${error}`;
   delete turn.pending;
@@ -994,38 +972,7 @@ prompt.addEventListener('input', () => {
   renderPromptSuggestions();
 });
 modelSelect.addEventListener('change', updateModelSelection);
-downloadModel.addEventListener('click', () => {
-  if (downloadingModel) return;
-  const model = modelSelect.value;
-  downloadingModel = model;
-  downloadModel.disabled = true;
-  downloadModel.textContent = 'Downloading…';
-  send.disabled = true;
-  window.overlay.pullModel(model, {
-    onProgress(progress) {
-      const percent = progress.total ? Math.min(100, (progress.completed / progress.total) * 100) : 0;
-      downloadProgress.style.width = `${percent}%`;
-      downloadDetail.textContent = progress.total
-        ? `${Math.round(percent)}% · ${formatBytes(progress.completed)} of ${formatBytes(progress.total)}`
-        : progress.status;
-    },
-    async onDone() {
-      downloadingModel = null;
-      await refreshModels();
-      const match = [...modelSelect.options].find((option) => option.value === model || option.value === `${model}:latest`);
-      if (match) modelSelect.value = match.value;
-      updateModelSelection();
-      setStatus(`${model} downloaded and ready`);
-    },
-    onError(error) {
-      downloadingModel = null;
-      downloadModel.disabled = false;
-      downloadModel.textContent = 'Retry';
-      downloadDetail.textContent = error;
-      setStatus(error, true);
-    }
-  });
-});
+
 const homeView = document.getElementById('home-view');
 const setupView = document.getElementById('setup-view');
 const showHome = document.getElementById('show-home');
@@ -1041,7 +988,15 @@ const endSession = document.getElementById('end-session');
 let stagedResume = null;
 let creatingSession = false;
 
+function blockNewSession() {
+  if (!sessionContext.hasSession() && !sessionActive && !creatingSession) return false;
+  const modal = document.getElementById('session-already-open-modal');
+  if (!modal.open) modal.showModal();
+  return true;
+}
+document.getElementById('session-already-open-ok').addEventListener('click', () => document.getElementById('session-already-open-modal').close());
 function openSessionSetup() {
+  if (blockNewSession()) return;
   setView('setup');
   companyInput.focus();
 }
@@ -1075,9 +1030,11 @@ resumeButton.addEventListener('click', async () => {
   } catch (error) { setupStatus.textContent = error.message || 'Could not read your resume. Please try again.'; }
   finally { resumeButton.disabled = false; }
 });
+const sessionCreatingModal = document.getElementById('session-creating-modal');
+sessionCreatingModal.addEventListener('cancel', event => event.preventDefault());
 setupForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (creatingSession) return;
+  if (blockNewSession()) return;
   const company = companyInput.value.trim();
   if (!company) { setupStatus.textContent = 'Enter a company name to continue.'; companyInput.focus(); return; }
   creatingSession = true;
@@ -1086,7 +1043,8 @@ setupForm.addEventListener('submit', async (event) => {
   removeResume.disabled = true;
   companyInput.disabled = true;
   setupContext.disabled = true;
-  setupStatus.textContent = 'Preparing your session…';
+  setupStatus.textContent = 'Creating a session…';
+  sessionCreatingModal.showModal();
   const nextContext = {
     text: `Company: ${company}\n\n${setupContext.value.trim()}`.trim(),
     files: stagedResume ? [stagedResume] : []
@@ -1121,6 +1079,7 @@ setupForm.addEventListener('submit', async (event) => {
     stagedResume = null;
     renderStagedResume();
     await startLiveTranscription();
+    if (!transcriptionRunning) throw new Error(transcriptStatus.textContent || 'Could not start audio capture.');
   } catch (error) {
     if (sessionContext.hasSession()) {
       setView('transcript');
@@ -1129,6 +1088,7 @@ setupForm.addEventListener('submit', async (event) => {
     } else setView('setup');
     setupStatus.textContent = error.message || 'Could not create the session. Please try again.';
   } finally {
+    if (sessionCreatingModal.open) sessionCreatingModal.close();
     creatingSession = false;
     createSession.disabled = false;
     resumeButton.disabled = !contextLoaded;
@@ -1163,9 +1123,16 @@ function clearSessionContext() {
   saveTranscriptContext();
 }
 
-endSession.addEventListener('click', async () => {
+const endConfirmModal = document.getElementById('end-confirm-modal');
+const feedbackModal = document.getElementById('feedback-modal');
+endSession.addEventListener('click', () => { if (!creatingSession && !endConfirmModal.open) endConfirmModal.showModal(); });
+document.getElementById('end-confirm-cancel').addEventListener('click', () => endConfirmModal.close());
+document.getElementById('end-confirm-yes').addEventListener('click', async () => {
   if (creatingSession) return;
+  if (endSession.disabled) return;
   endSession.disabled = true;
+  document.getElementById('end-confirm-yes').disabled = true;
+  document.getElementById('end-confirm-status').textContent = 'Ending session…';
   try {
     if (transcriptionRunning) await stopLiveTranscription();
     const wallet = await window.overlay.stopUsage();
@@ -1176,9 +1143,15 @@ endSession.addEventListener('click', async () => {
     renderStagedResume();
     setupStatus.textContent = '';
     updateUsageState({ active: false, ...wallet });
+    await windowModeQueue;
     setView('home');
-  } catch (error) { setStatus(error.message || 'Could not end the session. Please try again.', true); }
-  finally { endSession.disabled = false; }
+    endConfirmModal.close();
+    document.getElementById('feedback-form').reset();
+    document.getElementById('feedback-status').textContent = '';
+    document.querySelectorAll('.feedback-stars label').forEach(label => label.classList.remove('chosen'));
+    feedbackModal.showModal();
+  } catch (error) { document.getElementById('end-confirm-status').textContent = error.message || 'Could not end the session. Please try again.'; }
+  finally { endSession.disabled = false; document.getElementById('end-confirm-yes').disabled = false; }
 });
 
 const historyView = document.getElementById('history-view');
@@ -1281,7 +1254,7 @@ function setView(view) {
   panel.classList.toggle('settings-mode', settingsOpen || offersOpen);
   panel.classList.toggle('offers-mode', offersOpen);
   viewTitle.textContent = historyOpen ? 'Session history' : homeOpen ? 'Home' : setupOpen ? 'New session' : settingsOpen ? 'Settings' : offersOpen ? 'Recharge & Offers' : notesOpen ? 'Notepad' : contextOpen ? 'Global context' : summaryOpen ? 'Meeting summary' : 'Live transcription';
-  status.textContent = historyOpen ? 'Saved to your account' : homeOpen ? 'Your next conversation starts here' : setupOpen ? 'Tailor your conversation copilot' : settingsOpen ? 'Appearance is saved locally' : offersOpen ? 'Manage your local account usage' : notesOpen || contextOpen ? 'Stored only on this computer' : summaryOpen ? 'Conversation saved locally' : 'On-device speech recognition and interview answers';
+  status.textContent = historyOpen ? 'Saved to your account' : homeOpen ? 'Your next conversation starts here' : setupOpen ? 'Tailor your conversation copilot' : settingsOpen ? 'Appearance is saved locally' : offersOpen ? 'Manage your local account usage' : notesOpen || contextOpen ? 'Stored only on this computer' : summaryOpen ? 'Conversation saved locally' : 'Cloud transcription and interview answers';
   if (notesOpen) notepad.focus();
   if (contextOpen) contextInput.focus();
   else if (!notesOpen) renderPromptSuggestions();
@@ -2029,7 +2002,7 @@ function resetTranscriptHistory() {
   renderPromptSuggestions();
   const empty = document.createElement('div');
   empty.className = 'transcript-empty';
-  empty.textContent = transcriptionRunning ? 'Listening…' : 'Start listening for live local captions.';
+  empty.textContent = transcriptionRunning ? 'Listening…' : 'Start listening for live captions.';
   transcriptFeed.append(empty);
 }
 
@@ -2097,6 +2070,7 @@ window.overlay.onTranscription((event) => {
     return;
   }
   if (event.type === 'status' || event.type === 'ready' || event.type === 'warning' || event.type === 'error') {
+    if (isRateLimitNotice(event.text)) return;
     transcriptStatus.textContent = event.text;
   }
   if (event.type === 'interview-turn') {
@@ -2435,7 +2409,7 @@ document.getElementById('save-cloud').addEventListener('click', async () => {
   catch (error) { cloudStatus.textContent = error.message; }
 });
 document.getElementById('clear-cloud-keys').addEventListener('click', async () => {
-  try { showCloudSettings(await window.overlay.saveCloudSettings({ groqKey: '', geminiKey: '', transcription: 'local' })); await refreshModels(); }
+  try { showCloudSettings(await window.overlay.saveCloudSettings({ groqKey: '', geminiKey: '', transcription: 'groq' })); await refreshModels(); }
   catch (error) { cloudStatus.textContent = error.message; }
 });
 
@@ -2447,4 +2421,19 @@ document.getElementById('refresh-updated-pricing').addEventListener('click', asy
     document.getElementById('pricing-updated-modal').close();
     paymentStatus.textContent = 'Prices refreshed. Review the total before paying.';
   }
+});
+
+for (const id of ['feedback-close', 'feedback-skip']) document.getElementById(id).addEventListener('click', () => feedbackModal.close());
+document.getElementById('feedback-form').addEventListener('change', () => {
+ const rating = Number(document.querySelector('input[name="rating"]:checked')?.value || 0);
+ document.querySelectorAll('.feedback-stars label').forEach((label, index) => label.classList.toggle('chosen', index < rating));
+});
+document.getElementById('feedback-form').addEventListener('submit', async event => {
+ event.preventDefault(); const button = document.getElementById('feedback-submit'); if (button.disabled) return;
+ button.disabled = true;
+ try {
+  await window.overlay.submitFeedback({ rating: Number(document.querySelector('input[name="rating"]:checked')?.value), suggestion: document.getElementById('feedback-suggestion').value.trim() });
+  feedbackModal.close();
+ } catch (error) { document.getElementById('feedback-status').textContent = error.message || 'Could not save feedback. Try again or skip.'; }
+ finally { button.disabled = false; }
 });

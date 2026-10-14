@@ -40,11 +40,11 @@ function createTranscriptionQueue({ processAudio, onError = () => {}, onLag = ()
     }
   }
 
-  function enqueue(speaker, bytes, capturedAt = Date.now()) {
+  function enqueue(speaker, bytes, capturedAt = Date.now(), speechValidated = false) {
     const raw = Buffer.from(bytes);
     if (!raw.length || raw.length % BYTES_PER_SAMPLE) return;
     const samples = new Float32Array(raw.buffer, raw.byteOffset, raw.length / BYTES_PER_SAMPLE);
-    if (!usableSpeech(samples)) return;
+    if (!speechValidated && !usableSpeech(samples)) return;
     const index = pending.findIndex(item => item.speaker === speaker);
     let combined = raw;
     if (index >= 0) {

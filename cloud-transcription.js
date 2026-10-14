@@ -1,4 +1,5 @@
-const { usableSpeech, createTranscriptionQueue } = require('./transcription-audio');
+const { createTranscriptionQueue } = require('./transcription-audio');
+const { createSpeechChunker } = require('./speech-chunker');
 const { providerError } = require('./cloud-ai');
 function wavFromBytes(bytes) {
   const raw = Buffer.from(bytes);
@@ -15,7 +16,8 @@ function wavFromBytes(bytes) {
 }
 function createCloudTranscription(publish, { getSettings, fetchImpl = fetch }) {
   let running = false, generation = 0, controller, timer, settings;
-  const buffers = new Map();
+  const chunkers = new Map();
+  const lastAudioAt = new Map();
   const previous = new Map();
   const overlapBytes = 16000 * 4 / 2;
   const queue = createTranscriptionQueue({
@@ -34,24 +36,22 @@ function createCloudTranscription(publish, { getSettings, fetchImpl = fetch }) {
         method: 'POST', headers: { Authorization: `Bearer ${settings.groqKey}` }, body: form,
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)])
       });
-      if (!response.ok) throw providerError('Groq', response.status);
+      if (!response.ok) {
+        const body = typeof response.json === 'function' ? await response.json().catch(() => ({})) : {};
+        throw typeof body.error === 'string' ? new Error(body.error) : providerError('Groq', response.status);
+      }
       const result = await response.json();
       const text = String(result.text || '').trim();
       if (running && id === generation && text) publish({ type: 'transcript', speaker, text, capturedAt });
     }
   });
-  function flush(speaker) {
-    const item = buffers.get(speaker);
-    buffers.delete(speaker);
-    if (item) queue.enqueue(speaker, item.bytes, item.capturedAt);
-  }
   function start() {
     if (running) return;
     settings = getSettings();
     if (!settings.groqKey) throw new Error('Add a Groq API key in AI & Models settings.');
     generation++; running = true; controller = new AbortController();
     timer = setInterval(() => {
-      for (const [speaker, item] of buffers) if (Date.now() - item.startedAt >= settings.segmentSeconds * 1000) flush(speaker);
+      for (const [speaker, chunker] of chunkers) if (Date.now() - lastAudioAt.get(speaker) >= 800) chunker.idle();
     }, 500);
     publish({ type: 'ready', text: `Listening · Groq ${settings.groqModel} · ${settings.language === 'auto' ? 'automatic language' : settings.language}` });
   }
@@ -63,18 +63,17 @@ function createCloudTranscription(publish, { getSettings, fetchImpl = fetch }) {
     previous.set(speaker, Buffer.from(raw));
     const overlaps = last && last.length >= overlapBytes && raw.length >= overlapBytes && last.subarray(-overlapBytes).equals(raw.subarray(0, overlapBytes));
     const newBytes = raw.subarray(overlaps ? overlapBytes : 0);
-    const samples = new Float32Array(newBytes.length / 4);
-    for (let i = 0; i < samples.length; i++) samples[i] = newBytes.readFloatLE(i * 4);
-    const now = Date.now();
-    const pending = buffers.get(speaker);
-    if (!pending && !usableSpeech(samples)) return;
-    const combined = pending ? Buffer.concat([pending.bytes, newBytes]) : Buffer.from(newBytes);
-    buffers.set(speaker, { bytes: combined, capturedAt: now, startedAt: pending?.startedAt ?? now });
-    if (combined.length >= settings.segmentSeconds * 16000 * 4) flush(speaker);
+    if (!chunkers.has(speaker)) chunkers.set(speaker, createSpeechChunker({
+      segmentSeconds: settings.segmentSeconds,
+      emit: (audio, capturedAt) => queue.enqueue(speaker, audio, capturedAt, true)
+    }));
+    lastAudioAt.set(speaker, Date.now());
+    chunkers.get(speaker).audio(newBytes);
   }
+
   function stop() {
     running = false; generation++; clearInterval(timer); controller?.abort();
-    queue.clear(); buffers.clear(); previous.clear();
+    queue.clear(); for (const chunker of chunkers.values()) chunker.clear(); chunkers.clear(); lastAudioAt.clear(); previous.clear();
     publish({ type: 'status', text: 'Stopped' });
   }
   return { start, stop, audio, dispose: stop };

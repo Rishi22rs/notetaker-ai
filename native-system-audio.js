@@ -42,7 +42,7 @@ module.exports = function createSystemAudio(onAudio) {
         if (probe || child !== process) return;
         pending = Buffer.concat([pending, bytes]);
         const size = Math.round(16000 * 2 * windowSeconds);
-        const overlap = Math.round(16000 * 2 * 0.5);
+        const overlap = windowSeconds <= 0.5 ? 0 : Math.round(16000 * 2 * 0.5);
         while (pending.length >= size) {
           const floats = new Float32Array(size / 2);
           for (let i = 0; i < floats.length; i++) floats[i] = pending.readInt16LE(i * 2) / 32768;

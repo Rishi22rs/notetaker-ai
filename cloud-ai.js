@@ -20,7 +20,10 @@ function createCloudAI({ getSettings, fetchImpl = fetch }) {
         max_tokens: json ? 512 : 4096, reasoning_effort: 'low',
         ...(json ? { response_format: { type: 'json_object' } } : {}) })
     });
-    if (!response.ok) throw providerError('Gemini', response.status);
+    if (!response.ok) {
+      const body = typeof response.json === 'function' ? await response.json().catch(() => ({})) : {};
+      throw typeof body.error === 'string' ? new Error(body.error) : providerError('Gemini', response.status);
+    }
     const result = await response.json();
     const choice = result.choices?.[0];
     if (!choice?.message?.content) throw new Error('Gemini returned no answer. Try rephrasing the question.');
@@ -39,7 +42,10 @@ function createCloudAI({ getSettings, fetchImpl = fetch }) {
         body: JSON.stringify({ model: GEMINI_MODEL, messages: messages.map(({role, content}) => ({role, content})),
           stream: true, temperature: 0.2, max_tokens: 4096, reasoning_effort: 'low' })
       });
-      if (!response.ok) throw providerError('Gemini', response.status);
+      if (!response.ok) {
+      const body = typeof response.json === 'function' ? await response.json().catch(() => ({})) : {};
+      throw typeof body.error === 'string' ? new Error(body.error) : providerError('Gemini', response.status);
+    }
       let buffer = '', received = false, finished = false;
       const decoder = new TextDecoder();
       function line(value) {
@@ -69,4 +75,4 @@ function createCloudAI({ getSettings, fetchImpl = fetch }) {
 
   return { chat, complete: ({ messages }) => request({ messages, json: true, signal: AbortSignal.timeout(30_000) }) };
 }
-module.exports = { createCloudAI, CLOUD_MODEL, providerError };
+module.exports = { createCloudAI, CLOUD_MODEL, GEMINI_MODEL, providerError };

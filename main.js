@@ -3,12 +3,11 @@ const os = require('node:os');
 const fs = require('node:fs/promises');
 const { app, BrowserWindow, globalShortcut, screen, dialog, ipcMain, desktopCapturer, shell, systemPreferences, safeStorage } = require('electron');
 const { createAuthClient } = require('./auth-client');
-const { createLocalAI } = require('./local-ai');
+const { createCloudModels } = require('./cloud-models');
 const { createCloudAI } = require('./cloud-ai');
 const { createCloudSettings } = require('./cloud-settings');
 const { createCloudTranscription } = require('./cloud-transcription');
 let cloudSettings;
-let localTranscription;
 let cloudTranscription;
 let transcriptionActive = false;
 const { buildContextMessages } = require('./context-prompt');
@@ -26,7 +25,7 @@ let floatingWindowController;
 const { createFloatingWindowController } = require('./floating-window');
 let transcription;
 let interviewSession;
-let localAI;
+let modelAI;
 let audioEchoFilter;
 let authClient;
 let usageSession;
@@ -36,7 +35,6 @@ const nativeAudio = process.platform === 'darwin' ? require('./native-system-aud
 let browseMode = false;
 const activeChats = new Map();
 const activeInterviewAnswers = new Map();
-const activePulls = new Map();
 const quitShortcut = 'CommandOrControl+Shift+Q';
 const visibilityShortcut = 'CommandOrControl+Shift+H';
 const MAX_CONTEXT_FILE_BYTES = 25 * 1024 * 1024;
@@ -218,7 +216,6 @@ async function createWindow() {
   });
 
   await win.loadFile(path.join(__dirname, 'index.html'));
-  const transcriptionBackend = process.platform === 'darwin' ? './transcription-metal' : './transcription';
   const publishTranscriptionEvent = (event) => {
     // Shutdown can emit a final transcription status after the BrowserWindow's
     // closed handler has already set `win` to null.
@@ -227,11 +224,10 @@ async function createWindow() {
   };
   audioEchoFilter = createAudioEchoFilter({ onEvent: publishTranscriptionEvent });
   const publish = (event) => audioEchoFilter.push(event);
-  localTranscription = require(transcriptionBackend)(publish);
-  cloudTranscription = createCloudTranscription(publish, { getSettings: () => cloudSettings.get() });
+  cloudTranscription = createCloudTranscription(publish, { getSettings: () => ({ ...cloudSettings.get(), geminiKey: 'backend-managed', groqKey: 'backend-managed' }), fetchImpl: (url, options) => authClient.providerFetch(url, { ...options, usageToken: usageSession?.token }) });
   transcription = {
     start() {
-      const backend = cloudSettings.get().transcription === 'groq' ? cloudTranscription : localTranscription;
+      const backend = cloudTranscription;
       transcription.current = backend;
       return backend.start();
     },
@@ -246,7 +242,7 @@ async function createWindow() {
       transcription.current?.audio(speaker, bytes);
     },
     stop() { transcription.current?.stop(); transcription.current = null; transcriptionActive = false; },
-    dispose() { localTranscription.dispose(); cloudTranscription.dispose(); }
+    dispose() { cloudTranscription.dispose(); }
   };
   interviewSession = createInterviewSession({
     onTurn: (turn) => {
@@ -259,12 +255,12 @@ async function createWindow() {
   win.show();
 }
 
-ipcMain.handle('cloud:settings', () => cloudSettings.publicSettings());
+ipcMain.handle('cloud:settings', async () => ({ ...cloudSettings.publicSettings(), ...(await authClient.aiStatus()) }));
 ipcMain.handle('cloud:save-settings', async (_event, input) => {
   if (transcriptionActive || activeChats.size || activeInterviewAnswers.size) throw new Error('Stop listening and wait for answers before changing cloud settings.');
   return cloudSettings.save(input);
 });
-ipcMain.handle('local-ai:models', () => localAI.listModels());
+ipcMain.handle('local-ai:models', () => modelAI.listModels());
 ipcMain.handle('profile:name', () => {
   try { return os.userInfo().username || 'Local User'; }
   catch { return 'Local User'; }
@@ -344,6 +340,7 @@ ipcMain.handle('history:create', async (_event, details) => {
   return record;
 });
 ipcMain.handle('history:end', endRecordedSession);
+ipcMain.handle('feedback:submit', (_event, body) => authClient.submitFeedback({ rating: body?.rating, suggestion: body?.suggestion }));
 ipcMain.handle('history:list', (_event, page) => authClient.listSessionHistory(Math.max(0, Math.floor(Number(page) || 0))));
 ipcMain.handle('history:detail', (_event, id) => authClient.sessionHistoryDetail(String(id || '')));
 ipcMain.handle('history:download-resume', async (_event, id) => {
@@ -379,7 +376,7 @@ ipcMain.handle('transcription:start', async (_event, sources) => {
   try {
     await transcription?.start();
     transcriptionActive = true;
-    if (nativeAudio && sources?.system) await nativeAudio.start(false, cloudSettings.get().transcription === 'groq' ? 2 : 1.5);
+    if (nativeAudio && sources?.system) await nativeAudio.start(false, 0.5);
   } catch (error) {
     nativeAudio?.stop(); transcription?.stop(); await stopUsageMeter(); throw error;
   }
@@ -409,7 +406,7 @@ ipcMain.handle('local-ai:suggestions', async (_event, request) => {
     })) : []
   };
   if (!model || (!draft && !transcript)) return [];
-  return localAI.suggest({ model, draft, context, transcript });
+  return modelAI.suggest({ model, draft, context, transcript });
 });
 ipcMain.handle('interview:detect-question', async (_event, request) => {
   requireActiveUsage();
@@ -426,7 +423,7 @@ ipcMain.handle('interview:detect-question', async (_event, request) => {
   return detectQuestion({
     turn,
     recentTurns,
-    classify: model && !request?.rulesOnly ? (input) => localAI.classifyInterviewTurn({ model, ...input }) : undefined
+    classify: model && !request?.rulesOnly ? (input) => modelAI.classifyInterviewTurn({ model, ...input }) : undefined
   });
 });
 ipcMain.handle('interview:retrieve-context', (_event, request) => {
@@ -493,7 +490,7 @@ ipcMain.on('interview:answer', (event, request) => {
     activeInterviewAnswers.delete(id);
     send(channel, value);
   };
-  const cancel = localAI.chat({
+  const cancel = modelAI.chat({
     model,
     messages,
     onChunk: (content) => send('interview:answer-chunk', { content }),
@@ -505,20 +502,6 @@ ipcMain.on('interview:answer', (event, request) => {
 ipcMain.on('interview:cancel-answer', (_event, id) => {
   activeInterviewAnswers.get(id)?.();
   activeInterviewAnswers.delete(id);
-});
-ipcMain.on('local-ai:download', (event, request) => {
-  const id = String(request?.id || '');
-  const model = String(request?.model || '');
-  if (!id || !/^[a-zA-Z0-9._/-]+(?::[a-zA-Z0-9._-]+)?$/.test(model)) return;
-  activePulls.get(id)?.();
-  const send = (channel, value = {}) => { if (!event.sender.isDestroyed()) event.sender.send(channel, { id, ...value }); };
-  const cancel = localAI.pullModel({
-    model,
-    onProgress: (progress) => send('local-ai:download-progress', progress),
-    onDone: () => { activePulls.delete(id); send('local-ai:download-done'); },
-    onError: (error) => { activePulls.delete(id); send('local-ai:download-error', { message: error.message }); }
-  });
-  activePulls.set(id, cancel);
 });
 ipcMain.handle('notes:load', async () => {
   try { return await fs.readFile(path.join(app.getPath('userData'), 'notes.md'), 'utf8'); }
@@ -626,7 +609,7 @@ ipcMain.on('local-ai:chat', (event, request) => {
     activeChats.delete(id);
     send(channel, value);
   };
-  const cancel = localAI.chat({
+  const cancel = modelAI.chat({
     model, messages: contextualMessages,
     onChunk: (content) => send('local-ai:chunk', { content }),
     onDone: () => finish('local-ai:done'),
@@ -647,14 +630,8 @@ app.whenReady().then(async () => {
   });
   cloudSettings = createCloudSettings({ userDataPath: app.getPath('userData'), safeStorage });
   await cloudSettings.load();
-  const cloudAI = createCloudAI({ getSettings: () => cloudSettings.get() });
-  localAI = createLocalAI({
-    cloudAI,
-    userDataPath: app.getPath('userData'),
-    resourcesPath: process.resourcesPath,
-    appPath: app.getAppPath(),
-    isPackaged: app.isPackaged
-  });
+  const cloudAI = createCloudAI({ getSettings: () => ({ ...cloudSettings.get(), geminiKey: 'backend-managed', groqKey: 'backend-managed' }), fetchImpl: (url, options) => authClient.providerFetch(url, { ...options, usageToken: usageSession?.token }) });
+  modelAI = createCloudModels({ cloudAI });
   return createWindow();
 }).catch((error) => {
   dialog.showErrorBox('Privacy Overlay Demo', error.message);
@@ -667,11 +644,9 @@ app.on('will-quit', () => {
   nativeAudio?.stop();
   transcription?.dispose();
   interviewSession?.dispose();
-  localAI?.stop();
   audioEchoFilter?.dispose();
   for (const cancel of activeChats.values()) cancel();
   for (const cancel of activeInterviewAnswers.values()) cancel();
-  for (const cancel of activePulls.values()) cancel();
   clearInterval(dragTimer);
   globalShortcut.unregisterAll();
 });

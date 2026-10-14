@@ -161,7 +161,7 @@ test('account menu exposes locally persisted independent appearance controls', (
   assert.match(htmlSource, /class="logout"/);
   assert.match(htmlSource, /id="app-opacity"/);
   assert.match(htmlSource, /id="text-opacity"/);
-  assert.match(htmlSource, /<section class="settings-view"[\s\S]*id="model"[\s\S]*id="model-download"/);
+  assert.match(htmlSource, /<section class="settings-view"[\s\S]*id="model"/);
   assert.match(htmlSource, /id="settings-tab-appearance"/);
   assert.match(htmlSource, /id="settings-tab-ai"/);
   assert.match(rendererSource, /function setSettingsTab/);

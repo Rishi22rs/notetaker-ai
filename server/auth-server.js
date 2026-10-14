@@ -1,4 +1,5 @@
 const http = require('node:http');
+const { createAIProxy } = require('./ai-proxy');
 const { StringDecoder } = require('node:string_decoder');
 const { pipeline: streamPipeline } = require('node:stream/promises');
 const { MongoClient } = require('mongodb');
@@ -35,6 +36,11 @@ async function readText(request, limit = 1_000_000) {
   return body + decoder.end();
 }
 
+function feedbackFields(body) {
+  if (!Number.isInteger(body.rating) || body.rating < 1 || body.rating > 5 || (body.suggestion !== undefined && typeof body.suggestion !== 'string') || (body.suggestion || '').length > 2000) throw Object.assign(new Error('Choose 1–5 stars and keep suggestions within 2,000 characters.'), { status: 400 });
+  return { rating: body.rating, suggestion: (body.suggestion || '').trim() };
+}
+
 function publicUser(user) {
   return { id: user._id.toString(), email: user.email, name: user.name, picture: user.picture || '' };
 }
@@ -50,10 +56,13 @@ async function createAuthServer(config) {
   const couponRedemptions = db.collection('coupon_redemptions');
   const wallets = db.collection('wallets');
   const discounts = db.collection('discounts');
+  const feedback = db.collection('feedback');
   const paymentService = createPaymentService({ db, config });
   const historyService = createSessionHistoryService({ db });
   const usageService = createUsageService({ db, historyService });
+  const aiProxy = createAIProxy({ config, authorize: usageService.authorizeAI });
   await Promise.all([
+    feedback.createIndex({ userId: 1, createdAt: -1 }),
     users.createIndex({ googleId: 1 }, { unique: true }),
     sessions.createIndex({ tokenHash: 1 }, { unique: true }),
     sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
@@ -79,6 +88,20 @@ async function createAuthServer(config) {
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url, config.publicUrl);
+      if (request.method === 'POST' && ['/ai/chat', '/ai/transcribe'].includes(url.pathname)) {
+        const user = await currentUser(request);
+        if (!user) return sendJson(response, 401, { error: 'Sign in to use AI.' });
+        return await aiProxy.handle({ request, response, user, kind: url.pathname === '/ai/chat' ? 'chat' : 'transcribe', readJson });
+      }
+      if (request.method === 'POST' && url.pathname === '/feedback') {
+        const user = await currentUser(request);
+        if (!user) return sendJson(response, 401, { error: 'Sign in to submit feedback.' });
+        const body = await readJson(request, 12000);
+        const fields = feedbackFields(body);
+        await feedback.insertOne({ userId: user._id, ...fields, createdAt: new Date() });
+        return sendJson(response, 201, { saved: true });
+      }
+      if (request.method === 'GET' && url.pathname === '/ai/status') return sendJson(response, 200, { hasGeminiKey: Boolean(config.geminiApiKey), hasGroqKey: Boolean(config.groqApiKey) });
       if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, originalResumeStorage: true });
       if (request.method === 'GET' && url.pathname === '/payments/plans') {
         return sendJson(response, 200, { plans: await paymentService.plans(), customPricing: await paymentService.customPricing(), configured: paymentService.configured() });
@@ -314,13 +337,16 @@ async function createAuthServer(config) {
       }
       sendJson(response, 404, { error: 'Not found.' });
     } catch (error) {
-      console.error(error);
+      if (response.headersSent) { response.destroy(); return; }
       const status = Number.isInteger(error.status) ? error.status : 500;
-      sendJson(response, status, { error: status < 500 ? error.message : 'The server could not complete this request.' });
+      const route = new URL(request.url, config.publicUrl).pathname;
+      const safeMessage = error.publicMessage || (status < 500 ? error.message : 'The server could not complete this request.');
+      console.error('Backend request failed:', request.method, route, status, error.publicMessage || error.name);
+      sendJson(response, status, { error: safeMessage });
     }
   });
 
   return { server, close: async () => { await new Promise((resolve) => server.close(resolve)); await client.close(); } };
 }
 
-module.exports = { createAuthServer, publicUser };
+module.exports = { createAuthServer, publicUser, feedbackFields };

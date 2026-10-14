@@ -1,6 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const DEFAULTS = { transcription: 'local', groqModel: 'whisper-large-v3-turbo', language: 'auto', answerLanguage: 'English', segmentSeconds: 4, groqKey: '', geminiKey: '' };
+const DEFAULTS = { transcription: 'groq', groqModel: 'whisper-large-v3-turbo', language: 'auto', answerLanguage: 'English', segmentSeconds: 4, groqKey: '', geminiKey: '' };
 function createCloudSettings({ userDataPath, safeStorage }) {
   const filename = path.join(userDataPath, 'cloud-settings.json');
   let value = { ...DEFAULTS };
@@ -22,10 +22,10 @@ function createCloudSettings({ userDataPath, safeStorage }) {
     if (!['local', 'groq'].includes(input.transcription) || !['whisper-large-v3', 'whisper-large-v3-turbo'].includes(input.groqModel) ||
       !['auto', 'en', 'hi'].includes(input.language) || !['auto', 'English', 'Hindi', 'Roman Hinglish'].includes(input.answerLanguage) || ![4, 10].includes(Number(input.segmentSeconds))) throw new Error('Invalid cloud settings.');
     const result = Object.fromEntries(Object.keys(DEFAULTS).map(key => [key, input[key]]));
+    result.transcription = 'groq';
     result.segmentSeconds = Number(result.segmentSeconds);
     result.answerLanguage = 'English';
     for (const key of ['groqKey', 'geminiKey']) result[key] = String(result[key] || '').trim().slice(0, 512);
-    if (result.transcription === 'groq' && !result.groqKey) throw new Error('Add a Groq API key before enabling cloud transcription.');
     return result;
   }
   async function save(input) {

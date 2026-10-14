@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('overlay', {
   onTranscription(callback) { ipcRenderer.on('transcription:event', (_event, value) => callback(value)); },
   onUsageUpdate(callback) { ipcRenderer.on('usage:update', (_event, value) => callback(value)); },
   createRecordedSession: (details) => ipcRenderer.invoke('history:create', details),
+  submitFeedback: body => ipcRenderer.invoke('feedback:submit', body),
   endRecordedSession: () => ipcRenderer.invoke('history:end'),
   listSessionHistory: (page) => ipcRenderer.invoke('history:list', page),
   downloadSessionResume: (id) => ipcRenderer.invoke('history:download-resume', id),
@@ -60,21 +61,6 @@ contextBridge.exposeInMainWorld('overlay', {
     ipcRenderer.on('interview:answer-error', onError);
     ipcRenderer.send('interview:answer', { ...request, id });
     return () => { cleanup(); ipcRenderer.send('interview:cancel-answer', id); };
-  },
-  pullModel(model, callbacks) {
-    const id = crypto.randomUUID();
-    const cleanup = () => {
-      ipcRenderer.removeListener('local-ai:download-progress', onProgress);
-      ipcRenderer.removeListener('local-ai:download-done', onDone);
-      ipcRenderer.removeListener('local-ai:download-error', onError);
-    };
-    const onProgress = (_event, data) => { if (data.id === id) callbacks.onProgress(data); };
-    const onDone = (_event, data) => { if (data.id === id) { cleanup(); callbacks.onDone(); } };
-    const onError = (_event, data) => { if (data.id === id) { cleanup(); callbacks.onError(data.message); } };
-    ipcRenderer.on('local-ai:download-progress', onProgress);
-    ipcRenderer.on('local-ai:download-done', onDone);
-    ipcRenderer.on('local-ai:download-error', onError);
-    ipcRenderer.send('local-ai:download', { id, model });
   },
   chat(request, callbacks) {
     const id = crypto.randomUUID();

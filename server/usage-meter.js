@@ -113,6 +113,16 @@ function createUsageService({ db, historyService }) {
     return { balanceSeconds: Math.max(0, Math.floor(Number(value?.balanceSeconds) || 0)) };
   }
 
+  async function authorizeAI(user, token) {
+    const now = new Date();
+    const [session, wallet] = await Promise.all([
+      sessions.findOne({ userId: user._id, token, status: 'active', leaseExpiresAt: { $gt: now } }),
+      balance(user)
+    ]);
+    if (!session) throw Object.assign(new Error('Start an active paid session to use AI.'), { status: 403 });
+    if (wallet.balanceSeconds - billableSeconds(session, now) < 1) throw Object.assign(new Error('Your usage balance is exhausted.'), { status: 402 });
+  }
+
   async function endHistory(user, historyId) {
     const active = await sessions.find({ userId: user._id, historyId, status: 'active' }).toArray();
     for (const session of active) await stop(user, session.token);
@@ -129,7 +139,7 @@ function createUsageService({ db, historyService }) {
     settled.then(() => { if (pending.get(key) === settled) pending.delete(key); });
     return result;
   };
-  return { ensureIndexes, start: serialized(start), heartbeat: serialized(heartbeat), stop: serialized(stop), reconcile: serialized(reconcile), endHistory: serialized(endHistory), balance, leaseMs: LEASE_MS };
+  return { ensureIndexes, authorizeAI, start: serialized(start), heartbeat: serialized(heartbeat), stop: serialized(stop), reconcile: serialized(reconcile), endHistory: serialized(endHistory), balance, leaseMs: LEASE_MS };
 }
 
 module.exports = { LEASE_MS, billableSeconds, nextMeteredAt, createUsageService };

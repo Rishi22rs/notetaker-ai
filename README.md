@@ -1,3 +1,9 @@
+> Current desktop builds are cloud-only: Gemini 3.5 Flash-Lite for answers and
+> Groq Whisper for transcription. Internet access and provider API keys are required.
+> Local Qwen/llama/Ollama, Whisper runtimes, Python workers and model downloads are
+> excluded from the app package. Local files and historical setup notes below do
+> not describe the current build.
+
 # Standalone local AI overlay
 
 A native Windows and macOS chat overlay with a bundled `llama.cpp` inference runtime.
@@ -327,3 +333,20 @@ an existing `app_config` document. Checkout reads current config for each order.
 ```sh
 npm run plan:add -- minutes_100_pack 6000 49900 1 69900 "Starter Pack"
 ```
+
+### Backend-managed AI
+
+Desktop requests now use authenticated `/ai/chat` and `/ai/transcribe` endpoints.
+Configure `GROQ_API_KEY` and `GEMINI_API_KEY` in the backend environment only,
+then restart the backend. No provider credential is sent to the desktop.
+The server requires a current paid usage lease owned by the signed-in user,
+checks remaining time, and rechecks authorization during long requests.
+Gemini responses are streamed with backpressure; disconnects cancel upstream work.
+Limits are 120 requests/minute per user, 4 in-flight requests per user and 100
+in-flight provider requests per backend instance. These are request limits, not
+provider quota increases or a measured concurrent-session capacity.
+AI routes do not persist prompts, audio or responses. Existing session-history
+storage is separate and has not been disabled by this change.
+For production, use HTTPS and a single backend instance until shared distributed
+usage locking and request limits are implemented. Provider keys previously saved
+on client devices are no longer used; removal of the old key settings is separate.

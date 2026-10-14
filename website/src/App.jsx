@@ -5,6 +5,7 @@ import {
   ShieldCheck, Sparkles, X, Zap
 } from 'lucide-react'
 import { detectPlatform, DOWNLOADS } from './platform'
+import Terms from './Terms'
 
 const features = [
   { icon: AudioLines, number: '01', title: 'Hears the room.', text: 'Live, on-device transcription separates your voice from computer audio, so every conversation stays clear.' },
@@ -14,7 +15,9 @@ const features = [
 ]
 
 const faqs = [
-  ['Does my data leave my computer?', 'UNYON is built around local processing. Prompts go to the AI model running on your machine, while conversations, context, and notes are stored locally.'],
+  ['Does my data leave my computer?', 'Local AI and transcription run on your device. Optional cloud features send audio and selected context to their providers. Account details, session history, and uploaded resumes may be stored with UNYON until you email us to request deletion.'],
+  ['How do I delete my stored data?', 'Email underratedgames22@gmail.com from your registered email address to request deletion. We keep server-stored data until you ask us to delete it, except for records we must retain by law. Delete local notes and files separately on your device.'],
+  ['Do my purchased minutes expire?', 'No. Purchased usage minutes never expire, so you can use your remaining balance whenever you need it.'],
   ['What do I need to run UNYON?', 'A supported macOS or Windows computer. UNYON includes a guided local-model setup, so you can choose the model that fits your hardware.'],
   ['Is UNYON only for interviews?', 'Not at all. Use it in meetings, study sessions, research, writing, coding, presentations, or anytime you want private, context-aware help.'],
   ['Can others see the overlay?', 'UNYON uses operating-system capture protection on supported platforms. This is best-effort protection, not an absolute security or DLP boundary.'],
@@ -108,6 +111,19 @@ function ProductDemo() {
 }
 
 function App() {
+  const [isTerms, setIsTerms] = useState(() => window.location.hash.startsWith('#/terms'))
+  useEffect(() => {
+    const navigate = () => {
+      const legal = window.location.hash.startsWith('#/terms')
+      setIsTerms(legal)
+      const section = window.location.hash.match(/^#\/terms\/section-(\d+)$/)
+      if (section) requestAnimationFrame(() => document.getElementById(`terms-section-${section[1]}`)?.scrollIntoView())
+      else if (legal || window.location.hash === '#top') window.scrollTo(0, 0)
+    }
+    window.addEventListener('hashchange', navigate)
+    navigate()
+    return () => window.removeEventListener('hashchange', navigate)
+  }, [])
   const [menuOpen, setMenuOpen] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [openFaq, setOpenFaq] = useState(0)
@@ -118,7 +134,7 @@ function App() {
     const observer = new IntersectionObserver(entries => entries.forEach(e => e.isIntersecting && e.target.classList.add('in-view')), { threshold: .12 })
     document.querySelectorAll('.reveal').forEach(el => observer.observe(el))
     return () => observer.disconnect()
-  }, [])
+  }, [isTerms])
   useEffect(() => {
     let lastY = window.scrollY
     let ticking = false
@@ -144,6 +160,7 @@ function App() {
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [menuOpen])
+  if (isTerms) return <Terms />
   return <>
     <header className={`nav ${headerHidden ? 'nav-hidden' : ''}`} id="top">
       <Logo />
@@ -162,7 +179,7 @@ function App() {
         <div className="hero-copy reveal">
           <div className="beta-pill"><span/> {platform === 'other' ? 'BETA · MAC & WINDOWS' : `BETA FOR ${DOWNLOADS[platform].name.toUpperCase()}`}</div>
           <h1>The AI that<br/><em>stays with you.</em></h1>
-          <p>UNYON listens, understands, and helps in real time—without sending your conversations to the cloud.</p>
+          <p>UNYON listens, understands, and helps in real time—with local AI on your device and optional cloud features when you choose them.</p>
           <div className="hero-actions"><DownloadButton platform={platform} onUnavailable={() => setModalOpen(true)} /><a className="text-link" href="#how">See how it works <span>↓</span></a></div>
         </div>
         <ProductDemo />
@@ -200,7 +217,7 @@ function App() {
       </section>
 
       <section className="privacy" id="privacy">
-        <div className="privacy-glow"/><div className="privacy-inner reveal"><div className="privacy-lock"><LockKeyhole/></div><p className="eyebrow lime">PRIVATE BY ARCHITECTURE</p><h2>Your conversations<br/>aren’t our business.</h2><p>UNYON runs AI and speech recognition on your computer. Your words, files, and notes stay on the device you control.</p><div className="privacy-flow"><div><Mic2/><span>Your conversation</span></div><ArrowRight/><div><MonitorUp/><span>Your device</span></div><ArrowRight/><div><Bot/><span>Local AI</span></div><ArrowRight/><div><Sparkles/><span>Private answer</span></div></div><small>Capture protection is best-effort OS protection and not a complete security boundary.</small></div>
+        <div className="privacy-glow"/><div className="privacy-inner reveal"><div className="privacy-lock"><LockKeyhole/></div><p className="eyebrow lime">PRIVATE BY ARCHITECTURE</p><h2>Your conversations<br/>aren’t our business.</h2><p>UNYON runs AI and speech recognition on your computer. Local prompts and notes stay on your device. Optional cloud features send audio and selected context to their providers. Account details, session history, and uploaded resumes may be stored with UNYON until you email us to request deletion, except for records we must retain by law.</p><div className="privacy-flow"><div><Mic2/><span>Your conversation</span></div><ArrowRight/><div><MonitorUp/><span>Your device</span></div><ArrowRight/><div><Bot/><span>Local AI</span></div><ArrowRight/><div><Sparkles/><span>Private answer</span></div></div><small>Capture protection is best-effort OS protection and not a complete security boundary.</small></div>
       </section>
 
       <section className="use-cases reveal"><p className="eyebrow">MADE FOR REAL WORK</p><div className="use-scroll"><span>INTERVIEWS</span><i>✦</i><span>MEETINGS</span><i>✦</i><span>RESEARCH</span><i>✦</i><span>STUDY</span><i>✦</i><span>WRITING</span></div></section>
@@ -212,7 +229,7 @@ function App() {
       <section className="cta-section"><div className="cta-orb"/><div className="reveal"><p className="eyebrow lime">UNYON PRIVATE BETA</p><h2>Be in the room.<br/><em>And ahead of it.</em></h2><p>Try the beta and help shape an AI copilot that works with you—not through your data.</p><DownloadButton platform={platform} className="button button-light" onUnavailable={() => setModalOpen(true)} /><span className="spots"><i/> {platform !== 'other' && DOWNLOADS[platform].available ? `Beta available for ${DOWNLOADS[platform].name}` : 'New beta spots opening weekly'}</span></div></section>
     </main>
 
-    <footer><div><Logo light/><p>Your private AI copilot.<br/>Here when it matters.</p></div><div className="footer-links"><div><b>PRODUCT</b><a href="#features">Features</a><a href="#privacy">Privacy</a><button onClick={() => setModalOpen(true)}>Beta access</button></div><div><b>COMPANY</b><a href="mailto:hello@myunyon.com">Contact</a><a href="#faq">FAQ</a></div></div><div className="footer-bottom"><span>© 2026 UNYON</span><span>Built local. Built private.</span></div></footer>
+    <footer><div><Logo light/><p>Your private AI copilot.<br/>Here when it matters.</p></div><div className="footer-links"><div><b>PRODUCT</b><a href="#features">Features</a><a href="#privacy">Privacy</a><button onClick={() => setModalOpen(true)}>Beta access</button></div><div><b>COMPANY</b><a href="mailto:underratedgames22@gmail.com">Contact</a><a href="#faq">FAQ</a><a href="#/terms">Terms &amp; conditions</a></div></div><div className="footer-bottom"><span>© 2026 UNYON</span><span>Built local. Built private.</span></div></footer>
     {modalOpen && <BetaModal onClose={() => setModalOpen(false)} />}
   </>
 }

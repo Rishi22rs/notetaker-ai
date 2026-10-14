@@ -130,7 +130,21 @@ function createAuthClient({ serverUrl, userDataPath, openExternal, timeoutMs = 1
     return { name: decodeURIComponent(response.headers.get('x-resume-filename') || 'resume'), bytes };
   }
 
+  async function providerFetch(url, options) {
+    const saved = await readSession();
+    if (!saved?.token) throw new Error('Sign in to use AI.');
+    const transcription = String(url).startsWith('https://api.groq.com/');
+    let body = options.body;
+    if (transcription) {
+      const form = body;
+      body = JSON.stringify({ audio: Buffer.from(await form.get('file').arrayBuffer()).toString('base64'), model: form.get('model'), language: form.get('language') || 'auto' });
+    }
+    return fetch(new URL(transcription ? '/ai/transcribe' : '/ai/chat', serverUrl), { method: 'POST', signal: options.signal, headers: { 'content-type': 'application/json', authorization: `Bearer ${saved.token}`, 'x-usage-token': options.usageToken || '' }, body });
+  }
+
   return {
+    submitFeedback: body => authorizedApi('/feedback', { method: 'POST', body: JSON.stringify(body) }),
+    providerFetch, aiStatus: () => api('/ai/status'),
     login, logout, redeemCoupon, status, startRecharge, downloadSessionResume,
     paymentPlans: () => api('/payments/plans'),
     paymentStatus: (id) => authorizedApi(`/payments/${encodeURIComponent(id)}`),

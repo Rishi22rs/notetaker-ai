@@ -373,7 +373,6 @@
     .floating-mode .floating-question { flex: 0 0 auto; }
     #transcript-feed { overflow-anchor: none; scroll-behavior: auto; }
     .header-wallet { display: flex; align-items: center; gap: 9px; flex-shrink: 0; padding: 5px 6px 5px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }.header-wallet output { color: var(--accent); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }.header-wallet button { width: 27px; height: 27px; padding: 0; border-radius: 6px; font-size: 18px; background: var(--accent-bg); color: var(--dark-text); border-color: var(--accent-bg); }
-    #open-offers { gap: 8px; padding-left: 8px; padding-right: 8px; }
     #open-offers .nav-label { font-size: 10.5px; white-space: nowrap; }
 
     .app-icon { display: inline-block; width: 16px; height: 16px; flex: 0 0 auto; vertical-align: middle; pointer-events: none; }
@@ -461,6 +460,23 @@
     #pricing-updated-modal { max-width: 380px; padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); }
     #pricing-updated-modal::backdrop { background: #0009; }
     .history-resume-file { display: flex; align-items: center; gap: 4px; min-width: 0; }.history-resume-file > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.history-resume-download { display: grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--muted); }.history-resume-download:hover { background: #c9ff4510; color: var(--accent); }.history-resume-download > .app-icon:first-child { width: 14px; height: 14px; margin: 0; }
+    #floating-question { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+    .floating-question-copy { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+    #floating-answer-now { flex: 0 0 auto; width: auto; margin: 0; padding: 6px 10px; white-space: nowrap; font-size: 11px; }
+    .session-dialog { width: min(440px, calc(100vw - 32px)); padding: 26px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--text); }
+    .session-dialog::backdrop { background: #0009; }
+    .session-dialog h2 { font-size: 20px; margin: 0 0 12px; }
+    .session-dialog p { color: var(--muted); font-size: 12px; }
+    .session-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    #end-confirm-yes, #feedback-submit { background: var(--accent-bg); color: var(--dark-text); }
+    #feedback-close { position: absolute; right: 10px; top: 6px; border: 0; background: transparent; font-size: 23px; }
+    .feedback-stars { border: 0; padding: 12px 0; margin: 0; display: flex; gap: 14px; }
+    .feedback-stars legend { font-size: 12px; color: var(--muted); }
+    .feedback-stars label { position: relative; cursor: pointer; font-size: 32px; color: var(--muted); }
+    .feedback-stars input { position: absolute; opacity: 0; }
+    .feedback-stars label.chosen { color: var(--accent); }
+    .feedback-stars label:focus-within { outline: 1px solid var(--accent); border-radius: 5px; }
+    #feedback-suggestion { width: 100%; margin-top: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--input); color: var(--text); }
   </style>
 </head>
 <body>
@@ -483,9 +499,9 @@
         <span class="floating-state" id="floating-state">Listening…</span>
         <button id="floating-pause" type="button" data-button-icon="pause">Pause</button><output id="floating-clock">0m 0s</output>
         <button id="floating-dashboard" type="button" title="Open dashboard" aria-label="Open dashboard"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10 12 3l9 7"/><path d="M5 9v11h5v-6h4v6h5V9"/></svg></button><button id="floating-collapse" type="button" title="Collapse or expand answer" aria-expanded="false" aria-label="Collapse or expand answer"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg></button><button id="floating-end" type="button" title="End session" data-button-icon="stop">End</button>
-      </div><nav class="answer-navigation" id="floating-answer-navigation" aria-label="Question history"><button class="answer-previous" data-button-icon="chevron-left" type="button" disabled>Previous</button><span class="answer-position">0 / 0</span><button id="floating-answer-now" type="button" data-button-icon="sparkles">Answer now</button><button class="answer-next" data-button-icon="chevron-right" type="button" disabled>Next</button></nav><div class="floating-question" id="floating-question" hidden><span class="floating-question-label">ANSWERING</span><span id="floating-question-text">Listening for the interviewer’s question…</span></div>
+      </div><nav class="answer-navigation" id="floating-answer-navigation" aria-label="Question history"><button class="answer-previous" data-button-icon="chevron-left" type="button" disabled>Previous</button><span class="answer-position">0 / 0</span><button class="answer-next" data-button-icon="chevron-right" type="button" disabled>Next</button></nav><div class="floating-question" id="floating-question" hidden><div class="floating-question-copy"><span class="floating-question-label">ANSWERING</span><span id="floating-question-text">Listening for the interviewer’s question…</span></div><button id="floating-answer-now" type="button">Answer now</button></div>
       <header>
-        <div class="brand"><h1 id="view-title">Live transcription</h1><span id="status">On-device speech recognition</span></div>
+        <div class="brand"><h1 id="view-title">Live transcription</h1><span id="status">Cloud speech recognition</span></div>
         <button id="new-chat" type="button" title="Create a session with tailored context"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>Create session</button>
         <button id="return-floating" type="button" title="Return to floating session" hidden data-button-icon="monitor">Floating view</button><button id="end-session" type="button" title="End session and delete session context" hidden data-button-icon="stop">End session</button>
         <output id="session-clock" class="session-clock" aria-label="Time remaining">0m 0s</output>
@@ -574,19 +590,19 @@
           </section>
           <section id="settings-ai" role="tabpanel" aria-labelledby="settings-tab-ai" hidden>
             <h2>AI &amp; Models</h2>
-            <p class="settings-intro">Choose cloud AI for online use or a local model for offline use.</p>
+            <p class="settings-intro">Use Gemini for answers and Groq for transcription.</p>
             <div class="setting-row cloud-provider-settings">
               <div class="setting-heading">Cloud providers</div>
               <p class="setting-description">Cloud transcription sends enabled microphone/system audio to Groq. Selecting Gemini sends your questions and relevant session/document context to Google. Keys are encrypted on this computer. Free-tier limits apply; paid provider accounts can incur charges.</p>
               <label for="cloud-transcription">Transcription</label>
-              <select id="cloud-transcription"><option value="local">Local · offline</option><option value="groq">Groq · cloud</option></select>
+              <select id="cloud-transcription"><option value="groq">Groq · cloud</option></select>
               <label for="groq-key">Groq API key</label><input id="groq-key" type="password" autocomplete="off" placeholder="Enter key; blank keeps saved key">
               <label for="gemini-key">Gemini API key</label><input id="gemini-key" type="password" autocomplete="off" placeholder="Enter key; blank keeps saved key">
               <label for="groq-model">Groq model</label><select id="groq-model"><option value="whisper-large-v3-turbo">Whisper Large V3 Turbo · budget</option><option value="whisper-large-v3">Whisper Large V3 · accuracy</option></select>
               <label for="cloud-language">Spoken language</label><select id="cloud-language"><option value="auto">Automatic · Hindi / Hinglish / English</option><option value="hi">Hindi</option><option value="en">English</option></select>
               <label for="answer-language">Answer language</label><select id="answer-language" disabled><option value="English">English · all questions</option></select>
               <label for="cloud-segment">Transcription segments</label><select id="cloud-segment"><option value="4">4 seconds · quicker captions</option><option value="10">10 seconds · lower billing overhead</option></select>
-              <p class="setting-description">Groq bills at least 10 seconds per request. Four-second segments cost more per audio minute. Stop cancels pending transcription.</p>
+              <p class="setting-description">Silence filtering skips idle audio and keeps a short lead-in and speech tail. Captions flush after a pause or the selected chunk limit. Groq bills at least 10 seconds per request; shorter chunks cost more. Stop cancels pending transcription.</p>
               <button id="save-cloud" type="button" data-button-icon="save">Save cloud settings</button><button id="clear-cloud-keys" type="button" data-button-icon="close">Remove saved keys</button>
               <p id="cloud-status" role="status"></p>
             </div>
@@ -594,11 +610,7 @@
               <div class="setting-heading"><label for="model">Answering model</label></div>
               <p class="setting-description">The selected model powers interview answers and typed questions.</p>
               <select id="model" aria-label="Answering model"></select>
-              <section class="model-download" id="model-download" hidden>
-                <div class="model-download-info"><span id="download-title"></span><span id="download-detail"></span></div>
-                <button id="download-model" type="button" data-button-icon="download">Download</button>
-                <div class="progress-track"><div id="download-progress"></div></div>
-              </section>
+
             </div>
           </section>
         </div>
@@ -646,7 +658,7 @@
           <span id="transcript-status">Stopped</span>
         </div>
         <div class="transcript-content">
-          <div id="transcript-feed"><div class="transcript-empty">Start listening for live local captions.</div></div>
+          <div id="transcript-feed"><div class="transcript-empty">Start listening for live captions.</div></div>
         </div>
       </section>
       <div class="prompt-suggestions" id="prompt-suggestions" aria-label="Prompt suggestions" hidden></div>
@@ -685,6 +697,22 @@
     <h2 id="payment-wait-title">Complete your payment in the browser</h2>
     <p id="payment-wait-message" role="status">Opening secure checkout…</p>
   </dialog>
+  <dialog class="payment-wait-modal" id="session-creating-modal" aria-labelledby="session-creating-title">
+    <div class="payment-wait-spinner" aria-hidden="true"></div>
+    <h2 id="session-creating-title">Creating a session…</h2>
+    <p role="status">Preparing your audio and floating window.</p>
+  </dialog>
+  <dialog class="payment-wait-modal" id="session-already-open-modal" aria-labelledby="session-already-open-title">
+    <h2 id="session-already-open-title">End your current session first</h2>
+    <p>You already have an open session. End it before creating a new one.</p>
+    <button id="session-already-open-ok" type="button">Okay</button>
+  </dialog>
+<dialog class="session-dialog" id="end-confirm-modal" aria-labelledby="end-confirm-title">
+<h2 id="end-confirm-title">Are you sure you want to end the session?</h2>
+<div class="session-dialog-actions"><button id="end-confirm-cancel" type="button">Keep session</button><button id="end-confirm-yes" type="button">Yes, end session</button></div><p id="end-confirm-status" role="status"></p></dialog>
+<dialog class="session-dialog" id="feedback-modal" aria-labelledby="feedback-title">
+<button id="feedback-close" type="button" aria-label="Close feedback">×</button><h2 id="feedback-title">How was your session?</h2><p>Help us improve. Feedback is optional.</p>
+<form id="feedback-form"><fieldset class="feedback-stars"><legend>Rate your experience</legend><label><input type="radio" name="rating" value="1" required aria-label="1 stars"><span aria-hidden="true">★</span></label><label><input type="radio" name="rating" value="2" required aria-label="2 stars"><span aria-hidden="true">★</span></label><label><input type="radio" name="rating" value="3" required aria-label="3 stars"><span aria-hidden="true">★</span></label><label><input type="radio" name="rating" value="4" required aria-label="4 stars"><span aria-hidden="true">★</span></label><label><input type="radio" name="rating" value="5" required aria-label="5 stars"><span aria-hidden="true">★</span></label></fieldset><label for="feedback-suggestion">Suggestions (optional)</label><textarea id="feedback-suggestion" maxlength="2000" rows="4" placeholder="What could we do better?"></textarea><p id="feedback-status" role="status"></p><div class="session-dialog-actions"><button id="feedback-skip" type="button">Skip</button><button id="feedback-submit" type="submit">Send feedback</button></div></form></dialog>
   <div class="resize-grip" aria-hidden="true"></div>
 <dialog id="pricing-updated-modal" aria-labelledby="pricing-updated-title"><h3 id="pricing-updated-title">Pricing has been updated</h3><p>The price or purchase limits changed. Refresh to review the latest details before paying.</p><button id="refresh-updated-pricing" type="button">Refresh</button></dialog>
   <script src="interview-question-context.js"></script>
