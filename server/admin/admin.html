@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>UNYON · Operations</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Instrument+Serif:ital@0;1&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/style.css">
+  <script src="/admin/app.js" defer></script>
+</head>
+<body>
+  <header class="nav">
+    <a class="logo" href="/admin" aria-label="UNYON Operations"><span class="logo-mark" aria-hidden="true"><span></span><span></span></span><span>UNYON</span><span class="nav-divider">/</span><span class="nav-title">Operations</span></a>
+    <div class="nav-actions"><span class="access-label">ADMIN ACCESS</span><a class="button button-dark" id="login" href="/admin/login">Sign in with Google <span aria-hidden="true">↗</span></a><button class="button button-dark" id="logout" hidden>Sign out <span aria-hidden="true">↗</span></button></div>
+  </header>
+  <main>
+    <section class="hero">
+      <div class="hero-copy"><p class="beta-pill"><span aria-hidden="true"></span> YOUR APP, AT A GLANCE</p><h1>A little clarity.<br><em>Behind the scenes.</em></h1><p class="intro">One quiet place to keep track of your server, your AI, and everything that keeps UNYON running.</p><p id="status" role="status">Checking administrator access…</p></div>
+      <aside class="access-card" id="access-card"><span class="eyebrow">01 / THE CONTROL ROOM</span><div class="access-art" aria-hidden="true"><span></span><span></span><i>U</i></div><h2>Just for you.</h2><p>Sign in with your authorized Google account to see live activity, provider usage, and alerts.</p><div class="access-foot"><span class="access-dot" aria-hidden="true"></span> GOOGLE SIGN-IN · RESTRICTED ACCESS</div></aside>
+    </section>
+    <div id="dashboard" hidden>
+      <section class="alerts-section"><div class="section-heading"><p class="eyebrow">01 / KEEP AN EYE ON</p><span class="refresh-note">REFRESHES EVERY 15 SECONDS</span></div><div id="alerts" aria-live="polite"></div></section>
+      <section class="metrics-section"><div class="section-heading"><h2>The running <em>picture.</em></h2><p class="eyebrow">02 / SERVER ACTIVITY</p></div><div class="grid overview-grid" id="overview"></div></section>
+      <section class="providers-section"><div class="section-heading"><h2>A little AI.<br><em>A clear view.</em></h2><p class="eyebrow">03 / AI PROVIDERS</p></div><div class="grid provider-grid" id="providers"></div></section>
+      <aside class="monitor-notes"><p class="eyebrow">THE USEFUL DETAILS</p><p id="scope" class="muted"></p><p class="muted">Alerts appear while this dashboard is open. Automatic refresh every 15 seconds. No email or background notifications are configured.</p></aside>
+    </div>
+  </main>
+  <footer><span class="eyebrow">UNYON / OPERATIONS</span><span>Less noise. More perspective.</span></footer>
+</body>
+</html>

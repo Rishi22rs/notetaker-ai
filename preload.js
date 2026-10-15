@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('overlay', {
   platform: process.platform,
+  onToggleSession: (callback) => ipcRenderer.on('overlay:toggle-session', callback),
   setWindowMode: (mode, answerHeight) => ipcRenderer.invoke('overlay:window-mode', mode, answerHeight),
   getUserName: () => ipcRenderer.invoke('profile:name'),
   getAuthStatus: () => ipcRenderer.invoke('auth:status'),

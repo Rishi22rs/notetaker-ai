@@ -30,13 +30,17 @@ function transcriptionPayload(body) {
   form.append('prompt', 'Interview conversation in Hindi and English. Preserve spoken language and technical terms.');
   return form;
 }
-function createAIProxy({ config, authorize, fetchImpl = fetch, logger = console.log }) {
+function createAIProxy({ config, authorize, fetchImpl = fetch, logger = console.log, observer = () => {} }) {
   const acquire = createLimiter();
   async function handle({ request, response, user, kind, readJson }) {
     const started = performance.now();
     const requestId = randomUUID();
     const metrics = { responseBytes: 0, outputCharacters: 0, tokens: null };
-    const log = (event, details = {}) => logger('[AI]', JSON.stringify({ timestamp: new Date().toISOString(), requestId, kind, event, elapsedMs: Math.round(performance.now() - started), ...details }));
+    const log = (event, details = {}) => {
+      const entry = { timestamp: new Date().toISOString(), requestId, kind, event, elapsedMs: Math.round(performance.now() - started), ...details };
+      logger('[AI]', JSON.stringify(entry));
+      try { observer(entry); } catch { /* Monitoring must not interrupt AI delivery. */ }
+    };
     log('received');
     let release;
     try { release = acquire(String(user._id)); } catch (error) { log('rate_limited', { status: error.status }); throw error; }
@@ -69,7 +73,11 @@ function createAIProxy({ config, authorize, fetchImpl = fetch, logger = console.
         method: 'POST', signal: controller.signal,
         headers: { Authorization: `Bearer ${key}`, ...(kind === 'chat' ? { 'content-type': 'application/json' } : {}) }, body: payload
       });
-      log('provider_headers', { status: upstream.status, providerHeadersMs: Math.round(performance.now() - providerStarted) });
+      const rateLimits = {};
+      for (const name of ['x-ratelimit-limit-requests', 'x-ratelimit-limit-tokens', 'x-ratelimit-remaining-requests', 'x-ratelimit-remaining-tokens', 'x-ratelimit-reset-requests', 'x-ratelimit-reset-tokens', 'retry-after']) {
+        const value = upstream.headers?.get(name); if (value != null) rateLimits[name] = value;
+      }
+      log('provider_headers', { status: upstream.status, rateLimits, providerHeadersMs: Math.round(performance.now() - providerStarted) });
       if (!upstream.ok) throw failure(upstream.status === 429 ? 'Provider rate limit reached. Try again shortly.' : `Cloud provider rejected this request (HTTP ${upstream.status}). Check the backend key, model access and provider account.`, upstream.status === 429 ? 429 : 502);
       response.writeHead(200, { 'content-type': body.stream && kind === 'chat' ? 'text/event-stream' : 'application/json', 'cache-control': 'no-store', 'x-accel-buffering': 'no' });
       response.flushHeaders?.();

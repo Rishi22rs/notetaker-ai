@@ -132,6 +132,9 @@ document.getElementById('floating-dashboard').addEventListener('click', () => {
 returnFloating.addEventListener('click', () => {
   setFloatingView(true).catch(error => setStatus(error.message, true));
 });
+window.overlay.onToggleSession(() => {
+  if (floatingView && !floatingPause.disabled) floatingPause.click();
+});
 document.getElementById('floating-end').addEventListener('click', () => document.getElementById('end-session').click());
 floatingCollapse.addEventListener('click', () => {
   if (!transcriptFeed.querySelector('.floating-current')) return;
@@ -154,6 +157,7 @@ let latestComputerTurnEndedAt = 0;
 let pendingComputerContinuation = null;
 const recommendedModels = [];
 document.body.classList.add(`platform-${window.overlay.platform}`);
+document.querySelectorAll('.hotkey-modifier').forEach(key => { key.textContent = window.overlay.platform === 'darwin' ? '⌘' : 'Ctrl'; });
 
 function loadAppearance() {
   try {

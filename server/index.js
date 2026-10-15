@@ -10,6 +10,9 @@ if (missing.length) {
 
 const port = Number(process.env.PORT || 8787);
 createAuthServer({
+  adminEmails: process.env.ADMIN_EMAILS,
+  geminiDailyRequests: process.env.ADMIN_GEMINI_DAILY_REQUESTS,
+  groqDailyRequests: process.env.ADMIN_GROQ_DAILY_REQUESTS,
   mongoUri: process.env.MONGODB_URI,
   mongoDbName: process.env.MONGODB_DB || 'notetaker',
   googleClientId: process.env.GOOGLE_CLIENT_ID,

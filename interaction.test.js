@@ -362,3 +362,41 @@ test('starting transcription checks permissions before charging session time', (
   assert.match(generation, /if \(!floatingView\) renderInterviewContent\(card, cleanAnswer\(\), true\)/);
   assert.match(generation, /setTimeout\(revealAnswer, 2000\)/);
 });
+
+test('interaction hotkey is registered only for the floating window and preserves click-through on answer expansion', () => {
+  const handlers = new Map(), shortcuts = new Map(); let ignored = false; let visible = true; const messages = [];
+  const window = { isDestroyed: () => false, isVisible: () => visible, hide() { visible = false; }, show() { visible = true; }, showInactive() { visible = true; }, setAlwaysOnTop() {}, webContents: { send(channel) { messages.push(channel); } }, setFocusable() {}, focus() {}, setIgnoreMouseEvents(value) { ignored = value; } };
+  const context = { __dirname, process: { platform: 'win32' }, setInterval, clearInterval,
+    require(name) {
+      if (name === 'electron') return {
+        app: { whenReady: () => ({ then: () => ({ catch() {} }) }), on() {} },
+        ipcMain: { handle(name, callback) { handlers.set(name, callback); }, on() {} },
+        globalShortcut: { register(key, callback) { shortcuts.set(key, callback); return true; }, unregister(key) { shortcuts.delete(key); } }
+      };
+      return require(name);
+    }
+  };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(require.resolve('./main'), 'utf8'), context);
+  context.testWindow = window;
+  vm.runInContext('win = testWindow; floatingWindowController = { setMode: () => ({}) }; browseMode = true;', context);
+  const mode = handlers.get('overlay:window-mode'); const event = { sender: window.webContents };
+  assert.equal(shortcuts.size, 0);
+  mode(event, 'floating');
+  const shortcut = shortcuts.get('CommandOrControl+Shift+I'); assert.equal(typeof shortcut, 'function');
+  const hideShortcut = shortcuts.get('CommandOrControl+Shift+H'); assert.equal(typeof hideShortcut, 'function');
+  assert.equal(shortcuts.size, 7);
+  const pauseShortcut = shortcuts.get('CommandOrControl+Shift+P');
+  pauseShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:toggle-session').length, 1);
+  for (const direction of ['Left', 'Right', 'Up', 'Down']) assert.equal(typeof shortcuts.get(`CommandOrControl+Shift+${direction}`), 'function');
+  hideShortcut(); assert.equal(visible, false);
+  hideShortcut(); assert.equal(visible, true);
+  shortcut(); assert.equal(ignored, true);
+  mode(event, 'answer'); assert.equal(ignored, true);
+  shortcut(); assert.equal(ignored, false);
+  hideShortcut(); assert.equal(visible, false);
+  mode(event, 'dashboard'); assert.equal(visible, true); assert.equal(shortcuts.size, 0); assert.equal(ignored, false);
+  shortcut(); assert.equal(ignored, false, 'stale callback cannot change dashboard interaction');
+  hideShortcut(); assert.equal(visible, true, 'stale hide callback cannot hide the dashboard');
+  pauseShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:toggle-session').length, 1, 'pause is inactive on the dashboard');
+});

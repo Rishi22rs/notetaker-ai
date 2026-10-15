@@ -1,4 +1,5 @@
 const http = require('node:http');
+const { createAdminMonitor } = require('./admin-monitor');
 const { createAIProxy } = require('./ai-proxy');
 const { StringDecoder } = require('node:string_decoder');
 const { pipeline: streamPipeline } = require('node:stream/promises');
@@ -60,8 +61,10 @@ async function createAuthServer(config) {
   const paymentService = createPaymentService({ db, config });
   const historyService = createSessionHistoryService({ db });
   const usageService = createUsageService({ db, historyService });
-  const aiProxy = createAIProxy({ config, authorize: usageService.authorizeAI });
+  const admin = createAdminMonitor({ db, config });
+  const aiProxy = createAIProxy({ config, authorize: usageService.authorizeAI, observer: admin.observe });
   await Promise.all([
+    admin.ensureIndexes(),
     feedback.createIndex({ userId: 1, createdAt: -1 }),
     users.createIndex({ googleId: 1 }, { unique: true }),
     sessions.createIndex({ tokenHash: 1 }, { unique: true }),
@@ -88,6 +91,7 @@ async function createAuthServer(config) {
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url, config.publicUrl);
+      if (await admin.handle(request, response, url)) return;
       if (request.method === 'POST' && ['/ai/chat', '/ai/transcribe'].includes(url.pathname)) {
         const user = await currentUser(request);
         if (!user) return sendJson(response, 401, { error: 'Sign in to use AI.' });
@@ -346,7 +350,7 @@ async function createAuthServer(config) {
     }
   });
 
-  return { server, close: async () => { await new Promise((resolve) => server.close(resolve)); await client.close(); } };
+  return { server, close: async () => { await new Promise((resolve) => server.close(resolve)); await admin.close(); await client.close(); } };
 }
 
 module.exports = { createAuthServer, publicUser, feedbackFields };

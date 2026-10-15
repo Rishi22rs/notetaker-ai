@@ -21,8 +21,10 @@ const { createAudioEchoFilter } = require('./audio-echo-filter');
 let win;
 let dragTimer;
 let floatingMode = false;
+let floatingClickThrough = false;
 let floatingWindowController;
 const { createFloatingWindowController } = require('./floating-window');
+const { snapFloatingBounds } = require('./floating-window-bounds');
 let transcription;
 let interviewSession;
 let modelAI;
@@ -37,6 +39,7 @@ const activeChats = new Map();
 const activeInterviewAnswers = new Map();
 const quitShortcut = 'CommandOrControl+Shift+Q';
 const visibilityShortcut = 'CommandOrControl+Shift+H';
+const interactionShortcut = 'CommandOrControl+Shift+I';
 const MAX_CONTEXT_FILE_BYTES = 25 * 1024 * 1024;
 const textExtensions = new Set([
   '.txt', '.md', '.markdown', '.csv', '.tsv', '.json', '.jsonl', '.xml', '.yaml', '.yml',
@@ -54,13 +57,14 @@ function setInteractive(window, enabled) {
 }
 
 function toggleWindowVisibility() {
+  if (!floatingMode) return;
   if (!win || win.isDestroyed()) return;
   if (win.isVisible()) {
     win.hide();
     return;
   }
   win.setAlwaysOnTop(true, 'screen-saver');
-  if (browseMode || floatingMode) {
+  if (floatingMode ? !floatingClickThrough : browseMode) {
     win.show();
     setInteractive(win, true);
   } else {
@@ -81,7 +85,7 @@ function enableHoldToDrag(window) {
   dragTimer = setInterval(() => {
     if (window.isDestroyed()) return;
     const held = isDown(0x11) && isDown(0x10); // Ctrl + Shift
-    const enabled = held || browseMode || floatingMode;
+    const enabled = held || (floatingMode ? !floatingClickThrough : browseMode);
     const mouseDown = isDown(0x01);
     if (enabled !== interactive) {
       interactive = enabled;
@@ -119,11 +123,61 @@ function enableHoldToDrag(window) {
   }, 16);
 }
 
+function toggleFloatingInteraction() {
+  if (!floatingMode || !win || win.isDestroyed()) return;
+  floatingClickThrough = !floatingClickThrough;
+  setInteractive(win, !floatingClickThrough);
+}
+
+function toggleFloatingPlayback() {
+  if (!floatingMode || !win || win.isDestroyed()) return;
+  win.webContents.send('overlay:toggle-session');
+}
+function snapFloatingWindow(direction) {
+  if (!floatingMode || !win || win.isDestroyed()) return;
+  const bounds = win.getBounds();
+  const area = screen.getDisplayMatching(bounds).workArea;
+  win.setBounds(snapFloatingBounds(bounds, area, direction));
+}
+const floatingHotkeys = [
+  [interactionShortcut, toggleFloatingInteraction],
+  [visibilityShortcut, toggleWindowVisibility],
+  ['CommandOrControl+Shift+P', toggleFloatingPlayback],
+  ...['Left', 'Right', 'Up', 'Down'].map(direction => [`CommandOrControl+Shift+${direction}`, () => snapFloatingWindow(direction)])
+];
+function unregisterFloatingHotkeys() {
+  for (const [key] of floatingHotkeys) globalShortcut.unregister(key);
+}
+function registerFloatingHotkeys() {
+  const registered = [];
+  for (const [key, handler] of floatingHotkeys) {
+    if (!globalShortcut.register(key, handler)) {
+      for (const previous of registered) globalShortcut.unregister(previous);
+      throw new Error(`Could not register ${key}. Free that shortcut and retry.`);
+    }
+    registered.push(key);
+  }
+}
+
 ipcMain.handle('overlay:window-mode', (event, mode, answerHeight) => {
   if (!win || event.sender !== win.webContents) throw new Error('Invalid overlay window');
-  const bounds = floatingWindowController.setMode(mode, answerHeight);
+  if (!['dashboard', 'floating', 'answer'].includes(mode)) throw new Error('Invalid window mode');
+  const enteringFloating = mode !== 'dashboard' && !floatingMode;
+  if (enteringFloating) registerFloatingHotkeys();
+  let bounds;
+  try { bounds = floatingWindowController.setMode(mode, answerHeight); }
+  catch (error) {
+    if (enteringFloating) unregisterFloatingHotkeys();
+    throw error;
+  }
   floatingMode = mode !== 'dashboard';
-  setInteractive(win, floatingMode || browseMode);
+  if (!floatingMode || enteringFloating) floatingClickThrough = false;
+  if (!floatingMode) {
+    unregisterFloatingHotkeys();
+    browseMode = true;
+    if (win.isVisible?.() === false) win.show();
+  }
+  setInteractive(win, floatingMode ? !floatingClickThrough : true);
   return bounds;
 });
 
@@ -135,15 +189,6 @@ async function createWindow() {
   // A click-through window needs a working exit route before it is shown.
   if (!globalShortcut.register(quitShortcut, () => app.quit())) {
     throw new Error('Could not register Ctrl+Shift+Q. Close the app using that shortcut and retry.');
-  }
-  if (!globalShortcut.register(visibilityShortcut, toggleWindowVisibility)) {
-    throw new Error('Could not register Command/Ctrl+Shift+H. Free that shortcut and retry.');
-  }
-  if (!globalShortcut.register('CommandOrControl+Shift+I', () => {
-    browseMode = !browseMode;
-    setInteractive(win, browseMode || floatingMode);
-  })) {
-    throw new Error('Could not register the interaction shortcut. Free Command/Ctrl+Shift+I and retry.');
   }
   const area = screen.getPrimaryDisplay().workArea;
   const width = Math.min(area.width, Math.max(620, Math.round(area.width * 0.65)));
@@ -357,8 +402,8 @@ ipcMain.handle('usage:start', () => startUsageMeter());
 ipcMain.handle('usage:stop', () => stopUsageMeter());
 ipcMain.handle('usage:status', async () => ({ active: Boolean(usageSession), ...(await authClient.wallet()) }));
 ipcMain.on('permissions:complete', () => {
-  browseMode = false;
-  setInteractive(win, false);
+  browseMode = true;
+  setInteractive(win, floatingMode ? !floatingClickThrough : true);
 });
 ipcMain.handle('audio:permission', () => nativeAudio?.start(true));
 ipcMain.handle('audio:microphone-status', () => process.platform === 'darwin'

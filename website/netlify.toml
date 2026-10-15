@@ -33,3 +33,8 @@
   [headers.values]
     Content-Type = "text/plain; charset=UTF-8"
     Cache-Control = "public, max-age=3600"
+
+[[redirects]]
+  from = "/admin"
+  to = "/index.html"
+  status = 200

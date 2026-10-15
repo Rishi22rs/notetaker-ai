@@ -7,4 +7,19 @@ function clampFloatingBounds(bounds, area) {
     width, height
   };
 }
-module.exports = { clampFloatingBounds };
+function snapFloatingBounds(bounds, area, direction) {
+  if (!['Left', 'Right', 'Up', 'Down'].includes(direction)) throw new Error('Invalid snap direction');
+  const current = clampFloatingBounds(bounds, area);
+  const horizontal = direction === 'Left' || direction === 'Right';
+  const axis = horizontal ? 'x' : 'y';
+  const size = horizontal ? 'width' : 'height';
+  const start = area[axis];
+  const end = start + area[size] - current[size];
+  const positions = [start, Math.round((start + end) / 2), end];
+  const forward = direction === 'Right' || direction === 'Down';
+  const next = forward
+    ? positions.find(position => position > current[axis] + 1) ?? end
+    : [...positions].reverse().find(position => position < current[axis] - 1) ?? start;
+  return { ...current, [axis]: next };
+}
+module.exports = { clampFloatingBounds, snapFloatingBounds };

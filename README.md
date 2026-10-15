@@ -172,10 +172,10 @@ the overlay and drag a window edge or corner to resize it.
 - Press Stop while a response is generating to cancel it.
 - New clears the locally stored conversation.
 - The overlay is click-through by default, so apps behind it remain fully usable.
-- Press Ctrl+Shift+I on Windows or Command+Shift+I on macOS to unlock the overlay.
+- In the floating window only, press Ctrl+Shift+I on Windows or Command+Shift+I on macOS to toggle interaction and click-through. The shortcut is unregistered on the dashboard.
 - While unlocked, use its controls or drag the title area to move it anywhere.
 - Press the same shortcut again to restore click-through mode.
-- Press Ctrl+Shift+H on Windows or Command+Shift+H on macOS to hide or show the app without stopping it.
+- Press Ctrl+Shift+H on Windows or Command+Shift+H on macOS to hide or show the floating window without stopping the session. This shortcut is unavailable on the dashboard.
 - Ctrl+Shift+Q on Windows or Command+Shift+Q on macOS quits.
 
 Windows capture exclusion is best-effort OS protection, not a complete DLP or anti-capture security boundary.
@@ -350,3 +350,56 @@ storage is separate and has not been disabled by this change.
 For production, use HTTPS and a single backend instance until shared distributed
 usage locking and request limits are implemented. Provider keys previously saved
 on client devices are no longer used; removal of the old key settings is separate.
+
+## Admin monitoring dashboard
+
+Open `/admin` on the backend to sign in with Google. Data and logout routes require
+an independent eight-hour HttpOnly admin session; ordinary desktop sessions do not
+grant administrator access. The server checks `ADMIN_EMAILS` on every data request,
+so removing an email revokes its access without waiting for session expiry after restart.
+Set the backend environment:
+
+```dotenv
+ADMIN_EMAILS=underratedgames22@gmail.com
+# Optional alert thresholds for observed provider requests per UTC day:
+ADMIN_GEMINI_DAILY_REQUESTS=
+ADMIN_GROQ_DAILY_REQUESTS=
+```
+
+Add `https://YOUR_BACKEND/admin/callback` as an authorized redirect URI in the
+existing Google OAuth web client. Keep `AUTH_PUBLIC_URL` set to the exact HTTPS
+backend origin. The Google client secret stays on the backend. The public website
+also has an `/admin` entry page: set `VITE_AUTH_SERVER_URL=https://YOUR_BACKEND` in
+the website build environment to link it to the backend login. No secret belongs in
+any `VITE_` variable. Restart/redeploy the backend and rebuild/redeploy the website.
+
+The dashboard refreshes every 15 seconds and shows unexpired listening leases,
+in-flight AI requests, the existing 100-request instance cap, process memory,
+host memory/load, event loop delay, uptime, and daily provider requests, completions,
+errors, rejections, reported tokens and estimated Groq billable audio seconds.
+An 80% request-capacity alert is a concurrency guardrail, not a measured maximum
+number of users: determine sustainable user capacity with production-like load tests.
+Missing keys, recent AI failures, high event loop delay and configured request
+budgets also trigger dashboard alerts. These are visible dashboard alerts only;
+email/push delivery and monitoring while the backend is down are not configured.
+
+Groq rate-limit response headers are captured when provided and shown with the
+observation timestamp; recent snapshots trigger alerts below 20% remaining.
+A snapshot can become stale or describe a different rate window/model, so it is
+not a guaranteed account-wide remaining balance. Gemini remaining quota and
+prepaid credit balances are not available from this integration. Configure daily
+alert budgets from your account's actual limits; these are advisory thresholds,
+not enforced quotas. Daily totals use UTC and persist in `admin_metrics`; writes
+are buffered for up to 10 seconds, so an abrupt process crash can lose that interval.
+Token totals include only usage metadata returned on completed requests. Other
+applications using the same provider account and interrupted streams can consume
+quota that this app cannot observe. No prompts, audio, answers, API keys or user
+session details are stored by the monitoring feature. Live metrics describe one
+backend process; multi-instance aggregate capacity needs shared instrumentation.
+
+
+Floating-only shortcuts: Cmd/Ctrl+Shift+P pauses/resumes the active session.
+Cmd/Ctrl+Shift+Left/Right moves between left, center, and right positions on the
+current display. Cmd/Ctrl+Shift+Up/Down moves between top, middle, and bottom.
+Each press moves one position in the arrow direction, preserves the other axis,
+and stops at the edge. All floating shortcuts are released on the dashboard.
