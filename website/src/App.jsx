@@ -111,13 +111,13 @@ function ProductDemo() {
 }
 
 function App() {
-  const [isTerms, setIsTerms] = useState(() => window.location.hash.startsWith('#/terms'))
+  const [legalPage, setLegalPage] = useState(() => window.location.hash.match(/^#\/(terms|privacy)(?:\/|$)/)?.[1] ?? null)
   useEffect(() => {
     const navigate = () => {
-      const legal = window.location.hash.startsWith('#/terms')
-      setIsTerms(legal)
-      const section = window.location.hash.match(/^#\/terms\/section-(\d+)$/)
-      if (section) requestAnimationFrame(() => document.getElementById(`terms-section-${section[1]}`)?.scrollIntoView())
+      const legal = window.location.hash.match(/^#\/(terms|privacy)(?:\/|$)/)?.[1] ?? null
+      setLegalPage(legal)
+      const section = window.location.hash.match(/^#\/(terms|privacy)\/section-(\d+)$/)
+      if (section) requestAnimationFrame(() => document.getElementById(`${section[1]}-section-${section[2]}`)?.scrollIntoView())
       else if (legal || window.location.hash === '#top') window.scrollTo(0, 0)
     }
     window.addEventListener('hashchange', navigate)
@@ -134,7 +134,7 @@ function App() {
     const observer = new IntersectionObserver(entries => entries.forEach(e => e.isIntersecting && e.target.classList.add('in-view')), { threshold: .12 })
     document.querySelectorAll('.reveal').forEach(el => observer.observe(el))
     return () => observer.disconnect()
-  }, [isTerms])
+  }, [legalPage])
   useEffect(() => {
     let lastY = window.scrollY
     let ticking = false
@@ -160,7 +160,7 @@ function App() {
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [menuOpen])
-  if (isTerms) return <Terms />
+  if (legalPage) return <Terms key={legalPage} policy={legalPage} />
   return <>
     <header className={`nav ${headerHidden ? 'nav-hidden' : ''}`} id="top">
       <Logo />
@@ -229,7 +229,7 @@ function App() {
       <section className="cta-section"><div className="cta-orb"/><div className="reveal"><p className="eyebrow lime">UNYON PRIVATE BETA</p><h2>Be in the room.<br/><em>And ahead of it.</em></h2><p>Try the beta and help shape an AI copilot that works with you—not through your data.</p><DownloadButton platform={platform} className="button button-light" onUnavailable={() => setModalOpen(true)} /><span className="spots"><i/> {platform !== 'other' && DOWNLOADS[platform].available ? `Beta available for ${DOWNLOADS[platform].name}` : 'New beta spots opening weekly'}</span></div></section>
     </main>
 
-    <footer><div><Logo light/><p>Your private AI copilot.<br/>Here when it matters.</p></div><div className="footer-links"><div><b>PRODUCT</b><a href="#features">Features</a><a href="#privacy">Privacy</a><button onClick={() => setModalOpen(true)}>Beta access</button></div><div><b>COMPANY</b><a href="mailto:underratedgames22@gmail.com">Contact</a><a href="#faq">FAQ</a><a href="#/terms">Terms &amp; conditions</a></div></div><div className="footer-bottom"><span>© 2026 UNYON</span><span>Built local. Built private.</span></div></footer>
+    <footer><div><Logo light/><p>Your private AI copilot.<br/>Here when it matters.</p></div><div className="footer-links"><div><b>PRODUCT</b><a href="#features">Features</a><a href="#privacy">Privacy</a><button onClick={() => setModalOpen(true)}>Beta access</button></div><div><b>COMPANY</b><a href="mailto:underratedgames22@gmail.com">Contact</a><a href="#faq">FAQ</a><a href="#/terms">Terms &amp; conditions</a><a href="#/privacy">Privacy Policy</a></div></div><div className="footer-bottom"><span>© 2026 UNYON</span><span>Built local. Built private.</span></div></footer>
     {modalOpen && <BetaModal onClose={() => setModalOpen(false)} />}
   </>
 }
