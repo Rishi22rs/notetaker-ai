@@ -11,7 +11,7 @@ By accepting these Terms during registration or installation, you agree to be bo
 
 ## 2. What UNYON provides
 
-UNYON provides AI assistance, audio transcription, notes, document context, and related features. Available features may differ by device, operating system, model, and app version. Some features require an account, internet access, downloaded models, device permissions, or prepaid usage credits.
+UNYON provides cloud-based AI assistance and audio transcription, along with notes, document context, and related features. AI and transcription require an internet connection and are processed by cloud services. Available features may differ by device, operating system, cloud model, and app version. Some features require an account, device permissions, or prepaid usage credits. UNYON does not provide local AI or transcription models.
 
 AI responses and transcripts may be inaccurate, incomplete, or misleading. Review outputs before relying on or sharing them. UNYON does not guarantee any interview, employment, academic, business, or other outcome. Outputs are not a substitute for qualified legal, medical, financial, or other professional advice.
 
@@ -41,11 +41,11 @@ These Terms do not transfer ownership of Your Content to us or grant permission 
 
 We do not claim ownership of AI outputs merely because they were generated through UNYON. Outputs may resemble outputs provided to other users and may not qualify for intellectual property protection. You are responsible for reviewing outputs and obtaining any rights needed for your intended use.
 
-## 6. Local processing, cloud features, and privacy
+## 6. Cloud processing and privacy
 
-Local AI and transcription features are designed to process their inputs on your device. The Service also uses online systems for features such as authentication, payments, and session history. Session details and uploaded resumes may be stored on our servers when you use those features.
+UNYON uses cloud services to process audio for transcription and generate AI responses. When you use these features, relevant audio, prompts, transcripts, and selected document or reference content are transmitted over the internet for processing. AI and transcription do not run locally on your device and are unavailable offline. The Service also uses online systems for authentication, payments, and session history. Session details and uploaded resumes may be stored on our servers when you use those features.
 
-If you enable cloud features, relevant audio may be transmitted to Groq, and prompts, transcripts, or selected reference excerpts may be transmitted to Google’s Gemini service. Those providers’ terms, privacy practices, limits, and charges apply to their services. Provider charges are separate from UNYON usage charges unless expressly stated otherwise.
+Cloud processing providers include Groq for transcription and Google’s Gemini service for AI responses. Relevant audio is sent to the transcription provider, and prompts, transcripts, or selected reference excerpts are sent to the AI provider as needed for the feature you use. Those providers’ terms, privacy practices, and usage limits apply to their services. Where you connect your own provider account or API key, any charges billed directly by that provider are separate from UNYON usage charges unless expressly stated otherwise.
 
 Account data, session history, uploaded resumes, and other content stored on our servers remain with UNYON until you request deletion by emailing underratedgames22@gmail.com from your registered email address. We may verify your identity before processing the request. Where applicable law requires us to retain particular records, we retain those records only as required by law. Locally stored content remains on your device and must be deleted there separately.
 
