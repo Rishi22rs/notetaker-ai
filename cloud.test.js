@@ -73,6 +73,7 @@ test('Groq keeps speakers, removes capture overlap, skips silence and leaves mix
     backend.audio('computer',speech(2)); backend.audio('computer',speech(2)); backend.audio('computer',speech(2));
     await tick(); await tick();
     assert.equal(requests.length,1); assert.equal(requests[0].body.get('language'),null);
+    assert.equal(requests[0].body.get('prompt'),null, 'Do not seed silence with text the recognizer could echo');
     assert.equal(requests[0].body.get('file').size,44 + 16000*2*4);
     assert.equal(events.find(event=>event.type==='transcript').speaker,'computer');
   } finally {backend.stop();}

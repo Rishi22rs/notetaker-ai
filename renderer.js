@@ -97,6 +97,32 @@ const floatingToolbar = document.getElementById('floating-toolbar');
 const floatingQuestion = document.getElementById('floating-question');
 const floatingQuestionText = document.getElementById('floating-question-text');
 const floatingState = document.getElementById('floating-state');
+const floatingSystemTranscript = document.getElementById('floating-system-transcript');
+const systemTranscriptViewport = document.getElementById('system-transcript-viewport');
+const systemTranscriptText = document.getElementById('system-transcript-text');
+let liveSystemText = '';
+const systemTranscriptTicker = createLiveTranscriptTicker({
+  viewport: systemTranscriptViewport, textElement: systemTranscriptText,
+  isActive: () => floatingView,
+  reducedMotion: () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+});
+function scrollSystemTranscript() { systemTranscriptTicker.refresh(); }
+function updateSystemTranscript(event) {
+  if (event.type !== 'transcript' || event.speaker !== 'computer' || !String(event.text || '').trim()) return;
+  liveSystemText = mergeCaptionText(liveSystemText, event.text).slice(-300);
+  systemTranscriptTicker.setText(liveSystemText);
+  systemTranscriptText.title = liveSystemText;
+  scrollSystemTranscript();
+}
+function resetSystemTranscript() {
+  systemTranscriptTicker.reset();
+  liveSystemText = '';
+  systemTranscriptText.textContent = 'Waiting for system audio…';
+  systemTranscriptText.removeAttribute('title');
+  systemTranscriptViewport.scrollLeft = 0;
+}
+new ResizeObserver(scrollSystemTranscript).observe(systemTranscriptViewport);
+
 const floatingPause = document.getElementById('floating-pause');
 const floatingCollapse = document.getElementById('floating-collapse');
 const returnFloating = document.getElementById('return-floating');
@@ -111,14 +137,20 @@ async function setFloatingView(enabled, expanded = floatingAnswerOpen) {
   document.body.classList.toggle('floating-answer-open', enabled && expanded);
   floatingToolbar.hidden = !enabled;
   floatingQuestion.hidden = !enabled;
+  floatingSystemTranscript.hidden = !enabled;
+  if (!enabled) systemTranscriptTicker.stop();
   floatingCollapse.replaceChildren(createAppIcon(expanded ? 'chevron-up' : 'chevron-down'));
   floatingCollapse.setAttribute('aria-expanded', String(expanded));
   setView(enabled ? 'transcript' : 'home');
   returnFloating.hidden = enabled || !sessionContext.hasSession();
   windowModeQueue = windowModeQueue.catch(() => {}).then(() => window.overlay.setWindowMode(enabled ? (expanded ? 'answer' : 'floating') : 'dashboard', answerHeight));
   await windowModeQueue;
+  if (enabled) scrollSystemTranscript();
 }
 function syncFloatingStatus() {
+  const listening = transcriptionRunning && transcriptionSources.system;
+  document.getElementById('system-transcript-indicator').classList.toggle('listening', listening);
+  if (!liveSystemText) systemTranscriptText.textContent = !transcriptionSources.system ? 'System audio is off' : listening ? 'Listening for system audio…' : 'System audio paused';
   floatingState.textContent = transcriptStatus.textContent;
   floatingPause.textContent = sessionActive ? 'Pause' : 'Resume';
   floatingPause.dataset.buttonIcon = sessionActive ? 'pause' : 'play';
@@ -595,7 +627,13 @@ function generateInterviewAnswer(request, label, turnId, verbosity = floatingVie
     onChunk(chunk) {
       if (activeInterviewAnswerTurnId !== turnId) return;
       rawAnswer += chunk;
-      if (!floatingView) renderInterviewContent(card, cleanAnswer(), true);
+      const answer = cleanAnswer();
+      if (!answer.trim()) return;
+      if (floatingView && card.dataset.buffered === 'true') {
+        delete card.dataset.buffered;
+        selectAnswerCard(card);
+      }
+      renderInterviewContent(card, answer, true);
     },
     onDone() {
       if (activeInterviewAnswerTurnId !== turnId) return;
@@ -614,23 +652,22 @@ function generateInterviewAnswer(request, label, turnId, verbosity = floatingVie
         }
         transcriptStatus.textContent = `${verbosity === 'detailed' ? 'Expanded answer' : 'Answer'} ready · ${label}`;
       };
-      if (floatingView) {
+      if (floatingView && card.dataset.buffered === 'true') {
         delete card.dataset.buffered;
         selectAnswerCard(card);
-        showAnswerLoader(text);
-        const revealTimer = setTimeout(revealAnswer, 2000);
-        cancelInterviewAnswer = () => {
-          clearTimeout(revealTimer);
-          if (previousCard?.isConnected && selectedAnswerId === turnId) selectAnswerCard(previousCard);
-        };
-      } else revealAnswer();
+      }
+      revealAnswer();
     },
     onError(error) {
       if (activeInterviewAnswerTurnId !== turnId) return;
       cancelInterviewAnswer = null;
       automaticAnswerActive = false;
       text.classList.remove('pending');
-      if (floatingView && card !== previousCard) { card.remove(); updateAnswerNavigation(); }
+      if (floatingView && card !== previousCard) {
+        card.remove();
+        if (selectedAnswerId === turnId) selectAnswerCard(previousCard?.isConnected ? previousCard : null);
+        updateAnswerNavigation();
+      }
       else if (!floatingView) text.textContent = isRateLimitNotice(error) ? 'Answer unavailable. You can try again.' : `Could not generate an answer: ${error}`;
       transcriptStatus.textContent = 'Answer generation failed';
     }
@@ -1103,6 +1140,7 @@ setupForm.addEventListener('submit', async (event) => {
 });
 
 function clearSessionContext() {
+  resetSystemTranscript();
   sessionContext.clear();
   returnFloating.hidden = true;
   floatingQuestionText.textContent = 'Listening for the interviewer’s question…';
@@ -1344,6 +1382,17 @@ showAccount.addEventListener('click', (event) => {
   if (open) openSettings.focus();
 });
 accountMenu.addEventListener('click', (event) => event.stopPropagation());
+for (const button of document.querySelectorAll('[data-legal-page]')) {
+  button.addEventListener('click', async () => {
+    accountMenu.hidden = true;
+    try {
+      await window.overlay.openLegalPage(button.dataset.legalPage);
+    } catch (error) {
+      setStatus(`Could not open legal page: ${error.message}`, true);
+    }
+  });
+}
+
 function formatUsage(seconds) {
   const whole = Math.max(0, Math.floor(Number(seconds) || 0));
   const minutes = Math.floor(whole / 60);
@@ -1979,6 +2028,7 @@ toggleTranscription.addEventListener('click', async () => {
 });
 
 function resetTranscriptHistory() {
+  resetSystemTranscript();
   cancelGeneration?.();
   cancelGeneration = null;
   activeTypedAnswerId = null;
@@ -2062,6 +2112,7 @@ let automaticAnswerActive = false;
 const INTERVIEWER_QUIET_MS = 3500;
 
 window.overlay.onTranscription((event) => {
+  updateSystemTranscript(event);
   if (event.type === 'computer-speech-activity') {
     latestComputerSpeechAt = Date.now();
     if (automaticAnswerActive) {
@@ -2369,15 +2420,28 @@ renderStoredTranscript();
 renderSummary();
 refreshModels();
 
+function finishStartup() {
+  const splash = document.getElementById('startup-screen');
+  document.querySelector('main.panel').inert = false;
+  document.body.classList.remove('starting');
+  document.body.classList.add('startup-ready');
+  splash.classList.add('leaving');
+  const cleanup = () => {
+    splash.remove();
+    document.body.classList.remove('startup-ready');
+  };
+  setTimeout(cleanup, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600);
+}
+
 window.overlay.getAuthStatus().then((result) => {
   applyAuthState(result);
   if (result.authenticated) window.overlay.getUsageStatus().then(updateUsageState).catch(() => updateUsageState());
-  if (!result.authenticated) loginStatus.textContent = 'Sign in to continue';
+  if (!result.authenticated) loginStatus.textContent = '';
 }).catch(() => {
   loginGate.hidden = false;
   loginStatus.classList.add('error');
   loginStatus.textContent = 'Cannot reach the authentication server.';
-});
+}).finally(finishStartup);
 window.overlay.loadNotes().then((content) => { notepad.value = content; }).catch(() => { notesStatus.textContent = 'Could not load notes'; });
 window.overlay.loadContext().then((value) => {
   if (!contextDirty) contextState = value && Array.isArray(value.files) ? value : { text: '', files: [] };
@@ -2441,3 +2505,10 @@ document.getElementById('feedback-form').addEventListener('submit', async event 
  } catch (error) { document.getElementById('feedback-status').textContent = error.message || 'Could not save feedback. Try again or skip.'; }
  finally { button.disabled = false; }
 });
+
+
+for (const button of document.querySelectorAll('[data-window-action]')) {
+  button.addEventListener('click', () => {
+    window.overlay.controlWindow(button.dataset.windowAction).catch(error => setStatus(error.message, true));
+  });
+}

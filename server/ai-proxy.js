@@ -27,7 +27,6 @@ function transcriptionPayload(body) {
   if (audio.length < 44 || audio.length > 1000000 || audio.toString('ascii', 0, 4) !== 'RIFF' || audio.toString('ascii', 8, 12) !== 'WAVE') throw failure('Invalid or oversized audio.', 400);
   const form = new FormData(); form.append('file', new Blob([audio], { type: 'audio/wav' }), 'audio.wav'); form.append('model', body.model); form.append('response_format', 'json');
   if (body.language && body.language !== 'auto') form.append('language', body.language);
-  form.append('prompt', 'Interview conversation in Hindi and English. Preserve spoken language and technical terms.');
   return form;
 }
 function createAIProxy({ config, authorize, fetchImpl = fetch, logger = console.log, observer = () => {} }) {

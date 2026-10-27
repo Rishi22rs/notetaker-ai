@@ -14,7 +14,7 @@
     "plan:add": "node server/manage-plan.js add",
     "plan:remove": "node server/manage-plan.js remove",
     "plans:migrate-seconds": "node server/migrate-recharge-plans-to-seconds.js",
-    "test": "node --test server/admin-monitor.test.js speech-chunker.test.js server/ai-proxy.test.js pdf-text.test.js server/session-history.test.js floating-window.test.js session-context.test.js cloud.test.js interaction.test.js audio-echo-filter.test.js transcription.test.js local-ai.test.js context-merge.test.js context-prompt.test.js interview-session.test.js question-detector.test.js context-retriever.test.js interview-answer-prompt.test.js interview-question-context.test.js auth-client.test.js auth-crypto.test.js server/payments.test.js server/usage-meter.test.js",
+    "test": "node --test live-transcript-ticker.test.js server/admin-monitor.test.js speech-chunker.test.js server/ai-proxy.test.js pdf-text.test.js server/session-history.test.js floating-window.test.js session-context.test.js cloud.test.js interaction.test.js audio-echo-filter.test.js transcription.test.js local-ai.test.js context-merge.test.js context-prompt.test.js interview-session.test.js question-detector.test.js context-retriever.test.js interview-answer-prompt.test.js interview-question-context.test.js auth-client.test.js auth-crypto.test.js server/payments.test.js server/usage-meter.test.js",
     "build:win": "electron-builder --win",
     "build:mac": "npm run build:audio:mac && electron-builder --mac",
     "build:all": "electron-builder -mwl"
@@ -39,22 +39,14 @@
       "output": "dist"
     },
     "files": [
-      "**/*",
-      "!.env",
-      "!.venv/**/*",
-      "!python-worker/**/*",
-      "!models/**/*",
-      "!vendor/**/*",
-      "!.whisper.cpp/**/*",
-      "!native-audiotee/**/*",
+      "*.js",
+      "index.html",
+      "package.json",
+      "!*.test.js",
+      "!browser-smoke.js",
       "!local-ai.js",
       "!transcription.js",
-      "!transcription-metal.js",
-      "!transcribe*.py",
-      "!requirements.txt",
-      "!scripts/prepare-llama-runtime.js",
-      "!**/*.test.js",
-      "!dist/**/*"
+      "!transcription-metal.js"
     ],
     "win": {
       "target": "nsis",
@@ -77,9 +69,11 @@
         }
       ],
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Local transcription labels speech from your microphone as You.",
-        "NSAudioCaptureUsageDescription": "Local transcription captures computer audio for on-device captions."
-      }
+        "NSMicrophoneUsageDescription": "UNYON transcribes your microphone during a session.",
+        "NSAudioCaptureUsageDescription": "UNYON transcribes computer audio during a session to provide live answers."
+      },
+      "icon": "build/icon.png",
+      "minimumSystemVersion": "14.2"
     },
     "nsis": {
       "oneClick": false,

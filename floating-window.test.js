@@ -16,7 +16,7 @@ test('floating session expands below the question and restores dashboard bounds'
   const dashboard = window.getBounds();
   const floating = controller.setMode('floating');
   assert.equal(floating.width, 620);
-  assert.equal(floating.height, 168);
+  assert.equal(floating.height, 206);
   window.setBounds({ ...floating, x: 100, y: 50 });
   const answer = controller.setMode('answer');
   assert.equal(answer.x, 100);

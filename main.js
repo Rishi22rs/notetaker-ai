@@ -57,7 +57,6 @@ function setInteractive(window, enabled) {
 }
 
 function toggleWindowVisibility() {
-  if (!floatingMode) return;
   if (!win || win.isDestroyed()) return;
   if (win.isVisible()) {
     win.hide();
@@ -141,10 +140,14 @@ function snapFloatingWindow(direction) {
 }
 const floatingHotkeys = [
   [interactionShortcut, toggleFloatingInteraction],
-  [visibilityShortcut, toggleWindowVisibility],
   ['CommandOrControl+Shift+P', toggleFloatingPlayback],
   ...['Left', 'Right', 'Up', 'Down'].map(direction => [`CommandOrControl+Shift+${direction}`, () => snapFloatingWindow(direction)])
 ];
+function registerVisibilityHotkey() {
+  if (!globalShortcut.register(visibilityShortcut, toggleWindowVisibility)) {
+    throw new Error(`Could not register ${visibilityShortcut}. Free that shortcut and retry.`);
+  }
+}
 function unregisterFloatingHotkeys() {
   for (const [key] of floatingHotkeys) globalShortcut.unregister(key);
 }
@@ -190,6 +193,7 @@ async function createWindow() {
   if (!globalShortcut.register(quitShortcut, () => app.quit())) {
     throw new Error('Could not register Ctrl+Shift+Q. Close the app using that shortcut and retry.');
   }
+  registerVisibilityHotkey();
   const area = screen.getPrimaryDisplay().workArea;
   const width = Math.min(area.width, Math.max(620, Math.round(area.width * 0.65)));
   const height = Math.min(area.height, Math.max(400, Math.round(area.height * 0.65)));
@@ -207,7 +211,7 @@ async function createWindow() {
     focusable: true,
     hasShadow: false,
     resizable: process.platform === 'darwin',
-    maximizable: false,
+    maximizable: true,
     fullscreenable: false,
     show: false,
     webPreferences: {
@@ -309,6 +313,23 @@ ipcMain.handle('local-ai:models', () => modelAI.listModels());
 ipcMain.handle('profile:name', () => {
   try { return os.userInfo().username || 'Local User'; }
   catch { return 'Local User'; }
+});
+ipcMain.handle('window:control', (event, action) => {
+  if (!win || win.isDestroyed() || event.sender !== win.webContents) throw new Error('Invalid app window');
+  if (action === 'close') return win.close();
+  if (action === 'minimize') return win.minimize();
+  if (action === 'maximize') {
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+    return;
+  }
+  throw new Error('Unknown window action');
+});
+
+ipcMain.handle('legal:open', (_event, page) => {
+  const pages = { privacy: 'https://myunyon.com/#/privacy', terms: 'https://myunyon.com/#/terms' };
+  if (!Object.hasOwn(pages, page)) throw new Error('Unknown legal page.');
+  return shell.openExternal(pages[page]);
 });
 ipcMain.handle('auth:status', () => authClient.status());
 ipcMain.handle('auth:login', (event) => authClient.login(() => {
@@ -669,7 +690,7 @@ ipcMain.on('local-ai:cancel', (_event, id) => {
 
 app.whenReady().then(async () => {
   authClient = createAuthClient({
-    serverUrl: process.env.AUTH_SERVER_URL || 'http://127.0.0.1:8787',
+    serverUrl: process.env.AUTH_SERVER_URL || 'https://api.myunyon.com',
     userDataPath: app.getPath('userData'),
     openExternal: (url) => shell.openExternal(url)
   });

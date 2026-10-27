@@ -359,11 +359,11 @@ test('starting transcription checks permissions before charging session time', (
   });
   assert.equal(cleared, false);
   const generation = source.match(/function generateInterviewAnswer\([\s\S]*?\n\}/)[0];
-  assert.match(generation, /if \(!floatingView\) renderInterviewContent\(card, cleanAnswer\(\), true\)/);
-  assert.match(generation, /setTimeout\(revealAnswer, 2000\)/);
+  assert.match(generation, /renderInterviewContent\(card, answer, true\)/);
+  assert.doesNotMatch(generation, /setTimeout\(revealAnswer/);
 });
 
-test('interaction hotkey is registered only for the floating window and preserves click-through on answer expansion', () => {
+test('visibility hotkey works in both modes while interaction hotkeys remain floating-only', () => {
   const handlers = new Map(), shortcuts = new Map(); let ignored = false; let visible = true; const messages = [];
   const window = { isDestroyed: () => false, isVisible: () => visible, hide() { visible = false; }, show() { visible = true; }, showInactive() { visible = true; }, setAlwaysOnTop() {}, webContents: { send(channel) { messages.push(channel); } }, setFocusable() {}, focus() {}, setIgnoreMouseEvents(value) { ignored = value; } };
   const context = { __dirname, process: { platform: 'win32' }, setInterval, clearInterval,
@@ -382,6 +382,11 @@ test('interaction hotkey is registered only for the floating window and preserve
   vm.runInContext('win = testWindow; floatingWindowController = { setMode: () => ({}) }; browseMode = true;', context);
   const mode = handlers.get('overlay:window-mode'); const event = { sender: window.webContents };
   assert.equal(shortcuts.size, 0);
+  vm.runInContext('registerVisibilityHotkey();', context);
+  const dashboardHide = shortcuts.get('CommandOrControl+Shift+H');
+  dashboardHide(); assert.equal(visible, false, 'dashboard can be hidden');
+  dashboardHide(); assert.equal(visible, true, 'dashboard can be restored');
+  assert.equal(ignored, false);
   mode(event, 'floating');
   const shortcut = shortcuts.get('CommandOrControl+Shift+I'); assert.equal(typeof shortcut, 'function');
   const hideShortcut = shortcuts.get('CommandOrControl+Shift+H'); assert.equal(typeof hideShortcut, 'function');
@@ -395,8 +400,119 @@ test('interaction hotkey is registered only for the floating window and preserve
   mode(event, 'answer'); assert.equal(ignored, true);
   shortcut(); assert.equal(ignored, false);
   hideShortcut(); assert.equal(visible, false);
-  mode(event, 'dashboard'); assert.equal(visible, true); assert.equal(shortcuts.size, 0); assert.equal(ignored, false);
+  mode(event, 'dashboard'); assert.equal(visible, true); assert.equal(shortcuts.size, 1); assert.equal(ignored, false);
   shortcut(); assert.equal(ignored, false, 'stale callback cannot change dashboard interaction');
-  hideShortcut(); assert.equal(visible, true, 'stale hide callback cannot hide the dashboard');
+  assert.equal(shortcuts.get('CommandOrControl+Shift+H'), dashboardHide);
+  hideShortcut(); assert.equal(visible, false, 'hide remains active after returning to dashboard');
+  hideShortcut(); assert.equal(visible, true, 'show remains active after returning to dashboard');
   pauseShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:toggle-session').length, 1, 'pause is inactive on the dashboard');
+});
+
+function streamingAnswerHarness() {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const fn = source.match(/function generateInterviewAnswer\([\s\S]*?\n\}/)[0];
+  const rendered = [], selected = [];
+  const pending = new Set();
+  const text = { classList: { add: value => pending.add(value), remove: value => pending.delete(value) } };
+  const expand = { hidden: false };
+  const previous = { dataset: { turnId: 'old' }, isConnected: true };
+  const card = { dataset: { turnId: 'new' }, querySelector: selector => selector === '.interview-answer-text' ? text : expand, remove() { this.removed = true; } };
+  const turn = { id: 'new' };
+  let callbacks;
+  const context = {
+    floatingView: true, preferredCodeLanguage: 'JavaScript', selectedAnswerId: 'old', automaticAnswerActive: false,
+    cancelUnfinishedInterviewAnswer() {}, answerHistoryCards: () => [previous], answerCardFor: () => card,
+    selectAnswerCard(value) { selected.push(value); context.selectedAnswerId = value?.dataset.turnId; }, updateAnswerNavigation() {},
+    showAnswerLoader() {}, setAnswerSnippet(_card, snippet) { card.answerSnippet = snippet; },
+    renderInterviewContent(_card, answer, streaming) { rendered.push({ answer, streaming }); },
+    transcriptStatus: { textContent: '' }, transcriptContext: [turn], saveTranscriptContext() {}, compactQuestionSnippet: value => value,
+    isRateLimitNotice: () => false,
+    window: { overlay: { generateInterviewAnswer(_request, handlers) { callbacks = handlers; return () => {}; } } },
+    setTimeout() { throw new Error('Answer presentation must not use a delay'); }
+  };
+  vm.runInNewContext(`${fn}\ngenerateInterviewAnswer({ question: 'Explain closures' }, 'technical', 'new', 'concise');`, context);
+  return { context, callbacks, rendered, selected, card, turn, pending };
+}
+
+test('floating answer shows the first meaningful chunk and completes without a reveal timer', () => {
+  const h = streamingAnswerHarness();
+  assert.equal(h.selected.length, 0);
+  h.callbacks.onChunk('ANSWERING: Closures\n');
+  assert.equal(h.selected.length, 0);
+  h.callbacks.onChunk('A closure ');
+  assert.equal(h.selected[0], h.card);
+  assert.equal(h.rendered[0].answer, 'A closure ');
+  assert.equal(h.rendered[0].streaming, true);
+  h.callbacks.onChunk('retains access to its lexical scope.');
+  assert.equal(h.selected.length, 1);
+  h.callbacks.onDone();
+  assert.equal(h.rendered.at(-1).streaming, undefined);
+  assert.equal(h.turn.answer.text, 'A closure retains access to its lexical scope.');
+  assert.equal(h.pending.has('pending'), false);
+  assert.equal(h.context.cancelInterviewAnswer, null);
+});
+
+test('superseded answer chunks cannot replace the current floating answer', () => {
+  const h = streamingAnswerHarness();
+  h.context.activeInterviewAnswerTurnId = 'replacement';
+  h.callbacks.onChunk('Outdated answer'); h.callbacks.onDone();
+  assert.equal(h.selected.length, 0);
+  assert.equal(h.rendered.length, 0);
+  assert.equal(h.turn.answer, undefined);
+});
+
+test('floating live ticker accepts only system-audio captions and retains a bounded latest line', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const update = source.match(/function updateSystemTranscript\(event\) \{[\s\S]*?\n\}/)[0];
+  const merge = source.match(/function mergeCaptionText\(previous, incoming\) \{[\s\S]*?\n\}/)[0];
+  let scrolled = 0;
+  const text = {};
+  const context = { systemTranscriptText: text, systemTranscriptTicker: { setText(value) { text.textContent = value; } }, scrollSystemTranscript: () => { scrolled += 1; } };
+  vm.createContext(context);
+  vm.runInContext(`let liveSystemText = '';\n${merge}\n${update}`, context);
+  vm.runInContext("updateSystemTranscript({type:'transcript',speaker:'user',text:'Microphone should stay private here'});", context);
+  assert.equal(text.textContent, undefined);
+  vm.runInContext("updateSystemTranscript({type:'transcript',speaker:'computer',text:'Tell me about your'});updateSystemTranscript({type:'transcript',speaker:'computer',text:'about your experience'});", context);
+  assert.equal(text.textContent, 'Tell me about your experience'); assert.equal(scrolled, 2);
+  vm.runInContext("updateSystemTranscript({type:'transcript',speaker:'computer',text:'a'.repeat(1500)});", context);
+  assert.equal(text.textContent.length, 300);
+});
+
+test('startup keeps login hidden until session resolves and dismisses the loader on success or failure', async () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const finish = source.match(/function finishStartup\(\) \{[\s\S]*?\n\}/)[0];
+  const authFlow = source.slice(source.indexOf('window.overlay.getAuthStatus().then'), source.indexOf('window.overlay.loadNotes().then'));
+  for (const outcome of ['authenticated', 'signed-out', 'error']) {
+    const classes = new Set(['starting']);
+    const splashClasses = new Set();
+    const panel = { inert: true };
+    let removed = false, resolve, reject;
+    const pending = new Promise((yes, no) => { resolve = yes; reject = no; });
+    const gate = { hidden: true };
+    const status = { classList: { add() {} }, textContent: '' };
+    const context = {
+      document: {
+        body: { classList: { add: value => classes.add(value), remove: value => classes.delete(value) } },
+        querySelector: () => panel,
+        getElementById: () => ({ classList: { add: value => splashClasses.add(value) }, remove() { removed = true; } })
+      },
+      window: { overlay: { getAuthStatus: () => pending, getUsageStatus: async () => ({}) }, matchMedia: () => ({ matches: true }) },
+      loginGate: gate, loginStatus: status,
+      applyAuthState(result) { gate.hidden = result.authenticated; },
+      updateUsageState() {}, setTimeout(callback) { callback(); }
+    };
+    vm.createContext(context);
+    const completion = vm.runInContext(`${finish}\n${authFlow}`, context);
+    assert.equal(gate.hidden, true);
+    assert.equal(panel.inert, true);
+    assert.equal(classes.has('starting'), true);
+    if (outcome === 'error') reject(new Error('offline'));
+    else resolve({ authenticated: outcome === 'authenticated' });
+    await completion;
+    assert.equal(gate.hidden, outcome === 'authenticated');
+    assert.equal(panel.inert, false);
+    assert.equal(classes.has('starting'), false);
+    assert.equal(removed, true);
+    if (outcome === 'error') assert.match(status.textContent, /Cannot reach/);
+  }
 });

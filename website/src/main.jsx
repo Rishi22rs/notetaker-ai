@@ -4,7 +4,7 @@ import App from './App'
 import './styles.css'
 
 function AdminEntry() {
-  const backend = import.meta.env.VITE_AUTH_SERVER_URL || (import.meta.env.DEV ? 'http://127.0.0.1:8787' : '')
+  const backend = import.meta.env.VITE_AUTH_SERVER_URL || 'https://api.myunyon.com'
   let destination
   try { const url = new URL(backend); if (url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname))) destination = `${url.origin}/admin` } catch {}
   return <>

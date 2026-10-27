@@ -31,7 +31,6 @@ function createCloudTranscription(publish, { getSettings, fetchImpl = fetch }) {
       form.append('file', new Blob([wavFromBytes(bytes)], { type: 'audio/wav' }), `${speaker}.wav`);
       form.append('model', settings.groqModel); form.append('response_format', 'json');
       if (settings.language !== 'auto') form.append('language', settings.language);
-      form.append('prompt', 'Interview conversation in Hindi and English. Preserve spoken language and technical terms: JavaScript, TypeScript, PostgreSQL, Kubernetes, Redis.');
       const response = await fetchImpl('https://api.groq.com/openai/v1/audio/transcriptions', {
         method: 'POST', headers: { Authorization: `Bearer ${settings.groqKey}` }, body: form,
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)])

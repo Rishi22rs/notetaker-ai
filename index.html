@@ -482,10 +482,77 @@
     .platform-darwin .windows-hotkey { display: none; }
     @media (max-width: 1000px) { .hotkeys-list { grid-template-columns: 1fr; } }
     .floating-mode.interactive .panel { outline: 1px solid rgb(201 255 69 / .45); outline-offset: 2px; }
+    .floating-system-transcript { display: flex; align-items: center; gap: 9px; flex: 0 0 32px; min-width: 0; padding: 7px 11px; border: 1px solid #353e33; border-radius: 8px; background: var(--chrome); }.floating-system-transcript[hidden] { display: none; }.system-transcript-source { display: flex; align-items: center; gap: 6px; flex-shrink: 0; color: var(--muted); font-size: 8px; letter-spacing: .8px; }.system-transcript-source i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }.system-transcript-source i.listening { background: var(--accent); box-shadow: 0 0 6px #c9ff4525; }.system-transcript-viewport { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; }#system-transcript-text { display: block; will-change: transform; width: max-content; white-space: nowrap; font-size: 11px; line-height: 16px; color: var(--text); }
+
+    .startup-screen { position: fixed; inset: 8px; z-index: 2000; display: grid; place-items: center; overflow: hidden; border: 1px solid #303531; border-radius: 12px; background: radial-gradient(ellipse at 50% 42%, #c9ff450a, transparent 52%), #111314; transition: opacity .45s ease, transform .55s cubic-bezier(.22,1,.36,1); }
+    .startup-content { display: flex; flex-direction: column; align-items: center; text-align: center; }
+    .startup-icon { width: 80px; height: 80px; filter: drop-shadow(0 0 24px #c9ff4520); animation: startup-breathe 2s ease-in-out infinite; }
+    .startup-name { margin: 20px 0 6px; font-size: 21px; font-weight: 650; letter-spacing: 5px; padding-left: 5px; color: #f4f5f7; }
+    .startup-label { margin: 0; font-size: 12px; color: #969f97; letter-spacing: .2px; }
+    .startup-track { width: 100px; height: 2px; margin-top: 26px; border-radius: 2px; background: #c9ff4515; overflow: hidden; }
+    .startup-track::after { content: ''; display: block; width: 40%; height: 100%; border-radius: inherit; background: #c9ff45; animation: startup-progress 1.4s ease-in-out infinite; }
+    body.starting > .panel, body.starting > .login-gate { visibility: hidden; }
+    body.startup-ready > .panel, body.startup-ready > .login-gate:not([hidden]) { animation: startup-reveal .55s cubic-bezier(.22,1,.36,1) both; }
+    .startup-screen.leaving { opacity: 0; transform: scale(1.035); pointer-events: none; }
+    @keyframes startup-breathe { 50% { opacity: .7; transform: translateY(-3px); } }
+    @keyframes startup-progress { from { transform: translateX(-110%); } to { transform: translateX(360%); } }
+    @keyframes startup-reveal { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .startup-icon, .startup-track::after, body.startup-ready > .panel, body.startup-ready > .login-gate:not([hidden]) { animation: none; } .startup-screen { transition: none; } }
+
+    .login-gate { overflow-y: auto; background: radial-gradient(ellipse at 50% 15%, #c9ff4509, transparent 55%), #111314; padding: 28px; }
+    .login-card { width: min(560px, 100%); padding: 38px 34px 26px; border-color: #c9ff451a; border-radius: 20px; background: linear-gradient(150deg, #1c201b, #171a18 65%); box-shadow: 0 24px 80px #0005, inset 0 1px #ffffff05; }
+    .login-brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 30px; font-size: 16px; font-weight: 700; letter-spacing: 3px; color: #f4f5f7; }
+    .login-brand svg { width: 38px; height: 38px; }
+    .login-eyebrow { display: flex; align-items: center; justify-content: center; gap: 7px; color: #a6af9f; font-size: 9px; letter-spacing: 1.8px; margin-bottom: 16px; }
+    .login-eyebrow > span { width: 5px; height: 5px; border-radius: 50%; background: #c9ff45; box-shadow: 0 0 10px #c9ff4535; }
+    .login-card h2 { font-size: clamp(26px, 4.5vw, 38px); line-height: 1.15; letter-spacing: -1.4px; font-weight: 500; margin-bottom: 18px; color: #f4f5f7; }
+    .login-card h2 em { color: #c9ff45; font-family: Georgia, serif; font-weight: 400; }
+    .login-card .login-intro { font-size: 12px; line-height: 1.8; color: #a4ada5; margin-bottom: 22px; }
+    .login-features { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 28px; color: #b1baaf; font-size: 10px; }
+    .login-features > span { display: inline-flex; gap: 5px; align-items: center; }
+    .login-features i { display: inline-flex; color: #c9ff45; }
+    .login-features .app-icon { width: 13px; height: 13px; margin: 0; }
+    .login-action { border-top: 1px solid #ffffff0c; padding-top: 24px; }
+    #google-login { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 12px 16px; border-radius: 10px; background: #f4f5f0; border: 1px solid #f4f5f0; color: #20251e; font-size: 13px; font-weight: 600; transition: background .18s, box-shadow .18s; }
+    #google-login:hover:not(:disabled) { background: #fff; box-shadow: 0 4px 20px #0003; }
+    #google-login > svg { width: 18px; height: 18px; flex-shrink: 0; }
+    #google-login > span:nth-child(2) { flex: 1; }
+    .login-button-arrow { color: #6b7568; font-size: 17px; }
+    .login-card .login-browser-note { margin: 10px 0 0; font-size: 10px; color: #879182; }
+    #login-status { margin-top: 8px; min-height: 0; font-size: 11px; }
+    #login-status:empty { display: none; }
+    .login-card .login-data-note { margin: 24px auto 0; max-width: 370px; font-size: 10px; line-height: 1.8; color: #7e8a7e; }
+    .login-data-note button { display: inline; padding: 0; margin: 0; border: 0; border-radius: 0; background: none; font-size: inherit; color: #b6c1af; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+    .login-data-note button:hover { color: #c9ff45; }
+    @media (max-width: 520px), (max-height: 650px) { .login-gate { padding: 18px; } .login-card { padding: 24px 22px 20px; margin: auto; } .login-brand { margin-bottom: 20px; } .login-features { margin-bottom: 18px; } .login-action { padding-top: 18px; } .login-card .login-data-note { margin-top: 18px; } }
+
+    .window-titlebar { position: fixed; top: 8px; left: 8px; right: 8px; height: 38px; z-index: 3000; display: flex; align-items: center; gap: 9px; padding: 0 14px; background: #171a18; border: 1px solid #303531; border-bottom: 0; border-radius: 12px 12px 0 0; -webkit-app-region: drag; }
+    .window-titlebar button { display: grid; place-items: center; padding: 0; margin: 0; width: 13px; height: 13px; min-width: 13px; border: 0; border-radius: 50%; color: #0009; -webkit-app-region: no-drag; cursor: pointer; }
+    .window-titlebar button[data-window-action="close"] { background: #ff5f57; }
+    .window-titlebar button[data-window-action="minimize"] { background: #febc2e; }
+    .window-titlebar button[data-window-action="maximize"] { background: #28c840; }
+    .window-titlebar button svg { width: 9px; height: 9px; opacity: 0; }
+    .window-titlebar:hover button svg, .window-titlebar button:focus-visible svg { opacity: 1; }
+    body:not(.floating-mode) > .panel { padding-top: 38px; }
+    body:not(.floating-mode) > .login-gate, body:not(.floating-mode) > .startup-screen, body:not(.floating-mode) > .permission-gate { top: 45px; border-top-left-radius: 0; border-top-right-radius: 0; }
+    body.floating-mode > .window-titlebar { display: none; }
   </style>
 </head>
-<body>
-  <main class="panel">
+<body class="starting">
+  <div class="window-titlebar" role="group" aria-label="Window controls">
+    <button type="button" data-window-action="close" aria-label="Close window" title="Close"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="m2 2 6 6m0-6-6 6"/></svg></button>
+    <button type="button" data-window-action="minimize" aria-label="Minimize window" title="Minimize"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M1 5h8"/></svg></button>
+    <button type="button" data-window-action="maximize" aria-label="Maximize or restore window" title="Maximize / Restore"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" aria-hidden="true"><path d="M2 6V2h4M8 4v4H4"/></svg></button>
+  </div>
+  <section class="startup-screen" id="startup-screen" role="status" aria-live="polite" aria-label="Loading UNYON">
+    <div class="startup-content"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="startup-icon" aria-hidden="true">
+  <rect width="64" height="64" rx="15" fill="#141713"/>
+  <ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/>
+  <ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/>
+</svg>
+<p class="startup-name">UNYON</p><p class="startup-label">Getting your workspace ready</p><div class="startup-track" aria-hidden="true"></div></div>
+  </section>
+  <main class="panel" inert>
     <nav class="activity-bar" aria-label="Views"><div class="app-identity"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#141713"/><ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/><ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/></svg><span>UNYON<small>Conversation copilot</small></span></div><div class="nav-caption">WORKSPACE</div><button class="activity active" id="show-home" type="button" title="Home" aria-label="Home"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10 12 3l9 7"/><path d="M5 9v11h5v-6h4v6h5V9"/></svg><span class="nav-label">Home</span></button>
       <button class="activity" id="show-notes" type="button" title="Local notepad" aria-label="Local notepad"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3h12v18H6z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg><span class="nav-label">Notepad</span></button>
       <button class="activity" id="show-context" type="button" title="Global context" aria-label="Global context"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 5h6l2 2h8v13H4z"/><path d="M8 12h8M8 16h5"/></svg><span class="nav-label">Global context</span></button>
@@ -495,7 +562,7 @@
       <section class="account-menu" id="account-menu" aria-label="Account menu" hidden>
         <div class="account-profile"><div class="account-avatar" id="account-avatar" aria-hidden="true">U</div><div class="account-profile-copy"><div class="account-name" id="account-name">Local User</div><div class="account-email" id="account-email">Your UNYON workspace</div></div></div>
         <div class="account-menu-group"><span class="account-menu-caption">WORKSPACE</span><button id="open-settings" type="button" data-button-icon="settings">Settings<span class="account-menu-arrow" aria-hidden="true"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></button></div>
-        <div class="account-menu-group"><span class="account-menu-caption">LEGAL</span><button type="button" data-button-icon="info" disabled>Privacy Policy</button><button type="button" data-button-icon="notes" disabled>Terms &amp; Conditions</button></div>
+        <div class="account-menu-group"><span class="account-menu-caption">LEGAL</span><button type="button" data-button-icon="info" data-legal-page="privacy">Privacy Policy</button><button type="button" data-button-icon="notes" data-legal-page="terms">Terms &amp; Conditions</button></div>
         <div class="account-menu-group account-menu-footer"><button class="logout" id="logout" type="button" data-button-icon="logout">Log out</button></div>
       </section>
     </nav>
@@ -504,7 +571,7 @@
         <span class="floating-state" id="floating-state">Listening…</span>
         <button id="floating-pause" type="button" data-button-icon="pause">Pause</button><output id="floating-clock">0m 0s</output>
         <button id="floating-dashboard" type="button" title="Open dashboard" aria-label="Open dashboard"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 10 12 3l9 7"/><path d="M5 9v11h5v-6h4v6h5V9"/></svg></button><button id="floating-collapse" type="button" title="Collapse or expand answer" aria-expanded="false" aria-label="Collapse or expand answer"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg></button><button id="floating-end" type="button" title="End session" data-button-icon="stop">End</button>
-      </div><nav class="answer-navigation" id="floating-answer-navigation" aria-label="Question history"><button class="answer-previous" data-button-icon="chevron-left" type="button" disabled>Previous</button><span class="answer-position">0 / 0</span><button class="answer-next" data-button-icon="chevron-right" type="button" disabled>Next</button></nav><div class="floating-question" id="floating-question" hidden><div class="floating-question-copy"><span class="floating-question-label">ANSWERING</span><span id="floating-question-text">Listening for the interviewer’s question…</span></div><button id="floating-answer-now" type="button">Answer now</button></div>
+      </div><nav class="answer-navigation" id="floating-answer-navigation" aria-label="Question history"><button class="answer-previous" data-button-icon="chevron-left" type="button" disabled>Previous</button><span class="answer-position">0 / 0</span><button class="answer-next" data-button-icon="chevron-right" type="button" disabled>Next</button></nav><div class="floating-system-transcript" id="floating-system-transcript" hidden aria-label="Live system audio transcription"><span class="system-transcript-source"><i id="system-transcript-indicator"></i>SYSTEM AUDIO</span><div class="system-transcript-viewport" id="system-transcript-viewport"><span id="system-transcript-text">Waiting for system audio…</span></div></div><div class="floating-question" id="floating-question" hidden><div class="floating-question-copy"><span class="floating-question-label">ANSWERING</span><span id="floating-question-text">Listening for the interviewer’s question…</span></div><button id="floating-answer-now" type="button">Answer now</button></div>
       <header>
         <div class="brand"><h1 id="view-title">Live transcription</h1><span id="status">Cloud speech recognition</span></div>
         <button id="new-chat" type="button" title="Create a session with tailored context"><svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>Create session</button>
@@ -519,7 +586,7 @@
         <section class="hotkeys-section" aria-labelledby="hotkeys-title">
           <div class="hotkeys-heading"><h3 id="hotkeys-title">Keyboard shortcuts</h3><span>KEEP YOUR FLOW</span></div>
           <dl class="hotkeys-list">
-            <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>H</kbd></dt><dd>Hide or show the floating window<span>Floating window only. Your session keeps running.</span></dd></div>
+            <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>H</kbd></dt><dd>Hide or show the app<span>Works in the main app and floating window. Your session keeps running.</span></dd></div>
             <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>I</kbd></dt><dd>Toggle click-through<span>Floating window only. Switch between interacting with UNYON and clicking through to the app underneath.</span></dd></div>
             <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>P</kbd></dt><dd>Pause or resume your session<span>Floating window only. Paused time does not consume minutes.</span></dd></div>
             <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>←</kbd></dt><dd>Snap left<span>Floating window only. Move from right to center to left. The other axis stays in place.</span></dd></div>
@@ -697,13 +764,24 @@
     </aside>
     -->
   </main>
-  <section class="login-gate" id="login-gate" role="dialog" aria-modal="true" aria-labelledby="login-title">
+  <section class="login-gate" id="login-gate" hidden role="dialog" aria-modal="true" aria-labelledby="login-title">
     <div class="login-card">
-      <div class="login-mark" aria-hidden="true">N</div>
-      <h2 id="login-title">Welcome to My App</h2>
-      <p>Sign in to continue. Your notes and AI processing remain on this computer.</p>
-      <button id="google-login" type="button">Continue with Google</button>
-      <div id="login-status" aria-live="polite">Checking your session…</div>
+      <div class="login-brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true">
+  <rect width="64" height="64" rx="15" fill="#141713"/>
+  <ellipse cx="25" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/>
+  <ellipse cx="39" cy="32" rx="12" ry="21" fill="none" stroke="#c9ff45" stroke-width="5"/>
+</svg>
+<span>UNYON</span></div>
+      <div class="login-eyebrow"><span></span> YOUR CONVERSATION COPILOT</div>
+      <h2 id="login-title">A little clarity.<br><em>Right when it matters.</em></h2>
+      <p class="login-intro">Live transcripts, thoughtful answers, and your context.<br>One quiet workspace for the conversation ahead.</p>
+      <div class="login-features" aria-label="Included in your workspace"><span><i data-button-icon="audio" aria-hidden="true"></i>Live transcription</span><span><i data-button-icon="sparkles" aria-hidden="true"></i>AI answers</span><span><i data-button-icon="notes" aria-hidden="true"></i>Session notes</span></div>
+      <div class="login-action">
+        <button id="google-login" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.89-1.74 2.98-4.3 2.98-7.36Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.62-2.41l-3.24-2.51c-.9.6-2.04.97-3.38.97-2.6 0-4.81-1.76-5.6-4.13H3.06v2.59A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 13.92a6 6 0 0 1 0-3.84V7.49H3.06a10 10 0 0 0 0 9.02l3.34-2.59Z"/><path fill="#EA4335" d="M12 5.95c1.47 0 2.79.5 3.82 1.5l2.87-2.87A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.94 5.49l3.34 2.59A5.99 5.99 0 0 1 12 5.95Z"/></svg><span>Continue with Google</span><span class="login-button-arrow" aria-hidden="true">↗</span></button>
+        <p class="login-browser-note">Secure sign-in opens in your browser</p>
+        <div id="login-status" aria-live="polite"></div>
+      </div>
+      <p class="login-data-note">AI features use cloud processing. Review how we handle your data in our <button type="button" data-legal-page="privacy">Privacy Policy</button> and <button type="button" data-legal-page="terms">Terms &amp; Conditions</button>.</p>
     </div>
   </section>
   <section class="permission-gate" id="permission-gate" role="dialog" aria-modal="true" aria-labelledby="permission-title" hidden>
@@ -740,6 +818,7 @@
   <script src="interview-question-context.js"></script>
   <script src="session-context.js"></script>
   <script src="app-icons.js"></script>
+  <script src="live-transcript-ticker.js"></script>
   <script src="renderer.js"></script>
 
 </body>

@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f2f0e9" />
-    <meta name="color-scheme" content="light" />
-    <meta name="description" content="UNYON is a private, local-first AI copilot for live transcription, meetings, interviews, notes, and real-time answers on macOS and Windows." />
+    <meta name="theme-color" content="#111314" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="UNYON is a desktop conversation copilot for live transcription, interviews, meetings, session context, and real-time answers on macOS and Windows." />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="googlebot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="author" content="UNYON" />
@@ -19,8 +19,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Instrument+Serif:ital@0;1&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet" />
     <meta property="og:site_name" content="UNYON" />
-    <meta property="og:title" content="UNYON — Private AI Copilot for Meetings and Interviews" />
-    <meta property="og:description" content="Get live transcription and context-aware answers from a private AI copilot that runs on your computer." />
+    <meta property="og:title" content="UNYON — Your Conversation Copilot" />
+    <meta property="og:description" content="Bring your context, stay in the conversation, and get focused answers in a floating desktop window." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://myunyon.com/" />
     <meta property="og:image" content="https://myunyon.com/og-unyon.png" />
@@ -49,7 +49,7 @@
             "@id": "https://myunyon.com/#website",
             "url": "https://myunyon.com/",
             "name": "UNYON",
-            "description": "Private, local-first AI copilot for meetings, interviews, live transcription, and notes.",
+            "description": "Desktop conversation copilot for meetings, interviews, live transcription, context, and real-time answers.",
             "publisher": { "@id": "https://myunyon.com/#organization" },
             "inLanguage": "en"
           },
@@ -61,16 +61,15 @@
             "applicationSubCategory": "AI meeting assistant and productivity software",
             "operatingSystem": "macOS 14.2 or later; Windows 10 or later",
             "softwareVersion": "1.0.0 Beta",
-            "description": "A private desktop AI copilot with on-device live transcription, context-aware answers, local AI chat, and notes.",
+            "description": "A desktop conversation copilot with live transcription, session context, real-time answers, notes, and a floating overlay.",
             "url": "https://myunyon.com/",
             "downloadUrl": "https://myunyon.com/downloads/UNYON-1.0.0-arm64.dmg",
             "publisher": { "@id": "https://myunyon.com/#organization" },
             "featureList": [
-              "On-device live transcription",
+              "Live microphone and system-audio transcription",
               "Real-time interview and meeting assistance",
-              "Local AI chat",
-              "Private context from PDF, DOCX, images, text, and code",
-              "Locally saved notes",
+              "Context from resumes, notes, PDFs, DOCX, images, text, and code",
+              "Session history and saved notes",
               "Floating desktop overlay"
             ],
             "isAccessibleForFree": true
@@ -82,7 +81,7 @@
               {
                 "@type": "Question",
                 "name": "Does my data leave my computer?",
-                "acceptedAnswer": { "@type": "Answer", "text": "Local AI and transcription run on your device. Optional cloud features send audio and selected context to their providers. Account details, session history, and uploaded resumes may be stored with UNYON until you email us to request deletion." }
+                "acceptedAnswer": { "@type": "Answer", "text": "Audio is sent to UNYON's transcription provider, and relevant prompts or selected context are sent to its AI provider. Account details, session history, and uploaded resumes may be stored with UNYON until the user requests deletion." }
               },
               {
                 "@type": "Question",
@@ -104,11 +103,11 @@
         ]
       }
     </script>
-    <title>UNYON: Private AI Copilot for Meetings &amp; Interviews</title>
+    <title>UNYON: Your Conversation Copilot</title>
   </head>
   <body>
     <div id="root"></div>
-    <noscript><main><h1>UNYON private AI copilot</h1><p>UNYON provides private, on-device live transcription, context-aware meeting and interview assistance, local AI chat, and notes for macOS and Windows.</p><p>Enable JavaScript to explore features or download the UNYON beta.</p></main></noscript>
+    <noscript><main><h1>UNYON conversation copilot</h1><p>UNYON provides live transcription, context-aware meeting and interview assistance, real-time answers, and notes for macOS and Windows.</p><p>Enable JavaScript to explore features or download the UNYON beta.</p></main></noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

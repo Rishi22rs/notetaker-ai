@@ -59,3 +59,12 @@ test('feedback permits 1–5 stars and optional suggestions, rejects invalid inp
  assert.throws(()=>feedbackFields({rating:5,suggestion:'x'.repeat(2001)}));
  assert.throws(()=>feedbackFields({rating:5,suggestion:{}}));
 });
+
+ test('transcription does not supply a prompt that can be echoed during silence', () => {
+ const { wavFromBytes } = require('../cloud-transcription');
+ const audio = wavFromBytes(Buffer.from(new Float32Array(16000).fill(0.1).buffer)).toString('base64');
+ const form = transcriptionPayload({ audio, model: 'whisper-large-v3-turbo', language: 'auto' });
+ assert.equal(form.get('prompt'), null);
+ assert.equal(form.get('language'), null);
+ assert.equal(form.get('model'), 'whisper-large-v3-turbo');
+ });
