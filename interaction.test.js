@@ -516,3 +516,35 @@ test('startup keeps login hidden until session resolves and dismisses the loader
     if (outcome === 'error') assert.match(status.textContent, /Cannot reach/);
   }
 });
+
+test('Google sign-in requires legal agreement and allows retry after a failed attempt', async () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const handlers = {};
+  const highlighted = new Set();
+  const row = { classList: { add: value => highlighted.add(value), remove: value => highlighted.delete(value) }, offsetWidth: 100 };
+  let focused = false;
+  const agreement = { checked: false, disabled: false, closest: () => row, setAttribute() {}, removeAttribute() {}, focus() { focused = true; }, addEventListener(_, callback) { handlers.change = callback; } };
+  const button = { disabled: false, addEventListener(_, callback) { handlers.click = callback; } };
+  let calls = 0, rejectLogin;
+  const context = {
+    loginAgreement: agreement, googleLogin: button,
+    loginStatus: { classList: { add() {}, remove() {} }, textContent: '' },
+    window: { overlay: { loginWithGoogle() { calls++; return new Promise((_, reject) => { rejectLogin = reject; }); } } },
+    applyAuthState() {}
+  };
+  vm.createContext(context);
+  vm.runInContext(source.slice(source.indexOf("loginAgreement.addEventListener('change'"), source.indexOf("logout.addEventListener('click'")), context);
+  await handlers.click(); assert.equal(calls, 0);
+  assert.equal(button.disabled, false); assert.equal(focused, true); assert.equal(highlighted.has('needs-agreement'), true);
+  agreement.checked = true; handlers.change(); assert.equal(button.disabled, false);
+  assert.equal(highlighted.has('needs-agreement'), false);
+  const attempt = handlers.click();
+  assert.equal(calls, 1); assert.equal(button.disabled, true); assert.equal(agreement.disabled, true);
+  await handlers.click(); assert.equal(calls, 1);
+  rejectLogin(new Error('offline')); await attempt;
+  assert.equal(button.disabled, false); assert.equal(agreement.disabled, false);
+  agreement.checked = false; handlers.change();
+  assert.equal(button.disabled, false);
+  await handlers.click(); assert.equal(calls, 1);
+  assert.equal(highlighted.has('needs-agreement'), true);
+});

@@ -41,6 +41,7 @@ const accountMenu = document.getElementById('account-menu');
 const accountName = document.getElementById('account-name');
 const loginGate = document.getElementById('login-gate');
 const googleLogin = document.getElementById('google-login');
+const loginAgreement = document.getElementById('login-agreement');
 const loginStatus = document.getElementById('login-status');
 const logout = document.getElementById('logout');
 const couponForm = document.getElementById('coupon-form');
@@ -1661,8 +1662,29 @@ async function clearLocalUserWorkspace() {
 }
 
 window.overlay.onGoogleBrowserOpened(() => { loginStatus.textContent = 'Complete Google sign-in in your browser…'; });
+loginAgreement.addEventListener('change', () => {
+  if (loginAgreement.checked) {
+    loginAgreement.closest('.login-agreement').classList.remove('needs-agreement');
+    loginAgreement.removeAttribute('aria-invalid');
+    loginStatus.classList.remove('error');
+    loginStatus.textContent = '';
+  }
+});
 googleLogin.addEventListener('click', async () => {
+  if (googleLogin.disabled) return;
+  if (!loginAgreement.checked) {
+    const agreementRow = loginAgreement.closest('.login-agreement');
+    agreementRow.classList.remove('needs-agreement');
+    void agreementRow.offsetWidth;
+    agreementRow.classList.add('needs-agreement');
+    loginAgreement.setAttribute('aria-invalid', 'true');
+    loginAgreement.focus();
+    loginStatus.classList.add('error');
+    loginStatus.textContent = 'Please agree to the Terms & Conditions and acknowledge the Privacy Policy to continue.';
+    return;
+  }
   googleLogin.disabled = true;
+  loginAgreement.disabled = true;
   loginStatus.classList.remove('error');
   loginStatus.textContent = 'Connecting to sign-in server…';
   try {
@@ -1672,7 +1694,10 @@ googleLogin.addEventListener('click', async () => {
   } catch (error) {
     loginStatus.classList.add('error');
     loginStatus.textContent = error.message || 'Could not sign in.';
-  } finally { googleLogin.disabled = false; }
+  } finally {
+    loginAgreement.disabled = false;
+    googleLogin.disabled = false;
+  }
 });
 
 logout.addEventListener('click', async () => {
