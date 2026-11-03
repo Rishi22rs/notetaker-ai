@@ -29,8 +29,8 @@ function createInterviewSession({
   onTurn,
   // Wait long enough for the interviewer to finish a clause or constraint.
   pauseMs = 2800,
-  computerPauseMs = 3500,
-  questionPauseMs = 3500,
+  computerPauseMs = 1500,
+  questionPauseMs = 1500,
   maxTurnMs = 20_000,
   computerMaxTurnMs = 45_000,
   now = Date.now,

@@ -104,6 +104,18 @@ test('live answer waits for continuation and cancels when interviewer resumes', 
   assert.match(source, /answerStartTimer = setTimeout\(\(\) => \{[\s\S]*?\}, 200\)/);
   assert.match(source, /event\.speaker === 'computer' && latestComputerTurnEndedAt && capturedAt > latestComputerTurnEndedAt/);
   assert.match(source, /pendingComputerContinuation/);
+  assert.match(source, /isRelevantInterviewerContinuation\(lastInterviewQuestion\?\.text, event\.text\)/);
+});
+
+test('brief interviewer acknowledgements do not interrupt an answer but meaningful follow-ups do', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const functionSource = source.match(/function isRelevantInterviewerContinuation\([\s\S]*?\n\}/)?.[0];
+  assert.ok(functionSource);
+  const relevant = vm.runInNewContext(`${functionSource}\nisRelevantInterviewerContinuation`, { Set });
+  assert.equal(relevant('Explain binary search', 'Okay, great, thank you'), false);
+  assert.equal(relevant('Explain binary search', 'Also write the solution in Python'), true);
+  assert.equal(relevant('Explain binary search', 'What is its time complexity?'), true);
+  assert.equal(relevant('Explain binary search', 'Use a recursive approach instead'), true);
 });
 
 test('interrupted AI answer cards are removed instead of left empty', () => {
@@ -161,13 +173,14 @@ test('account menu exposes locally persisted independent appearance controls', (
   assert.match(htmlSource, /class="logout"/);
   assert.match(htmlSource, /id="app-opacity"/);
   assert.match(htmlSource, /id="text-opacity"/);
-  assert.match(htmlSource, /<section class="settings-view"[\s\S]*id="model"/);
+  assert.doesNotMatch(htmlSource, /id="model"/);
   assert.match(htmlSource, /id="settings-tab-appearance"/);
-  assert.match(htmlSource, /id="settings-tab-ai"/);
+  assert.match(htmlSource, /id="settings-tab-audio"/);
+  assert.doesNotMatch(htmlSource, /id="settings-(?:tab-)?ai"/);
   assert.match(rendererSource, /function setSettingsTab/);
   const headerMarkup = htmlSource.match(/<header>[\s\S]*?<\/header>/)?.[0] || '';
   assert.doesNotMatch(headerMarkup, /id="model"/);
-  assert.match(rendererSource, /modelSelect\.hidden = !settingsOpen/);
+  assert.match(rendererSource, /const modelSelect = document\.createElement\('select'\)/);
   assert.match(rendererSource, /local-ai-appearance-v1/);
   assert.match(rendererSource, /--floating-app-opacity/);
   assert.match(rendererSource, /--floating-text-opacity/);
@@ -341,13 +354,14 @@ test('starting transcription checks permissions before charging session time', (
   assert.match(html, /overflow-anchor: none/);
 });
 
- test('automatic answers wait for quiet in system audio and stop if speech resumes', () => {
+ test('automatic answers wait for quiet and only meaningful resumed speech stops the answer', () => {
   const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
   assert.match(source, /event.type === 'computer-speech-activity'/);
   assert.match(source, /latestComputerSpeechAt = Date.now\(\)/);
   assert.match(source, /const remainingQuiet = INTERVIEWER_QUIET_MS - \(Date.now\(\) - latestComputerSpeechAt\)/);
   assert.match(source, /answerStartTimer = setTimeout\(beginWhenQuiet, remainingQuiet\)/);
-  assert.match(source, /if \(automaticAnswerActive\) \{[\s\S]*?cancelUnfinishedInterviewAnswer\(\)/);
+  assert.match(source, /answerPending && isRelevantInterviewerContinuation/);
+  assert.match(source, /const INTERVIEWER_QUIET_MS = 1500/);
 });
 
  test('new speech keeps the previous floating answer visible until its replacement is ready', () => {
@@ -363,7 +377,7 @@ test('starting transcription checks permissions before charging session time', (
   assert.doesNotMatch(generation, /setTimeout\(revealAnswer/);
 });
 
-test('visibility hotkey works in both modes while interaction hotkeys remain floating-only', () => {
+test('visibility hotkey works in both modes while interaction hotkeys remain floating-only', async () => {
   const handlers = new Map(), shortcuts = new Map(); let ignored = false; let visible = true; const messages = [];
   const window = { isDestroyed: () => false, isVisible: () => visible, hide() { visible = false; }, show() { visible = true; }, showInactive() { visible = true; }, setAlwaysOnTop() {}, webContents: { send(channel) { messages.push(channel); } }, setFocusable() {}, focus() {}, setIgnoreMouseEvents(value) { ignored = value; } };
   const context = { __dirname, process: { platform: 'win32' }, setInterval, clearInterval,
@@ -371,7 +385,8 @@ test('visibility hotkey works in both modes while interaction hotkeys remain flo
       if (name === 'electron') return {
         app: { whenReady: () => ({ then: () => ({ catch() {} }) }), on() {} },
         ipcMain: { handle(name, callback) { handlers.set(name, callback); }, on() {} },
-        globalShortcut: { register(key, callback) { shortcuts.set(key, callback); return true; }, unregister(key) { shortcuts.delete(key); } }
+        globalShortcut: { register(key, callback) { shortcuts.set(key, callback); return true; }, unregister(key) { shortcuts.delete(key); } },
+        clipboard: { readText: () => 'copied coding question' }
       };
       return require(name);
     }
@@ -390,9 +405,17 @@ test('visibility hotkey works in both modes while interaction hotkeys remain flo
   mode(event, 'floating');
   const shortcut = shortcuts.get('CommandOrControl+Shift+I'); assert.equal(typeof shortcut, 'function');
   const hideShortcut = shortcuts.get('CommandOrControl+Shift+H'); assert.equal(typeof hideShortcut, 'function');
-  assert.equal(shortcuts.size, 7);
+  assert.equal(shortcuts.size, 11);
   const pauseShortcut = shortcuts.get('CommandOrControl+Shift+P');
   pauseShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:toggle-session').length, 1);
+  const notepadShortcut = shortcuts.get('CommandOrControl+Shift+N');
+  notepadShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:toggle-notepad').length, 1);
+  const chatShortcut = shortcuts.get('CommandOrControl+Shift+C');
+  chatShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:toggle-chat').length, 1);
+  const clipboardShortcut = shortcuts.get('CommandOrControl+Shift+V');
+  await clipboardShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:chat-paste-and-send').length, 1);
+  const transcriptionShortcut = shortcuts.get('CommandOrControl+Shift+T');
+  transcriptionShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:show-transcription').length, 1);
   for (const direction of ['Left', 'Right', 'Up', 'Down']) assert.equal(typeof shortcuts.get(`CommandOrControl+Shift+${direction}`), 'function');
   hideShortcut(); assert.equal(visible, false);
   hideShortcut(); assert.equal(visible, true);
@@ -406,6 +429,10 @@ test('visibility hotkey works in both modes while interaction hotkeys remain flo
   hideShortcut(); assert.equal(visible, false, 'hide remains active after returning to dashboard');
   hideShortcut(); assert.equal(visible, true, 'show remains active after returning to dashboard');
   pauseShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:toggle-session').length, 1, 'pause is inactive on the dashboard');
+  notepadShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:toggle-notepad').length, 1, 'notepad is inactive on the dashboard');
+  chatShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:toggle-chat').length, 1, 'chat is inactive on the dashboard');
+  await clipboardShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:chat-paste-and-send').length, 1, 'clipboard ask is inactive on the dashboard');
+  transcriptionShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:show-transcription').length, 1, 'transcription shortcut is inactive on the dashboard');
 });
 
 function streamingAnswerHarness() {

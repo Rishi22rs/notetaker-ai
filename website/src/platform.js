@@ -7,9 +7,9 @@ export const DOWNLOADS = {
   },
   windows: {
     name: 'Windows',
-    detail: '64-bit · Windows 10+',
+    detail: 'Intel / AMD 64-bit · Windows 10+',
     url: import.meta.env.VITE_WINDOWS_DOWNLOAD_URL || '/downloads/UNYON-Setup-1.0.0.exe',
-    available: import.meta.env.VITE_WINDOWS_DOWNLOAD_ENABLED === 'true',
+    available: import.meta.env.VITE_WINDOWS_DOWNLOAD_ENABLED !== 'false',
   },
 }
 

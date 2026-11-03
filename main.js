@@ -1,7 +1,7 @@
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs/promises');
-const { app, BrowserWindow, globalShortcut, screen, dialog, ipcMain, desktopCapturer, shell, systemPreferences, safeStorage } = require('electron');
+const { app, BrowserWindow, globalShortcut, screen, dialog, ipcMain, desktopCapturer, shell, systemPreferences, safeStorage, clipboard } = require('electron');
 const { createAuthClient } = require('./auth-client');
 const { createCloudModels } = require('./cloud-models');
 const { createCloudAI } = require('./cloud-ai');
@@ -132,6 +132,34 @@ function toggleFloatingPlayback() {
   if (!floatingMode || !win || win.isDestroyed()) return;
   win.webContents.send('overlay:toggle-session');
 }
+function toggleFloatingNotepad() {
+  if (!floatingMode || !win || win.isDestroyed()) return;
+  floatingClickThrough = false;
+  setInteractive(win, true);
+  win.webContents.send('overlay:toggle-notepad');
+}
+function toggleFloatingChat() {
+  if (!floatingMode || !win || win.isDestroyed()) return;
+  floatingClickThrough = false;
+  setInteractive(win, true);
+  win.webContents.send('overlay:toggle-chat');
+}
+async function pasteClipboardIntoFloatingChat() {
+  if (!floatingMode || !win || win.isDestroyed()) return;
+  let text = '';
+  try { text = String(await clipboard.readText()).trim(); }
+  catch { return; }
+  if (!text) return;
+  floatingClickThrough = false;
+  setInteractive(win, true);
+  win.webContents.send('overlay:chat-paste-and-send', text);
+}
+function showFloatingTranscription() {
+  if (!floatingMode || !win || win.isDestroyed()) return;
+  floatingClickThrough = false;
+  setInteractive(win, true);
+  win.webContents.send('overlay:show-transcription');
+}
 function snapFloatingWindow(direction) {
   if (!floatingMode || !win || win.isDestroyed()) return;
   const bounds = win.getBounds();
@@ -141,6 +169,10 @@ function snapFloatingWindow(direction) {
 const floatingHotkeys = [
   [interactionShortcut, toggleFloatingInteraction],
   ['CommandOrControl+Shift+P', toggleFloatingPlayback],
+  ['CommandOrControl+Shift+N', toggleFloatingNotepad],
+  ['CommandOrControl+Shift+C', toggleFloatingChat],
+  ['CommandOrControl+Shift+V', pasteClipboardIntoFloatingChat],
+  ['CommandOrControl+Shift+T', showFloatingTranscription],
   ...['Left', 'Right', 'Up', 'Down'].map(direction => [`CommandOrControl+Shift+${direction}`, () => snapFloatingWindow(direction)])
 ];
 function registerVisibilityHotkey() {

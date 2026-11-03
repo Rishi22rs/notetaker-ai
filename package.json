@@ -79,5 +79,9 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     }
+  },
+  "optionalDependencies": {
+    "@koromix/koffi-win32-x64": "^3.2.1",
+    "@napi-rs/canvas-win32-x64-msvc": "^1.0.10"
   }
 }

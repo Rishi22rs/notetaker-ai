@@ -1,4 +1,5 @@
-const modelSelect = document.getElementById('model');
+// Keep the backend-managed answering model selected internally.
+const modelSelect = document.createElement('select');
 const status = document.getElementById('status');
 const form = document.getElementById('composer');
 const prompt = document.getElementById('prompt');
@@ -62,10 +63,8 @@ const settingsView = document.getElementById('settings-view');
 const offersView = document.getElementById('offers-view');
 const settingsAppearanceTab = document.getElementById('settings-tab-appearance');
 const settingsAudioTab = document.getElementById('settings-tab-audio');
-const settingsAiTab = document.getElementById('settings-tab-ai');
 const settingsAppearancePanel = document.getElementById('settings-appearance');
 const settingsAudioPanel = document.getElementById('settings-audio');
-const settingsAiPanel = document.getElementById('settings-ai');
 const appOpacity = document.getElementById('app-opacity');
 const appOpacityValue = document.getElementById('app-opacity-value');
 const textOpacity = document.getElementById('text-opacity');
@@ -125,8 +124,24 @@ function resetSystemTranscript() {
 new ResizeObserver(scrollSystemTranscript).observe(systemTranscriptViewport);
 
 const floatingPause = document.getElementById('floating-pause');
+const floatingTranscription = document.getElementById('floating-transcription');
 const floatingCollapse = document.getElementById('floating-collapse');
+const floatingNotepadToggle = document.getElementById('floating-notepad-toggle');
+const floatingNotepad = document.getElementById('floating-notepad');
+const floatingNotepadEditor = document.getElementById('floating-notepad-editor');
+const floatingNotepadStatus = document.getElementById('floating-notepad-status');
+const floatingChatToggle = document.getElementById('floating-chat-toggle');
+const floatingChat = document.getElementById('floating-chat');
+const floatingChatMessages = document.getElementById('floating-chat-messages');
+const floatingChatForm = document.getElementById('floating-chat-form');
+const floatingChatInput = document.getElementById('floating-chat-input');
+const floatingChatSend = document.getElementById('floating-chat-send');
+const floatingChatNew = document.getElementById('floating-chat-new');
 const returnFloating = document.getElementById('return-floating');
+let floatingNotepadOpen = false;
+let floatingChatOpen = false;
+let floatingChatTurns = [];
+let cancelFloatingChat = null;
 
 let windowModeQueue = Promise.resolve();
 
@@ -134,11 +149,25 @@ async function setFloatingView(enabled, expanded = floatingAnswerOpen) {
   const answerHeight = expanded ? 520 : undefined;
   floatingView = enabled;
   floatingAnswerOpen = expanded;
+  if (!enabled) {
+    floatingNotepadOpen = false;
+    floatingChatOpen = false;
+    floatingNotepadToggle.setAttribute('aria-label', 'Open Notepad');
+    floatingNotepadToggle.title = 'Open Notepad (Command Shift N)';
+    floatingChatToggle.setAttribute('aria-label', 'Open Chat');
+    floatingChatToggle.title = 'Open Chat (Command Shift C)';
+  }
   document.body.classList.toggle('floating-mode', enabled);
   document.body.classList.toggle('floating-answer-open', enabled && expanded);
+  document.body.classList.toggle('floating-notepad-open', enabled && floatingNotepadOpen);
+  document.body.classList.toggle('floating-chat-open', enabled && floatingChatOpen);
   floatingToolbar.hidden = !enabled;
   floatingQuestion.hidden = !enabled;
   floatingSystemTranscript.hidden = !enabled;
+  floatingNotepad.hidden = !enabled || !floatingNotepadOpen;
+  floatingChat.hidden = !enabled || !floatingChatOpen;
+  floatingNotepadToggle.setAttribute('aria-pressed', String(enabled && floatingNotepadOpen));
+  floatingChatToggle.setAttribute('aria-pressed', String(enabled && floatingChatOpen));
   if (!enabled) systemTranscriptTicker.stop();
   floatingCollapse.replaceChildren(createAppIcon(expanded ? 'chevron-up' : 'chevron-down'));
   floatingCollapse.setAttribute('aria-expanded', String(expanded));
@@ -148,6 +177,64 @@ async function setFloatingView(enabled, expanded = floatingAnswerOpen) {
   await windowModeQueue;
   if (enabled) scrollSystemTranscript();
 }
+async function setFloatingNotepad(enabled) {
+  if (!floatingView) return;
+  floatingNotepadOpen = Boolean(enabled);
+  if (floatingNotepadOpen) {
+    floatingChatOpen = false;
+    floatingChat.hidden = true;
+    floatingChatToggle.setAttribute('aria-pressed', 'false');
+    document.body.classList.remove('floating-chat-open');
+  }
+  document.body.classList.toggle('floating-notepad-open', floatingNotepadOpen);
+  floatingNotepad.hidden = !floatingNotepadOpen;
+  floatingNotepadToggle.setAttribute('aria-pressed', String(floatingNotepadOpen));
+  floatingNotepadToggle.setAttribute('aria-label', floatingNotepadOpen ? 'Close Notepad' : 'Open Notepad');
+  floatingNotepadToggle.title = `${floatingNotepadOpen ? 'Close' : 'Open'} Notepad (Command Shift N)`;
+  if (floatingNotepadOpen) floatingNotepadEditor.value = notepad.value;
+  const mode = floatingNotepadOpen || floatingAnswerOpen ? 'answer' : 'floating';
+  const height = floatingNotepadOpen ? 420 : floatingAnswerOpen ? 520 : undefined;
+  windowModeQueue = windowModeQueue.catch(() => {}).then(() => window.overlay.setWindowMode(mode, height));
+  await windowModeQueue;
+  if (floatingNotepadOpen) floatingNotepadEditor.focus();
+}
+async function setFloatingChat(enabled) {
+  if (!floatingView) return;
+  floatingChatOpen = Boolean(enabled);
+  if (floatingChatOpen) {
+    floatingNotepadOpen = false;
+    floatingNotepad.hidden = true;
+    floatingNotepadToggle.setAttribute('aria-pressed', 'false');
+    document.body.classList.remove('floating-notepad-open');
+  }
+  document.body.classList.toggle('floating-chat-open', floatingChatOpen);
+  floatingChat.hidden = !floatingChatOpen;
+  floatingChatToggle.setAttribute('aria-pressed', String(floatingChatOpen));
+  floatingChatToggle.setAttribute('aria-label', floatingChatOpen ? 'Close Chat' : 'Open Chat');
+  floatingChatToggle.title = `${floatingChatOpen ? 'Close' : 'Open'} Chat (Command Shift C)`;
+  const mode = floatingChatOpen || floatingAnswerOpen ? 'answer' : 'floating';
+  const height = floatingChatOpen || floatingAnswerOpen ? 520 : undefined;
+  windowModeQueue = windowModeQueue.catch(() => {}).then(() => window.overlay.setWindowMode(mode, height));
+  await windowModeQueue;
+  if (floatingChatOpen) floatingChatInput.focus();
+}
+async function showFloatingTranscription() {
+  if (!floatingView) return;
+  floatingNotepadOpen = false;
+  floatingChatOpen = false;
+  floatingNotepad.hidden = true;
+  floatingChat.hidden = true;
+  floatingNotepadToggle.setAttribute('aria-pressed', 'false');
+  floatingChatToggle.setAttribute('aria-pressed', 'false');
+  floatingNotepadToggle.setAttribute('aria-label', 'Open Notepad');
+  floatingNotepadToggle.title = 'Open Notepad (Command Shift N)';
+  floatingChatToggle.setAttribute('aria-label', 'Open Chat');
+  floatingChatToggle.title = 'Open Chat (Command Shift C)';
+  document.body.classList.remove('floating-notepad-open', 'floating-chat-open');
+  const mode = floatingAnswerOpen ? 'answer' : 'floating';
+  windowModeQueue = windowModeQueue.catch(() => {}).then(() => window.overlay.setWindowMode(mode, floatingAnswerOpen ? 520 : undefined));
+  await windowModeQueue;
+}
 function syncFloatingStatus() {
   const listening = transcriptionRunning && transcriptionSources.system;
   document.getElementById('system-transcript-indicator').classList.toggle('listening', listening);
@@ -155,6 +242,7 @@ function syncFloatingStatus() {
   floatingState.textContent = transcriptStatus.textContent;
   floatingPause.textContent = sessionActive ? 'Pause' : 'Resume';
   floatingPause.dataset.buttonIcon = sessionActive ? 'pause' : 'play';
+  floatingPause.title = `${sessionActive ? 'Pause' : 'Resume'} session (Command Shift P)`;
   document.getElementById('floating-clock').textContent = sessionClock.textContent;
 }
 new MutationObserver(syncFloatingStatus).observe(transcriptStatus, { childList: true, characterData: true, subtree: true });
@@ -168,8 +256,144 @@ returnFloating.addEventListener('click', () => {
 window.overlay.onToggleSession(() => {
   if (floatingView && !floatingPause.disabled) floatingPause.click();
 });
+window.overlay.onToggleNotepad(() => {
+  if (floatingView) setFloatingNotepad(!floatingNotepadOpen).catch(error => setStatus(error.message, true));
+});
+window.overlay.onToggleChat(() => {
+  if (floatingView) setFloatingChat(!floatingChatOpen).catch(error => setStatus(error.message, true));
+});
+window.overlay.onShowTranscription(() => {
+  if (floatingView) showFloatingTranscription().catch(error => setStatus(error.message, true));
+});
+window.overlay.onChatPasteAndSend((text) => {
+  if (!floatingView || !String(text).trim()) return;
+  const openAndSend = async () => {
+    if (cancelFloatingChat) {
+      const assistant = floatingChatTurns.at(-1);
+      cancelFloatingChat();
+      finishFloatingChat(assistant, 'Stopped');
+    }
+    await setFloatingChat(true);
+    floatingChatInput.value = String(text).trim();
+    floatingChatInput.dispatchEvent(new Event('input'));
+    floatingChatForm.requestSubmit();
+  };
+  openAndSend().catch(error => setStatus(error.message, true));
+});
+floatingNotepadToggle.addEventListener('click', () => {
+  setFloatingNotepad(!floatingNotepadOpen).catch(error => setStatus(error.message, true));
+});
+floatingChatToggle.addEventListener('click', () => {
+  setFloatingChat(!floatingChatOpen).catch(error => setStatus(error.message, true));
+});
+floatingTranscription.addEventListener('click', () => {
+  showFloatingTranscription().catch(error => setStatus(error.message, true));
+});
+function renderFloatingChat() {
+  floatingChatMessages.replaceChildren();
+  if (!floatingChatTurns.length) {
+    const empty = document.createElement('div');
+    empty.className = 'floating-chat-empty';
+    empty.textContent = 'Paste or type any question below.';
+    floatingChatMessages.append(empty);
+    return;
+  }
+  for (const turn of floatingChatTurns) {
+    const message = document.createElement('div');
+    message.className = `floating-chat-message ${turn.role}${turn.pending ? ' pending' : ''}`;
+    if (turn.role === 'assistant') {
+      renderAnswerContent(message, turn.content, turn.requestMessages ? language => regenerateFloatingChatAnswer(turn, language) : null, Boolean(turn.pending));
+    } else message.textContent = turn.content;
+    floatingChatMessages.append(message);
+  }
+  floatingChatMessages.scrollTop = floatingChatMessages.scrollHeight;
+}
+function finishFloatingChat(assistant, error = '') {
+  if (!assistant || !floatingChatTurns.includes(assistant)) return;
+  assistant.pending = false;
+  if (error && !assistant.content) assistant.content = error === 'Stopped' ? 'Answer stopped.' : `Could not answer: ${error}`;
+  cancelFloatingChat = null;
+  floatingChatSend.textContent = 'Send';
+  floatingChatInput.disabled = false;
+  renderFloatingChat();
+  if (floatingChatOpen) floatingChatInput.focus();
+}
+function startFloatingChatAnswer(assistant, requestMessages) {
+  assistant.requestMessages = requestMessages;
+  cancelFloatingChat = window.overlay.chat({ model: modelSelect.value, messages: requestMessages, context: effectiveContext() }, {
+    onChunk(chunk) {
+      if (!assistant.pending || !floatingChatTurns.includes(assistant)) return;
+      assistant.content += chunk;
+      renderFloatingChat();
+    },
+    onDone() { finishFloatingChat(assistant); },
+    onError(error) { finishFloatingChat(assistant, error); }
+  });
+}
+function regenerateFloatingChatAnswer(assistant, language) {
+  if (cancelFloatingChat || !assistant.requestMessages) return;
+  assistant.content = '';
+  assistant.pending = true;
+  floatingChatInput.disabled = true;
+  floatingChatSend.textContent = 'Stop';
+  renderFloatingChat();
+  startFloatingChatAnswer(assistant, [...assistant.requestMessages, {
+    role: 'user',
+    content: `Rewrite the coding solution in ${language}. Include complete runnable code, an explanation, complexity, edge cases, and a short example. Keep the same answer to the original question.`
+  }]);
+}
+floatingChatForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (cancelFloatingChat) {
+    const assistant = floatingChatTurns.at(-1);
+    cancelFloatingChat();
+    finishFloatingChat(assistant, 'Stopped');
+    return;
+  }
+  const content = floatingChatInput.value.trim();
+  const model = modelSelect.value;
+  if (!content || !model) return;
+  floatingChatTurns.push({ role: 'user', content });
+  const assistant = { role: 'assistant', content: '', pending: true };
+  floatingChatTurns.push(assistant);
+  floatingChatInput.value = '';
+  floatingChatInput.style.height = '';
+  floatingChatInput.disabled = true;
+  floatingChatSend.textContent = 'Stop';
+  renderFloatingChat();
+  const requestMessages = [{
+    role: 'system',
+    content: 'You are UNYON, a helpful general-purpose assistant. First infer whether the latest request is a coding question or a normal question. For normal questions, answer directly and clearly. For coding questions, give a short approach, complete runnable code in a fenced block with the correct language tag, an explanation of the important parts, time and space complexity, meaningful edge cases, and a short example. Never omit the code when code is requested. Do not frame responses as interview coaching unless the user asks.'
+  }, ...floatingChatTurns.slice(0, -1).map(({ role, content: text }) => ({ role, content: text }))];
+  startFloatingChatAnswer(assistant, requestMessages);
+});
+floatingChatInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); floatingChatForm.requestSubmit(); }
+});
+floatingChatInput.addEventListener('input', () => {
+  floatingChatInput.style.height = 'auto';
+  floatingChatInput.style.height = `${Math.min(floatingChatInput.scrollHeight, 84)}px`;
+});
+floatingChatNew.addEventListener('click', () => {
+  if (cancelFloatingChat) cancelFloatingChat();
+  cancelFloatingChat = null;
+  floatingChatTurns = [];
+  floatingChatSend.textContent = 'Send';
+  floatingChatInput.disabled = false;
+  floatingChatInput.value = '';
+  renderFloatingChat();
+  floatingChatInput.focus();
+});
 document.getElementById('floating-end').addEventListener('click', () => document.getElementById('end-session').click());
 floatingCollapse.addEventListener('click', () => {
+  if (floatingChatOpen) {
+    setFloatingChat(false).catch(error => setStatus(error.message, true));
+    return;
+  }
+  if (floatingNotepadOpen) {
+    setFloatingNotepad(false).catch(error => setStatus(error.message, true));
+    return;
+  }
   if (!transcriptFeed.querySelector('.floating-current')) return;
   setFloatingView(true, !floatingAnswerOpen).catch(error => setStatus(error.message, true));
 });
@@ -685,7 +909,7 @@ async function answerTranscriptTurnManually(bubble, textElement, button) {
   const question = target.text;
   const selectedModel = modelSelect.selectedOptions[0];
   if (!modelSelect.value || selectedModel?.dataset.installed !== 'true') {
-    transcriptStatus.textContent = modelSelect.value.startsWith('cloud:') ? 'Add a Gemini API key in AI & Models settings before requesting an answer.' : 'Download and select a local model before requesting an answer.';
+    transcriptStatus.textContent = 'AI is unavailable. Please contact support.';
     return;
   }
   button.disabled = true;
@@ -863,7 +1087,7 @@ async function refreshModels() {
       option.value = item.name;
       option.textContent = `${item.displayName || item.name} · ${item.cloud ? 'Cloud' : formatBytes(item.size)}`;
       option.dataset.installed = item.cloud ? String(cloud.hasGeminiKey) : 'true';
-      if (item.cloud && !cloud.hasGeminiKey) option.textContent += ' · Add API key in settings';
+      if (item.cloud && !cloud.hasGeminiKey) option.textContent += ' · Service unavailable';
       installedGroup.append(option);
     }
     if (models.length) modelSelect.append(installedGroup);
@@ -906,7 +1130,7 @@ function updateModelSelection() {
   const ready = modelSelect.selectedOptions[0]?.dataset.installed === 'true';
   send.disabled = !ready || !sessionActive;
   if (ready) localStorage.setItem('local-ai-model', modelSelect.value);
-  else setStatus('Add a Gemini API key in AI & Models settings', true);
+  else setStatus('AI is unavailable. Please contact support.', true);
 }
 
 function recentDialogueTurns() {
@@ -1281,7 +1505,6 @@ function setView(view) {
   offersView.hidden = !offersOpen;
   form.hidden = !transcriptOpen || !sessionActive;
   promptSuggestions.hidden = !transcriptOpen;
-  modelSelect.hidden = !settingsOpen;
   newChat.hidden = settingsOpen || offersOpen || setupOpen || homeOpen || historyOpen;
   sessionClock.hidden = settingsOpen || offersOpen || setupOpen || homeOpen || historyOpen;
   endSession.hidden = !sessionContext.hasSession() && !sessionActive;
@@ -1306,13 +1529,10 @@ function setView(view) {
 function setSettingsTab(tab) {
   const appearanceOpen = tab === 'appearance';
   const audioOpen = tab === 'audio';
-  const aiOpen = tab === 'ai';
   settingsAppearanceTab.setAttribute('aria-selected', String(appearanceOpen));
   settingsAudioTab.setAttribute('aria-selected', String(audioOpen));
-  settingsAiTab.setAttribute('aria-selected', String(aiOpen));
   settingsAppearancePanel.hidden = !appearanceOpen;
   settingsAudioPanel.hidden = !audioOpen;
-  settingsAiPanel.hidden = !aiOpen;
   if (audioOpen) refreshMicrophonePermissionStatus();
   updateModelSelection();
 }
@@ -1726,7 +1946,6 @@ openOffers.addEventListener('click', () => {
 });
 settingsAppearanceTab.addEventListener('click', () => setSettingsTab('appearance'));
 settingsAudioTab.addEventListener('click', () => setSettingsTab('audio'));
-settingsAiTab.addEventListener('click', () => setSettingsTab('ai'));
 document.addEventListener('click', () => {
   accountMenu.hidden = true;
   showAccount.setAttribute('aria-expanded', 'false');
@@ -2134,19 +2353,25 @@ function isRepeatedQuestion(previous, incoming) {
 
 let latestComputerSpeechAt = 0;
 let automaticAnswerActive = false;
-const INTERVIEWER_QUIET_MS = 3500;
+const INTERVIEWER_QUIET_MS = 1500;
+
+function isRelevantInterviewerContinuation(question, incoming) {
+  const text = String(incoming || '').toLowerCase().replace(/[^a-z0-9+#?. ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+  const words = text.replace(/[?.]/g, '').split(' ').filter(Boolean);
+  const fillerWords = new Set(['ok', 'okay', 'yes', 'yeah', 'yep', 'right', 'sure', 'great', 'good', 'fine', 'thanks', 'thank', 'you', 'got', 'it', 'understood', 'hmm', 'hm', 'uh', 'um', 'continue', 'ahead', 'alright']);
+  if (words.length <= 5 && words.every(word => fillerWords.has(word))) return false;
+  if (/\?|^(?:what|why|how|when|where|who|which|can|could|would|should|do|does|did|is|are|have|has)\b/.test(text)) return true;
+  if (/\b(?:actually|also|instead|but|except|add|include|exclude|without|using|use|write|implement|explain|assume|consider|constraint|requirement|change|correction|clarify|follow[- ]?up|python|javascript|typescript|java|c\+\+|golang|rust|sql)\b/.test(text)) return true;
+  const questionWords = new Set(String(question || '').toLowerCase().replace(/[^a-z0-9+# ]/g, ' ').split(/\s+/).filter(word => word.length > 3));
+  const overlap = words.filter(word => word.length > 3 && questionWords.has(word)).length;
+  return words.length >= 6 || overlap >= 2;
+}
 
 window.overlay.onTranscription((event) => {
   updateSystemTranscript(event);
   if (event.type === 'computer-speech-activity') {
     latestComputerSpeechAt = Date.now();
-    if (automaticAnswerActive) {
-      pendingComputerContinuation = { text: lastInterviewQuestion?.text || '', at: Date.now() };
-      cancelUnfinishedInterviewAnswer();
-      automaticAnswerActive = false;
-      interviewPipelineRevision += 1;
-      transcriptStatus.textContent = 'Listening · interviewer still speaking…';
-    }
     return;
   }
   if (event.type === 'status' || event.type === 'ready' || event.type === 'warning' || event.type === 'error') {
@@ -2155,12 +2380,19 @@ window.overlay.onTranscription((event) => {
   }
   if (event.type === 'interview-turn') {
     if (event.turn.speaker === 'computer') {
-      updateLiveQuestionSnippet(event.turn.text);
-      if (pendingComputerContinuation && Date.now() - pendingComputerContinuation.at < 25_000) {
+      const continuationRelevant = !lastInterviewQuestion || isRelevantInterviewerContinuation(lastInterviewQuestion.text, event.turn.text);
+      if (continuationRelevant) updateLiveQuestionSnippet(event.turn.text);
+      if (continuationRelevant && pendingComputerContinuation && Date.now() - pendingComputerContinuation.at < 25_000) {
         event.turn.text = mergeCaptionText(pendingComputerContinuation.text, event.turn.text);
       }
       pendingComputerContinuation = null;
       latestComputerTurnEndedAt = Number(event.turn.endedAt) || 0;
+      const answerInProgress = answerStartTimer !== null || cancelInterviewAnswer !== null || automaticAnswerActive;
+      if (!continuationRelevant && answerInProgress) {
+        transcriptContext.push(event.turn);
+        saveTranscriptContext();
+        return;
+      }
     }
     transcriptContext.push(event.turn);
     if (lastCaption?.speaker === event.turn.speaker && lastCaption.bubble?.isConnected) {
@@ -2266,7 +2498,7 @@ window.overlay.onTranscription((event) => {
     // the next finalized turn instead of replying mid-sentence.
     const answerPending = answerStartTimer !== null || cancelInterviewAnswer !== null ||
       /^Understanding interviewer|^Question detected/.test(transcriptStatus.textContent);
-    if (answerPending) {
+    if (answerPending && isRelevantInterviewerContinuation(lastInterviewQuestion?.text, event.text)) {
       pendingComputerContinuation ||= {
         text: transcriptContext.filter((turn) => turn.speaker === 'computer').at(-1)?.text || '',
         at: Date.now()
@@ -2328,14 +2560,21 @@ window.overlay.onUsageUpdate((update) => {
   updateUsageState(update);
   if (!update.active && transcriptionRunning) stopLiveTranscription();
 });
-notepad.addEventListener('input', () => {
+function setNotesStatus(text) {
+  notesStatus.textContent = text;
+  floatingNotepadStatus.textContent = text;
+}
+function handleNoteInput(source, mirror) {
+  mirror.value = source.value;
   clearTimeout(noteSaveTimer);
-  notesStatus.textContent = 'Saving…';
+  setNotesStatus('Saving…');
   noteSaveTimer = setTimeout(async () => {
-    try { await window.overlay.saveNotes(notepad.value); notesStatus.textContent = 'Saved locally'; }
-    catch { notesStatus.textContent = 'Could not save'; }
+    try { await window.overlay.saveNotes(source.value); setNotesStatus('Saved locally'); }
+    catch { setNotesStatus('Could not save'); }
   }, 400);
-});
+}
+notepad.addEventListener('input', () => handleNoteInput(notepad, floatingNotepadEditor));
+floatingNotepadEditor.addEventListener('input', () => handleNoteInput(floatingNotepadEditor, notepad));
 
 function renderContextFiles() {
   contextFilesElement.replaceChildren();
@@ -2467,7 +2706,7 @@ window.overlay.getAuthStatus().then((result) => {
   loginStatus.classList.add('error');
   loginStatus.textContent = 'Cannot reach the authentication server.';
 }).finally(finishStartup);
-window.overlay.loadNotes().then((content) => { notepad.value = content; }).catch(() => { notesStatus.textContent = 'Could not load notes'; });
+window.overlay.loadNotes().then((content) => { notepad.value = content; floatingNotepadEditor.value = content; }).catch(() => { setNotesStatus('Could not load notes'); });
 window.overlay.loadContext().then((value) => {
   if (!contextDirty) contextState = value && Array.isArray(value.files) ? value : { text: '', files: [] };
   contextInput.value = contextState.text || '';
@@ -2475,36 +2714,6 @@ window.overlay.loadContext().then((value) => {
   renderPromptSuggestions();
 }).catch(() => { contextSaveStatus.textContent = 'Could not load context'; })
   .finally(() => { contextLoaded = true; uploadContext.disabled = false; resumeButton.disabled = false; });
-
-// Provider secrets remain in the main process; only readiness flags come back.
-const cloudFields = {
-  transcription: document.getElementById('cloud-transcription'),
-  groqModel: document.getElementById('groq-model'),
-  language: document.getElementById('cloud-language'),
-  answerLanguage: document.getElementById('answer-language'),
-  segmentSeconds: document.getElementById('cloud-segment')
-};
-const cloudStatus = document.getElementById('cloud-status');
-const groqKeyInput = document.getElementById('groq-key');
-const geminiKeyInput = document.getElementById('gemini-key');
-function showCloudSettings(value) {
-  for (const [key, element] of Object.entries(cloudFields)) element.value = String(value[key]);
-  groqKeyInput.value = ''; geminiKeyInput.value = '';
-  cloudStatus.textContent = `Groq key: ${value.hasGroqKey ? 'saved' : 'missing'} · Gemini key: ${value.hasGeminiKey ? 'saved' : 'missing'}`;
-}
-window.overlay.getCloudSettings().then(showCloudSettings).catch(() => { cloudStatus.textContent = 'Could not load cloud settings.'; });
-document.getElementById('save-cloud').addEventListener('click', async () => {
-  const value = Object.fromEntries(Object.entries(cloudFields).map(([key, element]) => [key, element.value]));
-  value.segmentSeconds = Number(value.segmentSeconds);
-  if (groqKeyInput.value.trim()) value.groqKey = groqKeyInput.value.trim();
-  if (geminiKeyInput.value.trim()) value.geminiKey = geminiKeyInput.value.trim();
-  try { showCloudSettings(await window.overlay.saveCloudSettings(value)); await refreshModels(); }
-  catch (error) { cloudStatus.textContent = error.message; }
-});
-document.getElementById('clear-cloud-keys').addEventListener('click', async () => {
-  try { showCloudSettings(await window.overlay.saveCloudSettings({ groqKey: '', geminiKey: '', transcription: 'groq' })); await refreshModels(); }
-  catch (error) { cloudStatus.textContent = error.message; }
-});
 
 document.getElementById('refresh-updated-pricing').addEventListener('click', async () => {
   const button = document.getElementById('refresh-updated-pricing'); button.disabled = true;

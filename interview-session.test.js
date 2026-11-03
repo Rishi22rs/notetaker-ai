@@ -66,13 +66,13 @@ test('a spoken question without Whisper punctuation waits for the longer turn bo
 test('computer speech uses a bounded pause so one prompt stays in one turn', () => {
   const f = fixture();
   f.session.ingest({ speaker: 'computer', text: 'Tell me about your project', capturedAt: 1000 });
-  assert.equal([...f.timers.values()][0].delay, 3500);
+  assert.equal([...f.timers.values()][0].delay, 1500);
 });
 
 test('question-shaped speech finalizes sooner than other interviewer speech', () => {
   const f = fixture();
   f.session.ingest({ speaker: 'computer', text: 'How would you scale this API?', capturedAt: 1000 });
-  assert.equal([...f.timers.values()][0].delay, 3500);
+  assert.equal([...f.timers.values()][0].delay, 1500);
 });
 
 test('candidate speech still uses the shorter ordinary pause', () => {
@@ -97,7 +97,7 @@ test('clear drops an unfinished turn', () => {
   f.fire();
   assert.equal(f.turns.length, 0);
   f.session.ingest({ speaker: 'computer', text: 'design a service with retries?', capturedAt: 4000 });
-  f.advance(3500);
+  f.advance(1500);
   f.fire();
   assert.equal(f.turns.length, 1);
   assert.equal(f.turns[0].text, 'How would you design a service with retries?');

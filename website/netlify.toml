@@ -18,7 +18,7 @@
 [[headers]]
   for = "/downloads/*"
   [headers.values]
-    Cache-Control = "public, max-age=86400"
+    Cache-Control = "public, max-age=0, must-revalidate"
     Content-Disposition = "attachment"
     X-Robots-Tag = "noindex, nofollow"
 
