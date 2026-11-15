@@ -2,7 +2,7 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const path = require('node:path');
 
-function createAuthClient({ serverUrl, userDataPath, openExternal, timeoutMs = 180_000 }) {
+function createAuthClient({ serverUrl, userDataPath, openExternal, timeoutMs = 180_000, createSocket = (url, options) => new (require('ws'))(url, options) }) {
   const sessionPath = path.join(userDataPath, 'auth-session.json');
 
   async function readSession() {
@@ -143,7 +143,53 @@ function createAuthClient({ serverUrl, userDataPath, openExternal, timeoutMs = 1
     return fetch(new URL(transcription ? '/ai/transcribe' : '/ai/chat', serverUrl), { method: 'POST', signal: options.signal, headers: { 'content-type': 'application/json', authorization: `Bearer ${saved.token}`, 'x-usage-token': options.usageToken || '' }, body });
   }
 
+  async function openTranscriptionStream({ speaker, language, usageToken, signal, onEvent, onClose }) {
+    const saved = await readSession();
+    if (!saved?.token) throw new Error('Sign in to use transcription.');
+    if (signal?.aborted) throw new Error('Transcription start cancelled.');
+    const url = new URL('/ai/transcribe/stream', serverUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.search = new URLSearchParams({ speaker, language: language || 'auto' });
+    return new Promise((resolve, reject) => {
+      let ready = false, closed = false;
+      const socket = createSocket(url.toString(), { headers: { authorization: `Bearer ${saved.token}`, 'x-usage-token': usageToken }, handshakeTimeout: 10000, maxPayload: 256000 });
+      const close = () => {
+        if (closed) return; closed = true;
+        clearTimeout(timer); signal?.removeEventListener('abort', abort);
+        if (socket.readyState === 1) {
+          socket.send(JSON.stringify({ type: 'stop' })); socket.close();
+          const forceClose = setTimeout(() => socket.terminate(), 2000); forceClose.unref();
+          socket.once('close', () => clearTimeout(forceClose));
+        }
+        else socket.terminate();
+        if (!ready) reject(new Error('Live transcription start cancelled.'));
+      };
+      const abort = () => close();
+      const fail = message => { if (closed) return; if (!ready) reject(new Error(message)); else onClose?.(message); close(); };
+      const timer = setTimeout(() => fail('Live transcription did not start in time. Check the backend deployment.'), 15000);
+      signal?.addEventListener('abort', abort, { once: true });
+      socket.on('unexpected-response', (_request, response) => { response.resume(); fail(`Live transcription rejected (HTTP ${response.statusCode}). Check the backend provider, API key, language, and active usage session.`); });
+      socket.on('error', () => fail('Live transcription connection failed. Check the backend deployment and network.'));
+      socket.on('close', () => fail('Live transcription disconnected. Restart listening to reconnect.'));
+      socket.on('message', bytes => {
+        if (closed) return;
+        let event;
+        try { event = JSON.parse(bytes.toString()); } catch { return fail('Invalid live transcription response.'); }
+        if (event.type === 'error') return fail(event.text || 'Live transcription failed.');
+        if (event.type === 'ready' && !ready) {
+          ready = true; clearTimeout(timer);
+          resolve({ close, send(bytes) {
+            if (closed || socket.readyState !== 1) throw new Error('Transcription stream is closed.');
+            if (socket.bufferedAmount > 64000) throw new Error('Transcription upload is behind. Restart listening.');
+            socket.send(bytes, { binary: true });
+          } });
+        } else if (['partial-transcript', 'transcript'].includes(event.type) && typeof event.text === 'string') onEvent({ ...event, speaker });
+      });
+    });
+  }
+
   return {
+    openTranscriptionStream,
     submitFeedback: body => authorizedApi('/feedback', { method: 'POST', body: JSON.stringify(body) }),
     providerFetch, aiStatus: () => api('/ai/status'),
     login, logout, redeemCoupon, status, startRecharge, downloadSessionResume,

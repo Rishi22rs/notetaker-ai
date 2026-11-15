@@ -19,6 +19,8 @@ const { createCloudModels } = require('./cloud-models');
 const { createCloudAI } = require('./cloud-ai');
 const { createCloudSettings } = require('./cloud-settings');
 const { createCloudTranscription } = require('./cloud-transcription');
+const { createStreamingTranscription } = require('./streaming-transcription');
+let streamingTranscription;
 let cloudSettings;
 let cloudTranscription;
 let transcriptionActive = false;
@@ -319,6 +321,10 @@ async function createWindow() {
 
   await win.loadFile(path.join(__dirname, 'index.html'));
   const publishTranscriptionEvent = (event) => {
+    if (event.type === 'error' && event.streaming) {
+      nativeAudio?.stop(); transcription?.stop();
+      stopUsageMeter().catch(error => console.warn('Could not stop usage after streaming failure:', error.message));
+    }
     // Shutdown can emit a final transcription status after the BrowserWindow's
     // closed handler has already set `win` to null.
     if (event.type === 'transcript') interviewSession?.ingest(event);
@@ -326,12 +332,19 @@ async function createWindow() {
   };
   audioEchoFilter = createAudioEchoFilter({ onEvent: publishTranscriptionEvent });
   const publish = (event) => audioEchoFilter.push(event);
-  cloudTranscription = createCloudTranscription(publish, { getSettings: () => ({ ...cloudSettings.get(), backendManaged: true }), fetchImpl: (url, options) => authClient.providerFetch(url, { ...options, usageToken: usageSession?.token }) });
+  cloudTranscription = createCloudTranscription(publish, { getSettings: () => ({ ...cloudSettings.get(), backendManaged: true,
+    captureIntervalsMs: { computer: process.platform === 'darwin' ? 500 : 1500, user: 1500 }
+  }), fetchImpl: (url, options) => authClient.providerFetch(url, { ...options, usageToken: usageSession?.token }) });
+  streamingTranscription = createStreamingTranscription(publish, {
+    getSettings: () => cloudSettings.get(),
+    openStream: options => authClient.openTranscriptionStream({ ...options, usageToken: usageSession?.token })
+  });
   transcription = {
-    start() {
-      const backend = cloudTranscription;
+    async start(sources) {
+      const status = await authClient.aiStatus();
+      const backend = status.streamingTranscription ? streamingTranscription : cloudTranscription;
       transcription.current = backend;
-      return backend.start();
+      return backend.start(sources);
     },
     audio(speaker, bytes) {
       if (speaker === 'computer' && transcription.current) {
@@ -344,7 +357,7 @@ async function createWindow() {
       transcription.current?.audio(speaker, bytes);
     },
     stop() { transcription.current?.stop(); transcription.current = null; transcriptionActive = false; },
-    dispose() { cloudTranscription.dispose(); }
+    dispose() { cloudTranscription.dispose(); streamingTranscription.dispose(); }
   };
   interviewSession = createInterviewSession({
     onTurn: (turn) => {
@@ -493,9 +506,9 @@ ipcMain.handle('transcription:start', async (_event, sources) => {
   // metered session after the renderer has obtained its audio streams.
   const session = await startUsageMeter();
   try {
-    await transcription?.start();
+    await transcription?.start(sources);
     transcriptionActive = true;
-    if (nativeAudio && sources?.system) await nativeAudio.start(false, 0.5);
+    if (nativeAudio && sources?.system) await nativeAudio.start(false, transcription.current === streamingTranscription ? 0.25 : 0.5);
   } catch (error) {
     nativeAudio?.stop(); transcription?.stop(); await stopUsageMeter(); throw error;
   }

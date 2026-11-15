@@ -3,6 +3,27 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
+test('live partial revisions replace the draft without entering finalized transcript context', () => {
+  const source = fs.readFileSync(require.resolve('./renderer'), 'utf8');
+  const functionSource = source.match(/function updateSystemTranscript\([\s\S]*?\n\}/)[0];
+  const painted = [];
+  const context = vm.createContext({
+    liveSystemText: 'Earlier question.', systemTranscriptTicker: { setText: text => painted.push(text) },
+    systemTranscriptText: {}, scrollSystemTranscript() {},
+    mergeCaptionText: require('./interview-session').mergeTranscriptText
+  });
+  vm.runInContext(functionSource, context);
+  context.updateSystemTranscript({ type: 'partial-transcript', speaker: 'computer', text: 'How does' });
+  context.updateSystemTranscript({ type: 'partial-transcript', speaker: 'computer', text: 'How does Redis work?' });
+  assert.equal(context.liveSystemText, 'Earlier question.');
+  assert.equal(painted.at(-1), 'Earlier question. How does Redis work?');
+  context.updateSystemTranscript({ type: 'transcript', speaker: 'computer', text: 'How does Redis work?' });
+  assert.equal(context.liveSystemText, 'Earlier question. How does Redis work?');
+  const count = painted.length;
+  context.updateSystemTranscript({ type: 'partial-transcript', speaker: 'user', text: 'Hidden microphone text' });
+  assert.equal(painted.length, count);
+});
+
 test('hold-to-resize clamps size and release restores click-through', () => {
   let tick;
   let held = false;

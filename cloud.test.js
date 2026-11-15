@@ -98,6 +98,23 @@ test('managed transcription uses the backend route without a Groq key or provide
   } finally { backend.stop(); }
 });
 
+test('a slow microphone transcription cannot block interviewer transcription', async () => {
+  const events = []; let releaseMic;
+  const backend = createCloudTranscription(event => events.push(event), {
+    getSettings: () => ({ backendManaged: true, groqModel: 'whisper-large-v3-turbo', language: 'auto', segmentSeconds: 4 }),
+    fetchImpl: async (_url, options) => {
+      if (options.body.get('file').name === 'user.wav') return new Promise(resolve => { releaseMic = resolve; });
+      return Response.json({ text: 'Interviewer question' });
+    }
+  });
+  try {
+    backend.start(); backend.audio('user', speech(4)); backend.audio('computer', speech(4));
+    await tick(); await tick();
+    assert.ok(releaseMic); assert.ok(events.some(event => event.type === 'transcript' && event.text === 'Interviewer question'));
+    releaseMic(Response.json({ text: 'Candidate response' })); await tick();
+  } finally { backend.stop(); }
+});
+
 test('stop aborts Groq and suppresses stale transcripts', async () => {
   const events=[]; let release, signal;
   const backend=createCloudTranscription(event=>events.push(event),{getSettings:()=>({groqKey:'key',groqModel:'whisper-large-v3',language:'hi',segmentSeconds:4}),fetchImpl:(_url,req)=>{signal=req.signal;return new Promise(resolve=>release=resolve);}});

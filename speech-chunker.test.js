@@ -32,3 +32,11 @@ test('arbitrary audio frame boundaries preserve speech bytes', () => {
  for(let offset=0;offset<bytes.length;offset+=100) chunker.audio(bytes.subarray(offset,offset+100));
  chunker.idle();assert.equal(sent.length,1);assert.ok(sent[0].equals(bytes));
 });
+
+test('cloud pause tuning finalizes after 400ms but preserves shorter hesitations', () => {
+ const sent = []; const chunker = createSpeechChunker({ pauseSeconds: .4, tailSeconds: .2, emit: bytes => sent.push(bytes) });
+ chunker.audio(audio(.5, .03)); chunker.audio(audio(.2));
+ assert.equal(sent.length, 0);
+ chunker.audio(audio(.22)); assert.equal(sent.length, 1);
+ assert.ok(sent[0].length <= 16000 * 4 * .72);
+});

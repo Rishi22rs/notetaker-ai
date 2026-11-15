@@ -17,6 +17,7 @@ createAuthServer({
   geminiDailyRequests: process.env.ADMIN_GEMINI_DAILY_REQUESTS,
   groqDailyRequests: process.env.ADMIN_GROQ_DAILY_REQUESTS,
   cloudflareDailyRequests: process.env.ADMIN_CLOUDFLARE_DAILY_REQUESTS,
+  assemblyaiDailyRequests: process.env.ADMIN_ASSEMBLYAI_DAILY_REQUESTS,
   mongoUri: process.env.MONGODB_URI,
   mongoDbName: process.env.MONGODB_DB || 'notetaker',
   googleClientId: process.env.GOOGLE_CLIENT_ID,
@@ -27,6 +28,7 @@ createAuthServer({
   transcriptionProvider: speechProvider,
   cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID,
   cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN,
+  assemblyaiApiKey: process.env.ASSEMBLYAI_API_KEY,
   razorpayKeyId: process.env.RAZORPAY_KEY_ID,
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET,
   razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET

@@ -20,7 +20,7 @@ function createCloudTranscription(publish, { getSettings, fetchImpl = fetch }) {
   const lastAudioAt = new Map();
   const previous = new Map();
   const overlapBytes = 16000 * 4 / 2;
-  const queue = createTranscriptionQueue({
+  function createQueue() { return createTranscriptionQueue({
     maxQueuedSeconds: 20,
     onError: error => { if (running) publish({ type: 'warning', text: error.message }); },
     onLag: () => publish({ type: 'warning', text: 'Cloud transcription is behind; older audio was skipped.' }),
@@ -43,15 +43,22 @@ function createCloudTranscription(publish, { getSettings, fetchImpl = fetch }) {
       const text = String(result.text || '').trim();
       if (running && id === generation && text) publish({ type: 'transcript', speaker, text, capturedAt });
     }
-  });
+  }); }
+  // Separate lanes keep a slow microphone request from holding system audio.
+  const queues = { computer: createQueue(), user: createQueue() };
   function start() {
     if (running) return;
     settings = getSettings();
     if (!settings.backendManaged && !settings.groqKey) throw new Error('Add a Groq API key in AI & Models settings.');
     generation++; running = true; controller = new AbortController();
     timer = setInterval(() => {
-      for (const [speaker, chunker] of chunkers) if (Date.now() - lastAudioAt.get(speaker) >= 800) chunker.idle();
-    }, 500);
+      // A missing packet isn't necessarily a spoken pause: renderer capture
+      // windows arrive less often than native system-audio frames.
+      for (const [speaker, chunker] of chunkers) {
+        const idleMs = (settings.captureIntervalsMs?.[speaker] ?? 1500) + 400;
+        if (Date.now() - lastAudioAt.get(speaker) >= idleMs) chunker.idle();
+      }
+    }, 100);
     publish({ type: 'ready', text: `Listening · ${settings.backendManaged ? 'Cloud Whisper' : `Groq ${settings.groqModel}`} · ${settings.language === 'auto' ? 'automatic language' : settings.language}` });
   }
   function audio(speaker, bytes) {
@@ -63,8 +70,8 @@ function createCloudTranscription(publish, { getSettings, fetchImpl = fetch }) {
     const overlaps = last && last.length >= overlapBytes && raw.length >= overlapBytes && last.subarray(-overlapBytes).equals(raw.subarray(0, overlapBytes));
     const newBytes = raw.subarray(overlaps ? overlapBytes : 0);
     if (!chunkers.has(speaker)) chunkers.set(speaker, createSpeechChunker({
-      segmentSeconds: settings.segmentSeconds,
-      emit: (audio, capturedAt) => queue.enqueue(speaker, audio, capturedAt, true)
+      segmentSeconds: settings.segmentSeconds, pauseSeconds: 0.4, tailSeconds: 0.2,
+      emit: (audio, capturedAt) => queues[speaker].enqueue(speaker, audio, capturedAt, true)
     }));
     lastAudioAt.set(speaker, Date.now());
     chunkers.get(speaker).audio(newBytes);
@@ -72,7 +79,7 @@ function createCloudTranscription(publish, { getSettings, fetchImpl = fetch }) {
 
   function stop() {
     running = false; generation++; clearInterval(timer); controller?.abort();
-    queue.clear(); for (const chunker of chunkers.values()) chunker.clear(); chunkers.clear(); lastAudioAt.clear(); previous.clear();
+    for (const queue of Object.values(queues)) queue.clear(); for (const chunker of chunkers.values()) chunker.clear(); chunkers.clear(); lastAudioAt.clear(); previous.clear();
     publish({ type: 'status', text: 'Stopped' });
   }
   return { start, stop, audio, dispose: stop };

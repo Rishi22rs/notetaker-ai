@@ -1,5 +1,5 @@
 > Current desktop builds are cloud-only: Gemini 3.5 Flash-Lite for answers and
-> Cloudflare or Groq Whisper for transcription. Internet access and provider API keys are required.
+> AssemblyAI live streaming or Cloudflare/Groq Whisper for transcription. Internet access and provider API keys are required.
 > Local Qwen/llama/Ollama, Whisper runtimes, Python workers and model downloads are
 > excluded from the app package. Local files and historical setup notes below do
 > not describe the current build.
@@ -237,7 +237,49 @@ native Core Audio tap, so no screen/window picker or screen video capture is use
 After granting macOS permission, fully quit and reopen the app if macOS requests it.
 
 
-## Cloud interview mode (Cloudflare / Groq + Gemini)
+## Cloud interview mode (AssemblyAI / Cloudflare / Groq + Gemini)
+
+### Live partial transcription with AssemblyAI
+
+Set the following in the backend environment and restart/redeploy it:
+
+```dotenv
+TRANSCRIPTION_PROVIDER=assemblyai
+ASSEMBLYAI_API_KEY=your_assemblyai_api_key
+```
+
+Get the key from [AssemblyAI](https://www.assemblyai.com/dashboard/).
+This path explicitly selects `universal-streaming-english` (the lower-cost
+Universal-Streaming model), not the provider's more expensive default model.
+It supports English only; `auto` here still uses the English model. Hindi is
+rejected before opening a stream. Gemini still produces the AI answers.
+
+Update/restart the desktop app too: it discovers `streamingTranscription` via
+`/ai/status` and opens authenticated WebSockets to `/ai/transcribe/stream`.
+The backend relays to AssemblyAI and keeps the permanent provider key private.
+Each source has its own 16 kHz PCM16 stream; short non-overlapping frames replace
+the four-second transcription chunks. System audio connects first and continues
+while the microphone connects. A failed microphone stream warns without stopping
+system transcription. Partial revisions replace the on-screen draft; only one
+final transcript per provider turn enters the interview context and answers.
+
+Streaming endpointing checks after 250 ms of silence with a 700 ms maximum pause.
+These are provider turn-detection settings, not an end-to-end latency guarantee.
+The existing interviewer-continuation checks still protect against premature
+answers. Old chunk providers also use independent speaker queues and a shorter
+400 ms speech-pause boundary; the original energy thresholds are unchanged.
+
+Stopping, disconnecting, exhausting usage, or signing out closes provider streams.
+The backend rechecks authentication and the paid lease every five seconds. A
+single user can have one stream per source, up to two total. Limits include 100
+streams per backend instance and 30 new streams/minute/user; these are safety
+caps, not measured user capacity or AssemblyAI account limits. Upload and output
+buffers are bounded. Failed streams require an explicit restart; no hidden
+provider fallback or automatic reconnection creates extra billable sessions.
+AssemblyAI bills open session time, including silence, separately for each source.
+The admin dashboard records open-stream seconds as an estimate, not an invoice.
+
+### Existing chunk providers
 
 The desktop sends audio to the authenticated backend. Select the transcription
 provider in the **backend environment**, not in the desktop settings:
@@ -423,7 +465,7 @@ The dashboard refreshes every 15 seconds and shows unexpired listening leases,
 in-flight AI requests, the existing 100-request instance cap, process memory,
 host memory/load, event loop delay, uptime, and daily provider requests, completions,
 errors, rejections, reported tokens and estimated audio seconds, separated by
-Gemini, Groq, and Cloudflare. Groq estimates include its ten-second request
+Gemini, Groq, Cloudflare, and AssemblyAI. Groq estimates include its ten-second request
 minimum; Cloudflare estimates use uploaded WAV duration. These estimates include
 attempted requests, so they are not provider invoices.
 An 80% request-capacity alert is a concurrency guardrail, not a measured maximum

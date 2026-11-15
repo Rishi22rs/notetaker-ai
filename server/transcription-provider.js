@@ -2,11 +2,12 @@ const CLOUDFLARE_MODEL = '@cf/openai/whisper-large-v3-turbo';
 
 function transcriptionProvider(config) {
   const provider = String(config.transcriptionProvider || 'groq').trim().toLowerCase();
-  if (!['groq', 'cloudflare'].includes(provider)) throw new Error('TRANSCRIPTION_PROVIDER must be groq or cloudflare.');
+  if (!['groq', 'cloudflare', 'assemblyai'].includes(provider)) throw new Error('TRANSCRIPTION_PROVIDER must be groq, cloudflare, or assemblyai.');
   return provider;
 }
 
 function transcriptionConfigured(config) {
+  if (transcriptionProvider(config) === 'assemblyai') return Boolean(config.assemblyaiApiKey);
   return transcriptionProvider(config) === 'cloudflare'
     ? Boolean(config.cloudflareApiToken && /^[a-f0-9]{32}$/i.test(config.cloudflareAccountId || ''))
     : Boolean(config.groqApiKey);

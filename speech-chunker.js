@@ -2,11 +2,11 @@ const RATE = 16000;
 const FRAME_BYTES = RATE * 4 * 0.02;
 // Energy gating is deliberately conservative: it is not a speech recognizer.
 // Keep quiet speech and pre-roll; constant background noise may still pass.
-function createSpeechChunker({ segmentSeconds = 4, emit }) {
+function createSpeechChunker({ segmentSeconds = 4, pauseSeconds = 0.7, tailSeconds = 0.3, emit }) {
   const maxBytes = Math.max(1, segmentSeconds) * RATE * 4;
   const preRollBytes = RATE * 4 * 0.2;
-  const tailBytes = RATE * 4 * 0.3;
-  const pauseBytes = RATE * 4 * 0.7;
+  const tailBytes = RATE * 4 * tailSeconds;
+  const pauseBytes = RATE * 4 * pauseSeconds;
   const minimumSpeechBytes = RATE * 4 * 0.08;
   let remainder = Buffer.alloc(0), preRoll = Buffer.alloc(0), frames = [], length = 0, silence = 0, speech = 0, capturedAt;
   function flush() {
