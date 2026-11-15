@@ -2,6 +2,29 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createAuthClient } = require('./auth-client');
 
+test('backend-managed transcription forwards audio and usage auth without a provider credential', async t => {
+  const fs = require('node:fs/promises'); const path = require('node:path'); const os = require('node:os');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'transcription-client-test-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  await fs.writeFile(path.join(directory, 'auth-session.json'), JSON.stringify({ token: 'app-session' }));
+  const client = createAuthClient({ serverUrl: 'https://backend.example.com', userDataPath: directory, openExternal: async () => {} });
+  const signal = new AbortController().signal;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(String(url), 'https://backend.example.com/ai/transcribe');
+    assert.equal(options.headers.authorization, 'Bearer app-session');
+    assert.equal(options.headers['x-usage-token'], 'lease');
+    assert.equal(options.signal, signal);
+    const body = JSON.parse(options.body);
+    assert.equal(body.audio, Buffer.from('wav bytes').toString('base64')); assert.equal(body.language, 'hi');
+    assert.equal(body.model, 'whisper-large-v3-turbo');
+    return Response.json({ text: 'Transcript' });
+  });
+  const form = new FormData(); form.set('file', new Blob(['wav bytes']), 'audio.wav');
+  form.set('model', 'whisper-large-v3-turbo'); form.set('language', 'hi');
+  const response = await client.providerFetch('/ai/transcribe', { transcription: true, body: form, usageToken: 'lease', signal });
+  assert.equal((await response.json()).text, 'Transcript');
+});
+
 test('Google login reports an unavailable server before opening a browser', async () => {
   let opened = false;
   const client = createAuthClient({

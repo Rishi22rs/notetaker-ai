@@ -21,7 +21,7 @@ test('Gemini streams split UTF-8 SSE frames and ignores metadata', async () => {
   await new Promise((resolve, reject) => ai.chat({ messages: [{ role: 'user', content: 'Hi', images: ['secret-image'] }], onChunk: text => answer += text, onDone: resolve, onError: reject }));
   assert.equal(answer, 'नमस्ते'); assert.equal(payload.stream, true);
   assert.equal(payload.model, 'gemini-3.5-flash-lite');
-  assert.equal(payload.reasoning_effort, 'low');
+  assert.equal(payload.reasoning_effort, 'minimal');
   assert.equal(payload.messages[0].images, undefined);
 });
 
@@ -77,6 +77,25 @@ test('Groq keeps speakers, removes capture overlap, skips silence and leaves mix
     assert.equal(requests[0].body.get('file').size,44 + 16000*2*4);
     assert.equal(events.find(event=>event.type==='transcript').speaker,'computer');
   } finally {backend.stop();}
+});
+
+test('managed transcription uses the backend route without a Groq key or provider-specific status', async () => {
+  const events = [], requests = [];
+  const backend = createCloudTranscription(event => events.push(event), {
+    getSettings: () => ({ backendManaged: true, groqModel: 'whisper-large-v3-turbo', language: 'auto', segmentSeconds: 4 }),
+    fetchImpl: async (url, request) => { requests.push({ url, request }); return Response.json({ text: 'Backend transcript' }); }
+  });
+  try {
+    backend.start();
+    backend.audio('computer', speech(4));
+    await tick(); await tick();
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, '/ai/transcribe');
+    assert.equal(requests[0].request.transcription, true);
+    assert.equal(requests[0].request.headers.Authorization, undefined);
+    assert.match(events.find(event => event.type === 'ready').text, /Cloud Whisper/);
+    assert.equal(events.find(event => event.type === 'transcript').text, 'Backend transcript');
+  } finally { backend.stop(); }
 });
 
 test('stop aborts Groq and suppresses stale transcripts', async () => {

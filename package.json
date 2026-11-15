@@ -1,13 +1,19 @@
 {
   "name": "privacy-overlay-demo",
-  "version": "1.0.0",
+  "version": "1.1.0-beta.1",
   "private": true,
   "description": "Screen-capture-protected standalone local AI chat overlay",
+  "author": {
+    "name": "UNYON",
+    "url": "https://myunyon.com"
+  },
   "main": "main.js",
   "scripts": {
     "build:audio:mac": "node scripts/build-audio-mac.js",
     "setup:windows": "node -e \"console.log('Cloud models require no local model setup.')\"",
     "start": "electron .",
+    "start:debug": "node scripts/start-debug.js",
+    "test:debug": "node --test reactotron-config.test.js auth-client.test.js",
     "start:auth": "node server/index.js",
     "coupon:create": "node server/create-coupon.js",
     "pricing:manage": "node server/manage-pricing.js",
@@ -15,13 +21,15 @@
     "plan:remove": "node server/manage-plan.js remove",
     "plans:migrate-seconds": "node server/migrate-recharge-plans-to-seconds.js",
     "test": "node --test live-transcript-ticker.test.js server/admin-monitor.test.js speech-chunker.test.js server/ai-proxy.test.js pdf-text.test.js server/session-history.test.js floating-window.test.js session-context.test.js cloud.test.js interaction.test.js audio-echo-filter.test.js transcription.test.js local-ai.test.js context-merge.test.js context-prompt.test.js interview-session.test.js question-detector.test.js context-retriever.test.js interview-answer-prompt.test.js interview-question-context.test.js auth-client.test.js auth-crypto.test.js server/payments.test.js server/usage-meter.test.js",
-    "build:win": "electron-builder --win",
+    "build:win": "electron-builder --win --x64",
     "build:mac": "npm run build:audio:mac && electron-builder --mac",
-    "build:all": "electron-builder -mwl"
+    "build:all": "npm run build:mac && npm run build:win",
+    "release:stage": "node scripts/stage-release-artifacts.js"
   },
   "devDependencies": {
     "electron": "44.2.0",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "reactotron-core-client": "^2.10.0"
   },
   "dependencies": {
     "@napi-rs/canvas": "1.0.10",
@@ -50,6 +58,7 @@
     ],
     "win": {
       "target": "nsis",
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
       "extraResources": []
     },
     "mac": {
@@ -57,6 +66,7 @@
         "dmg",
         "zip"
       ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "category": "public.app-category.utilities",
       "extraResources": [
         {

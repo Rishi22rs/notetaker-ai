@@ -547,6 +547,8 @@
     .login-agreement.needs-agreement input { outline: 2px solid #e69d98; outline-offset: 3px; }
     @keyframes agreement-shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-4px); } 40%, 80% { transform: translateX(4px); } }
     @media (prefers-reduced-motion: reduce) { .login-agreement.needs-agreement { animation: none; } }
+    .floating-chat-message { flex-shrink: 0; }
+    .floating-chat-messages { overflow-anchor: none; }
   </style>
 </head>
 <body class="starting">

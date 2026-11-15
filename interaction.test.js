@@ -21,7 +21,7 @@ test('hold-to-resize clamps size and release restores click-through', () => {
     webContents: { send() {} }
   };
   const context = {
-    __dirname, process: { platform: 'win32' }, setInterval(fn) { tick = fn; }, clearInterval() {},
+    __dirname, process: { platform: 'win32', env: {} }, setInterval(fn) { tick = fn; }, clearInterval() {},
     require(name) {
       if (name === './captions') return () => ({});
       if (name === 'koffi') return { load: () => ({ func: () => (key) =>
@@ -84,6 +84,20 @@ test('embedded browser modifier wheel scrolls the page without zooming', () => {
   prevented = false;
   wheel({ deltaY: 50, preventDefault() { prevented = true; } });
   assert.equal(prevented, false);
+});
+
+test('reload shortcuts are disabled so an active floating session cannot be reset', () => {
+  const source = fs.readFileSync(require.resolve('./main'), 'utf8');
+  const functionSource = source.match(/function isReloadShortcut\([\s\S]*?\n\}/)?.[0];
+  assert.ok(functionSource);
+  const isReloadShortcut = vm.runInNewContext(`${functionSource}\nisReloadShortcut`);
+  assert.equal(isReloadShortcut({ key: 'r', meta: true }), true);
+  assert.equal(isReloadShortcut({ key: 'R', control: true, shift: true }), true);
+  assert.equal(isReloadShortcut({ key: 'F5' }), true);
+  assert.equal(isReloadShortcut({ key: 'r' }), false);
+  assert.equal(isReloadShortcut({ key: 'F6' }), false);
+  assert.match(source, /before-input-event/);
+  assert.match(source, /Menu\.setApplicationMenu\(null\)/);
 });
 
 test('only the latest computer line has an answer action below it', () => {
@@ -380,7 +394,7 @@ test('starting transcription checks permissions before charging session time', (
 test('visibility hotkey works in both modes while interaction hotkeys remain floating-only', async () => {
   const handlers = new Map(), shortcuts = new Map(); let ignored = false; let visible = true; const messages = [];
   const window = { isDestroyed: () => false, isVisible: () => visible, hide() { visible = false; }, show() { visible = true; }, showInactive() { visible = true; }, setAlwaysOnTop() {}, webContents: { send(channel) { messages.push(channel); } }, setFocusable() {}, focus() {}, setIgnoreMouseEvents(value) { ignored = value; } };
-  const context = { __dirname, process: { platform: 'win32' }, setInterval, clearInterval,
+  const context = { __dirname, process: { platform: 'win32', env: {} }, setInterval, clearInterval,
     require(name) {
       if (name === 'electron') return {
         app: { whenReady: () => ({ then: () => ({ catch() {} }) }), on() {} },

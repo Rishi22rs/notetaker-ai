@@ -119,3 +119,4 @@ footer{background:#0c0e0d;border-top:1px solid var(--line)}.logo-light .logo-mar
 .install-steps p{margin:7px 0 0;padding:0 14px 16px 0;color:#d9ddd8;font-size:12px;line-height:1.55;border-bottom:1px solid var(--line)}
 .install-steps li:last-child p{padding-bottom:0;border-bottom:0}
 @media(max-width:650px){.install-steps li{grid-template-columns:32px minmax(0,1fr);gap:12px;min-height:62px}.install-steps li>span{width:32px;height:32px;box-shadow:0 0 0 4px #191c1a}.install-steps li:not(:last-child)::after{left:15px;top:33px}.install-steps p{margin-top:5px;padding-right:0}}
+.downloads-copy>p{max-width:420px;color:var(--muted);font-size:14px;line-height:1.75}.checksum-link{display:inline-flex;align-items:center;gap:6px;margin-top:18px;color:var(--muted);font:9px var(--mono);letter-spacing:.04em;text-decoration:none}.checksum-link:hover{color:var(--lime)}

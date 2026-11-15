@@ -1,4 +1,5 @@
 const GEMINI_MODEL = 'gemini-3.5-flash-lite';
+const GEMINI_REASONING_EFFORT = 'minimal';
 const CLOUD_MODEL = `cloud:${GEMINI_MODEL}`;
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
@@ -17,7 +18,7 @@ function createCloudAI({ getSettings, fetchImpl = fetch }) {
       method: 'POST', signal,
       headers: { Authorization: `Bearer ${settings.geminiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: GEMINI_MODEL, messages, stream: false, temperature: 0.2,
-        max_tokens: json ? 512 : 4096, reasoning_effort: 'low',
+        max_tokens: json ? 512 : 4096, reasoning_effort: GEMINI_REASONING_EFFORT,
         ...(json ? { response_format: { type: 'json_object' } } : {}) })
     });
     if (!response.ok) {
@@ -40,7 +41,7 @@ function createCloudAI({ getSettings, fetchImpl = fetch }) {
         method: 'POST', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]),
         headers: { Authorization: `Bearer ${settings.geminiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: GEMINI_MODEL, messages: messages.map(({role, content}) => ({role, content})),
-          stream: true, temperature: 0.2, max_tokens: 4096, reasoning_effort: 'low' })
+          stream: true, temperature: 0.2, max_tokens: 4096, reasoning_effort: GEMINI_REASONING_EFFORT })
       });
       if (!response.ok) {
       const body = typeof response.json === 'function' ? await response.json().catch(() => ({})) : {};
@@ -75,4 +76,4 @@ function createCloudAI({ getSettings, fetchImpl = fetch }) {
 
   return { chat, complete: ({ messages }) => request({ messages, json: true, signal: AbortSignal.timeout(30_000) }) };
 }
-module.exports = { createCloudAI, CLOUD_MODEL, GEMINI_MODEL, providerError };
+module.exports = { createCloudAI, CLOUD_MODEL, GEMINI_MODEL, GEMINI_REASONING_EFFORT, providerError };

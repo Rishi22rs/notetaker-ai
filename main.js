@@ -1,7 +1,19 @@
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs/promises');
-const { app, BrowserWindow, globalShortcut, screen, dialog, ipcMain, desktopCapturer, shell, systemPreferences, safeStorage, clipboard } = require('electron');
+const { app, BrowserWindow, Menu, globalShortcut, screen, dialog, ipcMain, desktopCapturer, shell, systemPreferences, safeStorage, clipboard } = require('electron');
+let diagnostics;
+if (!app.isPackaged && process.env.REACTOTRON === '1') {
+  try { diagnostics = require('./reactotron-config').startReactotron(); }
+  catch (error) { console.warn('Reactotron could not start:', error.message); }
+}
+app.on('will-quit', () => diagnostics?.close());
+app.on('web-contents-created', (_event, contents) => {
+  if (!diagnostics) return;
+  contents.on('console-message', (details) => {
+    diagnostics.log(details.level === 'error' ? 'error' : details.level === 'warning' ? 'warn' : 'log', `[renderer] ${details.message}`);
+  });
+});
 const { createAuthClient } = require('./auth-client');
 const { createCloudModels } = require('./cloud-models');
 const { createCloudAI } = require('./cloud-ai');
@@ -47,6 +59,11 @@ const textExtensions = new Set([
   '.cs', '.go', '.rs', '.rb', '.php', '.swift', '.kt', '.kts', '.sql', '.sh', '.zsh', '.ps1',
   '.toml', '.ini', '.cfg', '.conf', '.log'
 ]);
+
+function isReloadShortcut(input) {
+  const key = String(input?.key || '').toLowerCase();
+  return key === 'f5' || (key === 'r' && Boolean(input?.control || input?.meta));
+}
 
 function setInteractive(window, enabled) {
   if (!window || window.isDestroyed()) return;
@@ -257,6 +274,7 @@ async function createWindow() {
   win.setMinimumSize(Math.min(620, area.width), Math.min(400, area.height));
 
   floatingWindowController = createFloatingWindowController(win, screen);
+  Menu.setApplicationMenu(null);
   win.setMenu(null);
   win.setAlwaysOnTop(true, 'screen-saver');
   if (process.platform === 'darwin') {
@@ -287,6 +305,9 @@ async function createWindow() {
     } catch { callback(null); }
   }, { useSystemPicker: process.platform === 'darwin' });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('before-input-event', (event, input) => {
+    if (isReloadShortcut(input)) event.preventDefault();
+  });
   win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.on('closed', () => {
     endRecordedSession().catch(error => console.warn('Could not finalize session history:', error.message));
@@ -305,7 +326,7 @@ async function createWindow() {
   };
   audioEchoFilter = createAudioEchoFilter({ onEvent: publishTranscriptionEvent });
   const publish = (event) => audioEchoFilter.push(event);
-  cloudTranscription = createCloudTranscription(publish, { getSettings: () => ({ ...cloudSettings.get(), geminiKey: 'backend-managed', groqKey: 'backend-managed' }), fetchImpl: (url, options) => authClient.providerFetch(url, { ...options, usageToken: usageSession?.token }) });
+  cloudTranscription = createCloudTranscription(publish, { getSettings: () => ({ ...cloudSettings.get(), backendManaged: true }), fetchImpl: (url, options) => authClient.providerFetch(url, { ...options, usageToken: usageSession?.token }) });
   transcription = {
     start() {
       const backend = cloudTranscription;

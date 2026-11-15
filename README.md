@@ -1,5 +1,5 @@
 > Current desktop builds are cloud-only: Gemini 3.5 Flash-Lite for answers and
-> Groq Whisper for transcription. Internet access and provider API keys are required.
+> Cloudflare or Groq Whisper for transcription. Internet access and provider API keys are required.
 > Local Qwen/llama/Ollama, Whisper runtimes, Python workers and model downloads are
 > excluded from the app package. Local files and historical setup notes below do
 > not describe the current build.
@@ -67,6 +67,21 @@ npm start
 
 ## Google sign-in and MongoDB
 
+### Inspect API calls and logs with Reactotron
+
+Open the [Reactotron desktop app](https://github.com/infinitered/reactotron/releases),
+then run `npm run start:debug`. Select **UNYON Electron** in Reactotron. The client
+connects to `127.0.0.1:9090` and shows main-process fetch calls (including auth,
+payments, and AI), HTTP status, timing, network failures, and main/renderer console
+logs. Request/response bodies, headers, query values, and resource IDs are omitted;
+common credential patterns in log strings are redacted. Avoid logging private data
+in free-form messages. Streaming AI responses and audio downloads remain untouched.
+HTTP failures appear in the network timeline; API error messages also appear when
+the application logs them. These are desktop diagnostics, not Render server logs.
+
+Normal `npm start` and packaged releases do not connect to Reactotron. Stop and
+restart with `npm run start:debug` after opening Reactotron if needed.
+
 Authentication uses Google OAuth in the system browser. The Node authentication
 server verifies the Google identity, creates or updates the user in MongoDB, and
 issues an opaque 30-day session. Only a hash of that session is stored in MongoDB;
@@ -86,6 +101,12 @@ For a deployed backend, set `AUTH_PUBLIC_URL` to its HTTPS origin and add the ex
 `<origin>/auth/google/callback` URI in Google Cloud. Start Electron with
 `AUTH_SERVER_URL` set to the same origin. Never bundle `.env` or the Google client
 secret with the desktop app; the build explicitly excludes `.env`.
+
+On Render, use `npm install` as the build command, `npm run start:auth` as the
+start command, `HOST=0.0.0.0`, and `/health` as the health check path. Let Render
+provide `PORT`. The backend root (`/`) returns an API status message; it does not
+host the website or start desktop sign-in. Set `AUTH_SERVER_URL` to the backend
+origin without an added `/api` or `/auth` path.
 
 The authentication collections are created automatically:
 
@@ -216,30 +237,55 @@ native Core Audio tap, so no screen/window picker or screen video capture is use
 After granting macOS permission, fully quit and reopen the app if macOS requests it.
 
 
-## Cloud interview mode (Groq + Gemini)
+## Cloud interview mode (Cloudflare / Groq + Gemini)
 
-Settings → AI & Models now offers optional cloud transcription and answering.
-Local mode remains available and does not require provider keys.
+The desktop sends audio to the authenticated backend. Select the transcription
+provider in the **backend environment**, not in the desktop settings:
 
-1. Create a Groq key in https://console.groq.com/ and a Gemini key in
-   https://aistudio.google.com/. Use the providers' Free plans for testing;
-   this app does not change provider billing plans or guarantee free usage.
-2. Enter both keys in Cloud providers and save. Keys are encrypted with
-   Electron safeStorage in the app's local user-data directory. Blank fields
-   keep saved keys; Remove saved keys deletes both and restores local transcription.
-3. Select Groq transcription and either Whisper Large V3 Turbo (budget) or
-   Large V3 (accuracy). Automatic language detection supports mixed-language
-   testing; Hindi and English can also be selected explicitly.
-4. Select Gemini 3.5 Flash-Lite in the answering-model picker. It powers typed
-   answers, interview answers, suggestions, and ambiguous-question classification.
-   All answers are written in English, regardless of the spoken or typed question language.
-5. Start listening normally. Microphone and system transcripts retain separate
-   speaker labels and use the existing echo filter and recent-session dialogue.
+```dotenv
+TRANSCRIPTION_PROVIDER=cloudflare
+CLOUDFLARE_ACCOUNT_ID=your_32_character_account_id
+CLOUDFLARE_API_TOKEN=your_workers_ai_api_token
+GROQ_API_KEY=your_groq_api_key
+GEMINI_API_KEY=your_gemini_api_key
+```
 
-Enabled audio sources are uploaded to Groq. Questions and selected transcript /
-reference excerpts are sent to Google. Typed cloud questions retrieve bounded
-reference excerpts instead of uploading every document. This integration is
-text-only for answering; attached images are not sent to Gemini.
+Create a Cloudflare token and copy your Account ID from
+[Workers AI → Use REST API](https://developers.cloudflare.com/workers-ai/get-started/rest-api/).
+Use the Workers AI token template (Workers AI Read and Edit on the intended account).
+Keep credentials in Render's environment or the backend `.env`; never put them in
+Git, desktop builds, or website `VITE_` variables.
+
+- `TRANSCRIPTION_PROVIDER=cloudflare` uses `@cf/openai/whisper-large-v3-turbo`.
+- `TRANSCRIPTION_PROVIDER=groq` uses the existing Groq Whisper integration and key.
+- An unset selector keeps Groq for existing deployments. Invalid values fail
+  startup. There is no automatic provider fallback or duplicate audio upload.
+- Restart/redeploy the backend after changing the selector. Existing desktop
+  clients continue to use `/ai/transcribe`; no desktop rebuild is needed to switch.
+- `/ai/status` reports `transcriptionProvider`, `transcriptionModel`, and
+  `hasTranscriptionKey` without returning credentials. Cloudflare uses a fixed
+  Turbo model even if an older desktop client requests Groq Large V3.
+
+Cloudflare accepts base64 WAV chunks via the Workers AI REST API; its response
+is converted to the same `{ "text": "..." }` shape used by the desktop. This is
+chunked transcription, not a persistent realtime stream. Actual accuracy and
+latency must be checked with your audio and Cloudflare account.
+
+To diagnose a 429, check `/ai/status` on the backend the desktop actually uses.
+Changing a local `.env` does not change Render's environment. The updated backend
+reports `source`, `reason`, `providerCode`, and `retryAfterSeconds` when available
+in error responses, and forwards the `Retry-After` header. Backend concurrency
+and per-minute limits are distinguished from provider errors. Cloudflare error
+3040 means temporary provider capacity; 3036 means the daily free allocation is
+exhausted. Neither should be reported as the same generic request-rate error.
+Stopping and restarting listening does not reset backend or provider quotas.
+
+Gemini 3.5 Flash-Lite remains the answering model with minimal thinking and
+streamed answers. Microphone and system transcripts retain separate speaker
+labels and the existing echo filter and recent-session dialogue. Automatic
+language detection, English, and Hindi hints remain available. Questions and
+selected transcript/reference excerpts are sent to Google. Attached images are
+not sent by this text-only answering integration.
 
 Capture overlap is removed before cloud upload. Four-second segments favor
 responsiveness; ten-second segments reduce billing overhead. Groq bills a
@@ -337,8 +383,8 @@ npm run plan:add -- minutes_100_pack 6000 49900 1 69900 "Starter Pack"
 ### Backend-managed AI
 
 Desktop requests now use authenticated `/ai/chat` and `/ai/transcribe` endpoints.
-Configure `GROQ_API_KEY` and `GEMINI_API_KEY` in the backend environment only,
-then restart the backend. No provider credential is sent to the desktop.
+Configure the selected transcription provider credentials and `GEMINI_API_KEY`
+in the backend environment only, then restart the backend. No provider credential is sent to the desktop.
 The server requires a current paid usage lease owned by the signed-in user,
 checks remaining time, and rechecks authorization during long requests.
 Gemini responses are streamed with backpressure; disconnects cancel upstream work.
@@ -376,7 +422,10 @@ any `VITE_` variable. Restart/redeploy the backend and rebuild/redeploy the webs
 The dashboard refreshes every 15 seconds and shows unexpired listening leases,
 in-flight AI requests, the existing 100-request instance cap, process memory,
 host memory/load, event loop delay, uptime, and daily provider requests, completions,
-errors, rejections, reported tokens and estimated Groq billable audio seconds.
+errors, rejections, reported tokens and estimated audio seconds, separated by
+Gemini, Groq, and Cloudflare. Groq estimates include its ten-second request
+minimum; Cloudflare estimates use uploaded WAV duration. These estimates include
+attempted requests, so they are not provider invoices.
 An 80% request-capacity alert is a concurrency guardrail, not a measured maximum
 number of users: determine sustainable user capacity with production-like load tests.
 Missing keys, recent AI failures, high event loop delay and configured request

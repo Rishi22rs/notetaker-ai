@@ -1,0 +1,19 @@
+{
+  "version": "1.1.0-beta.1",
+  "channel": "beta",
+  "publishedAt": "2026-11-08T14:09:40.905Z",
+  "artifacts": {
+    "mac": {
+      "architecture": "arm64",
+      "url": "/downloads/UNYON-1.1.0-beta.1-arm64.dmg",
+      "sha256": "f3ccf233aa32ec6b6c9c0d1dfe67ca1e251f6a6131214ff2ba585c8e107d597f",
+      "size": 167513400
+    },
+    "windows": {
+      "architecture": "x64",
+      "url": "/downloads/UNYON-Setup-1.1.0-beta.1-x64.exe",
+      "sha256": "17a8885dafc814caf3ba86d22378e8d8a4c0c655586588b9e2c982e31fa23b9e",
+      "size": 138759324
+    }
+  }
+}

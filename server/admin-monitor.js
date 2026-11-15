@@ -3,6 +3,7 @@ const { monitorEventLoopDelay } = require('node:perf_hooks');
 const { randomToken, hashToken } = require('../auth-crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { transcriptionProvider, transcriptionConfigured } = require('./transcription-provider');
 
 function allowed(email, config) {
   return String(config.adminEmails || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean).includes(String(email || '').toLowerCase());
@@ -20,7 +21,7 @@ function createAdminMonitor({ db, config, fetchImpl = fetch }) {
   const loop = monitorEventLoopDelay({ resolution: 20 }); loop.enable();
   let pending = {}; let storageError = false; let flushing;
   function observe(event) {
-    const provider = event.kind === 'chat' ? 'gemini' : 'groq';
+    const provider = event.kind === 'chat' ? 'gemini' : event.provider === 'cloudflare' ? 'cloudflare' : 'groq';
     const key = `${new Date().toISOString().slice(0, 10)}:${provider}`;
     const values = pending[key] ||= {};
     const add = (name, n = 1) => { if (Number.isFinite(n)) values[name] = (values[name] || 0) + n; };
@@ -35,7 +36,7 @@ function createAdminMonitor({ db, config, fetchImpl = fetch }) {
     if (event.event === 'cancelled_or_timed_out') add('cancelled');
     if (event.event === 'rate_limited') add('localRejections');
     if (event.event === 'provider_headers' && event.status === 429) add('providerRejections');
-    if (event.event === 'audio_chunk') add('audioSecondsEstimate', event.minimumBillableSecondsEstimate);
+    if (event.event === 'audio_chunk') add('audioSecondsEstimate', event.audioSecondsEstimate ?? event.minimumBillableSecondsEstimate);
     if (event.event === 'provider_headers' && event.rateLimits && Object.keys(event.rateLimits).length) providerLimits.set(provider, { observedAt: new Date().toISOString(), values: event.rateLimits });
   }
   async function flush() {
@@ -109,15 +110,19 @@ function createAdminMonitor({ db, config, fetchImpl = fetch }) {
     if (request.method === 'GET' && url.pathname === '/admin/api/metrics') {
       await flush();
       const today = new Date().toISOString().slice(0, 10);
-      const [usage, activeSessions] = await Promise.all([records.find({ _id: { $in: [`${today}:gemini`, `${today}:groq`] } }).toArray(), db.collection('usage_sessions').countDocuments({ status: 'active', leaseExpiresAt: { $gt: new Date() } })]);
+      const [usage, activeSessions] = await Promise.all([records.find({ _id: { $in: [`${today}:gemini`, `${today}:groq`, `${today}:cloudflare`] } }).toArray(), db.collection('usage_sessions').countDocuments({ status: 'active', leaseExpiresAt: { $gt: new Date() } })]);
       const alerts = [];
       const activeRequests = live.size;
       if (activeRequests >= 80) alerts.push('AI request capacity is above 80% of the 100-request instance limit.');
       if (storageError) alerts.push('Usage storage failed; quota totals may be incomplete.');
-      const providers = ['gemini', 'groq'].map(name => {
+      const selectedSpeechProvider = transcriptionProvider(config);
+      const providers = ['gemini', 'groq', 'cloudflare'].map(name => {
         const row = usage.find(v => v._id === `${today}:${name}`) || {};
         const budget = Number(config[`${name}DailyRequests`]) > 0 ? Number(config[`${name}DailyRequests`]) : null;
-        if (!config[name === 'gemini' ? 'geminiApiKey' : 'groqApiKey']) alerts.push(`${name}: backend API key is missing.`);
+        const configured = name === 'gemini' ? Boolean(config.geminiApiKey) : name === 'cloudflare'
+          ? transcriptionConfigured({ ...config, transcriptionProvider: 'cloudflare' }) : Boolean(config.groqApiKey);
+        const enabled = name === 'gemini' || name === selectedSpeechProvider;
+        if (enabled && !configured) alerts.push(`${name}: backend credentials are missing or invalid.`);
         const failure = recentFailures.get(name);
         if (failure && Date.now() - failure.at < 300000) alerts.push(`${name}: a request failed within the last five minutes (HTTP ${failure.status}).`);
         if (budget && (row.requests || 0) >= budget * .8) alerts.push(`${name}: observed requests reached 80% of your configured daily alert budget.`);
@@ -129,7 +134,7 @@ function createAdminMonitor({ db, config, fetchImpl = fetch }) {
             if (limit > 0 && Number.isFinite(remaining) && remaining <= limit * .2) alerts.push(`${name}: provider-reported ${kind} remaining is below 20%.`);
           }
         }
-        return { name, configured: Boolean(config[name === 'gemini' ? 'geminiApiKey' : 'groqApiKey']), ...row, dailyRequestAlertBudget: budget, lastReportedLimits: limits };
+        return { name, configured, enabled, ...row, dailyRequestAlertBudget: budget, lastReportedLimits: limits };
       });
       const memory = process.memoryUsage(); const lagMs = Number.isFinite(loop.mean) ? Math.round(loop.mean / 1e6) : 0;
       if (lagMs >= 100) alerts.push('Event loop delay exceeds 100 ms.');

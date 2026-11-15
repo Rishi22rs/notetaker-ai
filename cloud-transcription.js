@@ -31,13 +31,13 @@ function createCloudTranscription(publish, { getSettings, fetchImpl = fetch }) {
       form.append('file', new Blob([wavFromBytes(bytes)], { type: 'audio/wav' }), `${speaker}.wav`);
       form.append('model', settings.groqModel); form.append('response_format', 'json');
       if (settings.language !== 'auto') form.append('language', settings.language);
-      const response = await fetchImpl('https://api.groq.com/openai/v1/audio/transcriptions', {
-        method: 'POST', headers: { Authorization: `Bearer ${settings.groqKey}` }, body: form,
+      const response = await fetchImpl(settings.backendManaged ? '/ai/transcribe' : 'https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST', transcription: true, headers: settings.backendManaged ? {} : { Authorization: `Bearer ${settings.groqKey}` }, body: form,
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)])
       });
       if (!response.ok) {
         const body = typeof response.json === 'function' ? await response.json().catch(() => ({})) : {};
-        throw typeof body.error === 'string' ? new Error(body.error) : providerError('Groq', response.status);
+        throw typeof body.error === 'string' ? new Error(body.error) : providerError(settings.backendManaged ? 'Transcription provider' : 'Groq', response.status);
       }
       const result = await response.json();
       const text = String(result.text || '').trim();
@@ -47,12 +47,12 @@ function createCloudTranscription(publish, { getSettings, fetchImpl = fetch }) {
   function start() {
     if (running) return;
     settings = getSettings();
-    if (!settings.groqKey) throw new Error('Add a Groq API key in AI & Models settings.');
+    if (!settings.backendManaged && !settings.groqKey) throw new Error('Add a Groq API key in AI & Models settings.');
     generation++; running = true; controller = new AbortController();
     timer = setInterval(() => {
       for (const [speaker, chunker] of chunkers) if (Date.now() - lastAudioAt.get(speaker) >= 800) chunker.idle();
     }, 500);
-    publish({ type: 'ready', text: `Listening · Groq ${settings.groqModel} · ${settings.language === 'auto' ? 'automatic language' : settings.language}` });
+    publish({ type: 'ready', text: `Listening · ${settings.backendManaged ? 'Cloud Whisper' : `Groq ${settings.groqModel}`} · ${settings.language === 'auto' ? 'automatic language' : settings.language}` });
   }
   function audio(speaker, bytes) {
     if (!running || !['user', 'computer'].includes(speaker)) return;

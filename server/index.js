@@ -1,5 +1,8 @@
 require('dotenv').config();
 const { createAuthServer } = require('./auth-server');
+const { transcriptionProvider } = require('./transcription-provider');
+// Fail on a mistyped provider instead of silently selecting another service.
+const speechProvider = transcriptionProvider({ transcriptionProvider: process.env.TRANSCRIPTION_PROVIDER });
 
 const required = ['MONGODB_URI', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'AUTH_PUBLIC_URL'];
 const missing = required.filter((name) => !process.env[name]);
@@ -13,6 +16,7 @@ createAuthServer({
   adminEmails: process.env.ADMIN_EMAILS,
   geminiDailyRequests: process.env.ADMIN_GEMINI_DAILY_REQUESTS,
   groqDailyRequests: process.env.ADMIN_GROQ_DAILY_REQUESTS,
+  cloudflareDailyRequests: process.env.ADMIN_CLOUDFLARE_DAILY_REQUESTS,
   mongoUri: process.env.MONGODB_URI,
   mongoDbName: process.env.MONGODB_DB || 'notetaker',
   googleClientId: process.env.GOOGLE_CLIENT_ID,
@@ -20,6 +24,9 @@ createAuthServer({
   publicUrl: process.env.AUTH_PUBLIC_URL.replace(/\/$/, ''),
   geminiApiKey: process.env.GEMINI_API_KEY,
   groqApiKey: process.env.GROQ_API_KEY,
+  transcriptionProvider: speechProvider,
+  cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+  cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN,
   razorpayKeyId: process.env.RAZORPAY_KEY_ID,
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET,
   razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET

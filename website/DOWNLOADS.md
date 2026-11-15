@@ -6,8 +6,10 @@ redirected to GitHub.
 
 Place release assets in `public/downloads` before the production website build:
 
-- `UNYON-1.0.0-arm64.dmg`
-- `UNYON-Setup-1.0.0.exe`
+- `UNYON-1.1.0-beta.1-arm64.dmg`
+- `UNYON-Setup-1.1.0-beta.1-x64.exe`
+- `SHA256SUMS.txt`
+- `release.json`
 
 The default same-origin paths are configured in `src/platform.js`. For another
 host, copy `.env.example` to `.env.production` and set the public URLs there.

@@ -17,6 +17,7 @@ async function refresh() {
       item.append(node('p', `Completed: ${p.completed || 0} · Errors: ${p.errors || 0} · Provider 429s: ${p.providerRejections || 0} · Local rejections: ${p.localRejections || 0} · Cancelled: ${p.cancelled || 0}`, 'muted'));
       item.append(node('p', `Average completed latency: ${p.completed ? Math.round(p.latencyMs / p.completed) : 0} ms · Reported tokens: ${p.tokens || 0} (${p.tokenReports || 0} usage reports)`, 'muted'));
       if (p.name === 'groq') item.append(node('p', `Estimated billable audio: ${Math.round(p.audioSecondsEstimate || 0)} seconds`, 'muted'));
+      if (p.name === 'cloudflare') item.append(node('p', `Estimated uploaded audio: ${Math.round(p.audioSecondsEstimate || 0)} seconds`, 'muted'));
       item.append(node('p', p.dailyRequestAlertBudget ? `Daily request alert budget: ${p.dailyRequestAlertBudget}` : 'Daily request alert budget: not configured', 'muted'));
       item.append(node('p', p.lastReportedLimits ? `Last provider quota snapshot: ${p.lastReportedLimits.observedAt}. Remaining values may be stale.` : 'Provider remaining quota: not reported. Account credit balance: unavailable.', 'muted'));
       if (p.lastReportedLimits) item.append(node('pre', JSON.stringify(p.lastReportedLimits.values, null, 2)));

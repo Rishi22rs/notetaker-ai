@@ -56,3 +56,19 @@ test('persists daily metrics, reports threshold alerts and protects logout again
   assert.equal((await s.request('/admin/logout', { ...auth, method: 'POST', origin:s.config.publicUrl })).status, 200);
   assert.equal((await s.request('/admin/api/metrics', auth)).status, 401);
 });
+
+test('Cloudflare metrics are separate from Groq and unused-provider keys do not alert', async t => {
+ const s = setup(); t.after(() => s.monitor.close());
+ s.config.transcriptionProvider = 'cloudflare'; s.config.cloudflareAccountId = 'a'.repeat(32); s.config.cloudflareApiToken = 'key'; s.config.groqApiKey = '';
+ await s.db.collection('admin_sessions').insertOne({ tokenHash: hashToken('valid'), email: s.config.adminEmails, expiresAt: new Date(Date.now() + 100000) });
+ s.monitor.observe({ requestId: 'cf', kind: 'transcribe', provider: 'cloudflare', event: 'received' });
+ s.monitor.observe({ requestId: 'cf', kind: 'transcribe', provider: 'cloudflare', event: 'provider_start' });
+ s.monitor.observe({ requestId: 'cf', kind: 'transcribe', provider: 'cloudflare', event: 'audio_chunk', audioSecondsEstimate: 4 });
+ s.monitor.observe({ requestId: 'cf', kind: 'transcribe', provider: 'cloudflare', event: 'completed', elapsedMs: 20 });
+ const result = (await s.request('/admin/api/metrics', { cookie: 'admin_session=valid' })).json();
+ const cloudflare = result.providers.find(provider => provider.name === 'cloudflare');
+ assert.equal(cloudflare.requests, 1); assert.equal(cloudflare.audioSecondsEstimate, 4);
+ assert.equal(cloudflare.enabled, true); assert.equal(result.activeRequests, 0);
+ assert.equal(result.providers.find(provider => provider.name === 'groq').enabled, false);
+ assert.ok(!result.alerts.some(alert => alert.includes('credentials')));
+});

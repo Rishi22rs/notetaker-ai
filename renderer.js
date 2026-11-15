@@ -140,6 +140,8 @@ const floatingChatNew = document.getElementById('floating-chat-new');
 const returnFloating = document.getElementById('return-floating');
 let floatingNotepadOpen = false;
 let floatingChatOpen = false;
+let floatingChatHeight = 400;
+let floatingChatResizeFrame = null;
 let floatingChatTurns = [];
 let cancelFloatingChat = null;
 
@@ -213,7 +215,7 @@ async function setFloatingChat(enabled) {
   floatingChatToggle.setAttribute('aria-label', floatingChatOpen ? 'Close Chat' : 'Open Chat');
   floatingChatToggle.title = `${floatingChatOpen ? 'Close' : 'Open'} Chat (Command Shift C)`;
   const mode = floatingChatOpen || floatingAnswerOpen ? 'answer' : 'floating';
-  const height = floatingChatOpen || floatingAnswerOpen ? 520 : undefined;
+  const height = floatingChatOpen ? floatingChatHeight : floatingAnswerOpen ? 520 : undefined;
   windowModeQueue = windowModeQueue.catch(() => {}).then(() => window.overlay.setWindowMode(mode, height));
   await windowModeQueue;
   if (floatingChatOpen) floatingChatInput.focus();
@@ -289,7 +291,22 @@ floatingChatToggle.addEventListener('click', () => {
 floatingTranscription.addEventListener('click', () => {
   showFloatingTranscription().catch(error => setStatus(error.message, true));
 });
+function growFloatingChat() {
+  if (!floatingView || !floatingChatOpen || floatingChatResizeFrame !== null) return;
+  floatingChatResizeFrame = requestAnimationFrame(() => {
+    floatingChatResizeFrame = null;
+    if (!floatingView || !floatingChatOpen) return;
+    const chromeHeight = window.innerHeight - floatingChatMessages.clientHeight;
+    const height = Math.min(520, Math.max(floatingChatHeight, Math.ceil(chromeHeight + floatingChatMessages.scrollHeight)));
+    if (height <= floatingChatHeight) return;
+    floatingChatHeight = height;
+    windowModeQueue = windowModeQueue.catch(() => {}).then(() => {
+      if (floatingView && floatingChatOpen) return window.overlay.setWindowMode('answer', floatingChatHeight);
+    });
+  });
+}
 function renderFloatingChat() {
+  const scrollTop = floatingChatMessages.scrollTop;
   floatingChatMessages.replaceChildren();
   if (!floatingChatTurns.length) {
     const empty = document.createElement('div');
@@ -306,7 +323,8 @@ function renderFloatingChat() {
     } else message.textContent = turn.content;
     floatingChatMessages.append(message);
   }
-  floatingChatMessages.scrollTop = floatingChatMessages.scrollHeight;
+  floatingChatMessages.scrollTop = scrollTop;
+  growFloatingChat();
 }
 function finishFloatingChat(assistant, error = '') {
   if (!assistant || !floatingChatTurns.includes(assistant)) return;
@@ -316,7 +334,7 @@ function finishFloatingChat(assistant, error = '') {
   floatingChatSend.textContent = 'Send';
   floatingChatInput.disabled = false;
   renderFloatingChat();
-  if (floatingChatOpen) floatingChatInput.focus();
+  if (floatingChatOpen) floatingChatInput.focus({ preventScroll: true });
 }
 function startFloatingChatAnswer(assistant, requestMessages) {
   assistant.requestMessages = requestMessages;

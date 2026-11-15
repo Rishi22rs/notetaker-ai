@@ -11,7 +11,7 @@ UNYON is a desktop conversation copilot for macOS and Windows.
 - Movable desktop overlay with best-effort operating-system capture protection
 
 UNYON is currently beta software. The macOS Apple silicon beta is available at:
-https://myunyon.com/downloads/UNYON-1.0.0-arm64.dmg
+https://myunyon.com/downloads/UNYON-1.1.0-beta.1-arm64.dmg
 
 Official website: https://myunyon.com/
 Contact: underratedgames22@gmail.com

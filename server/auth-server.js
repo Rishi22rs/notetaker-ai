@@ -1,4 +1,5 @@
 const http = require('node:http');
+const { transcriptionProvider, transcriptionConfigured, CLOUDFLARE_MODEL } = require('./transcription-provider');
 const { createAdminMonitor } = require('./admin-monitor');
 const { createAIProxy } = require('./ai-proxy');
 const { StringDecoder } = require('node:string_decoder');
@@ -91,6 +92,9 @@ async function createAuthServer(config) {
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url, config.publicUrl);
+      if (request.method === 'GET' && url.pathname === '/') {
+        return sendJson(response, 200, { ok: true, service: 'UNYON API', health: '/health', message: 'This is the UNYON backend. Open the desktop app to sign in.' });
+      }
       if (await admin.handle(request, response, url)) return;
       if (request.method === 'POST' && ['/ai/chat', '/ai/transcribe'].includes(url.pathname)) {
         const user = await currentUser(request);
@@ -105,7 +109,11 @@ async function createAuthServer(config) {
         await feedback.insertOne({ userId: user._id, ...fields, createdAt: new Date() });
         return sendJson(response, 201, { saved: true });
       }
-      if (request.method === 'GET' && url.pathname === '/ai/status') return sendJson(response, 200, { hasGeminiKey: Boolean(config.geminiApiKey), hasGroqKey: Boolean(config.groqApiKey) });
+      if (request.method === 'GET' && url.pathname === '/ai/status') return sendJson(response, 200, {
+        hasGeminiKey: Boolean(config.geminiApiKey), hasGroqKey: Boolean(config.groqApiKey),
+        transcriptionProvider: transcriptionProvider(config), hasTranscriptionKey: transcriptionConfigured(config),
+        transcriptionModel: transcriptionProvider(config) === 'cloudflare' ? CLOUDFLARE_MODEL : 'whisper-large-v3-turbo'
+      });
       if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, originalResumeStorage: true });
       if (request.method === 'GET' && url.pathname === '/payments/plans') {
         return sendJson(response, 200, { plans: await paymentService.plans(), customPricing: await paymentService.customPricing(), configured: paymentService.configured() });
@@ -346,7 +354,14 @@ async function createAuthServer(config) {
       const route = new URL(request.url, config.publicUrl).pathname;
       const safeMessage = error.publicMessage || (status < 500 ? error.message : 'The server could not complete this request.');
       console.error('Backend request failed:', request.method, route, status, error.publicMessage || error.name);
-      sendJson(response, status, { error: safeMessage });
+      if (error.retryAfterSeconds) response.setHeader('Retry-After', String(error.retryAfterSeconds));
+      sendJson(response, status, { error: safeMessage,
+        ...(['backend', 'provider'].includes(error.source) ? {
+          source: error.source, reason: error.reason,
+          ...(error.provider ? { provider: error.provider, providerCode: error.providerCode } : {}),
+          ...(error.retryAfterSeconds ? { retryAfterSeconds: error.retryAfterSeconds } : {})
+        } : {})
+      });
     }
   });
 

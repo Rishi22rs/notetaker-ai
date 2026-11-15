@@ -133,7 +133,8 @@ function createAuthClient({ serverUrl, userDataPath, openExternal, timeoutMs = 1
   async function providerFetch(url, options) {
     const saved = await readSession();
     if (!saved?.token) throw new Error('Sign in to use AI.');
-    const transcription = String(url).startsWith('https://api.groq.com/');
+    // The backend chooses the provider. Keep the legacy URL for older callers.
+    const transcription = options.transcription === true || String(url).startsWith('https://api.groq.com/');
     let body = options.body;
     if (transcription) {
       const form = body;

@@ -2,13 +2,13 @@ export const DOWNLOADS = {
   mac: {
     name: 'macOS',
     detail: 'Apple silicon · macOS 14.2+',
-    url: import.meta.env.VITE_MAC_DOWNLOAD_URL || '/downloads/UNYON-1.0.0-arm64.dmg',
+    url: import.meta.env.VITE_MAC_DOWNLOAD_URL || '/downloads/UNYON-1.1.0-beta.1-arm64.dmg',
     available: import.meta.env.VITE_MAC_DOWNLOAD_ENABLED !== 'false',
   },
   windows: {
     name: 'Windows',
     detail: 'Intel / AMD 64-bit · Windows 10+',
-    url: import.meta.env.VITE_WINDOWS_DOWNLOAD_URL || '/downloads/UNYON-Setup-1.0.0.exe',
+    url: import.meta.env.VITE_WINDOWS_DOWNLOAD_URL || '/downloads/UNYON-Setup-1.1.0-beta.1-x64.exe',
     available: import.meta.env.VITE_WINDOWS_DOWNLOAD_ENABLED !== 'false',
   },
 }
