@@ -42,7 +42,8 @@ Git; avoid editing the same files on both machines at once.
   remains enabled. Cloudflare/Groq transcription configuration follows current code.
 - Validation: all 174 tests passed; macOS ARM64 and Windows x64 packages built;
   both staged SHA-256 checksums verified; website production build passed.
-  Source pushed as acd55a5. Netlify production upload in progress;
+  Source pushed as acd55a5; release metadata as 4aa56cb. Netlify production
+  deployment completed: 6b03274f22642297c58c348b at https://myunyon.com;
   use `npm run build:all`, `npm run release:stage`, then website build and Netlify deploy.
 - Keep generated media and credentials out of the release commit.
 
