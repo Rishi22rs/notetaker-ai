@@ -40,7 +40,9 @@ Git; avoid editing the same files on both machines at once.
   and publishing website downloads on the existing Netlify site myunyon.com.
 - Pending changes remove experimental streaming transcription; answer streaming
   remains enabled. Cloudflare/Groq transcription configuration follows current code.
-- Validation: all 174 tests passed. Release packaging/deployment in progress;
+- Validation: all 174 tests passed; macOS ARM64 and Windows x64 packages built;
+  both staged SHA-256 checksums verified; website production build passed.
+  Source pushed as acd55a5. Netlify production upload in progress;
   use `npm run build:all`, `npm run release:stage`, then website build and Netlify deploy.
 - Keep generated media and credentials out of the release commit.
 

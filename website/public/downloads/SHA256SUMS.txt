@@ -1,2 +1,2 @@
-f3ccf233aa32ec6b6c9c0d1dfe67ca1e251f6a6131214ff2ba585c8e107d597f  UNYON-1.1.0-beta.1-arm64.dmg
-17a8885dafc814caf3ba86d22378e8d8a4c0c655586588b9e2c982e31fa23b9e  UNYON-Setup-1.1.0-beta.1-x64.exe
+5286f1cbde6afde9a524455c4d84c629a3f68d96441a1ae7dafd347729cc07e2  UNYON-1.1.0-beta.1-arm64.dmg
+076e1a3e7d6847da85f3494be998272f773186dc8399fbe0a6787dae51efae2e  UNYON-Setup-1.1.0-beta.1-x64.exe
