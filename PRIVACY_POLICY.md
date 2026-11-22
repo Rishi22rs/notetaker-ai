@@ -29,15 +29,15 @@ Where consent is required, we seek it through the relevant notice or permission 
 
 UNYON’s AI and transcription features use cloud services and require internet access. They do not run local AI or transcription models on your device.
 
-Relevant audio is transmitted to AssemblyAI, Cloudflare Workers AI, or Groq for transcription, depending on the backend configuration. Prompts, transcripts, conversation context, and selected reference excerpts are transmitted to Google’s Gemini service to generate responses. Requests may pass through UNYON’s backend before reaching the provider. Content does not remain exclusively on your device when you use these features.
+Relevant audio is transmitted to Cloudflare Workers AI or Groq for transcription, depending on the backend configuration. Prompts, transcripts, conversation context, and selected reference excerpts are transmitted to Google’s Gemini service to generate responses. Requests may pass through UNYON’s backend before reaching the provider. Content does not remain exclusively on your device when you use these features.
 
 Provider processing, retention, safety review, and any use for service improvement depend on the provider’s terms and the account plan and settings used. In particular, Google’s Gemini API terms distinguish paid and unpaid services; unpaid-service content may be used to improve Google’s products and may be reviewed by people. Do not submit confidential or sensitive information unless the relevant processing arrangement is appropriate for that information.
 
-Read [Google’s Gemini API terms](https://ai.google.dev/gemini-api/terms), [AssemblyAI’s privacy information](https://www.assemblyai.com/legal/privacy-policy), [Cloudflare’s privacy information](https://www.cloudflare.com/privacypolicy/), and [Groq’s privacy information](https://groq.com/privacy-policy). We do not promise that third-party providers retain no data or never use content for model improvement.
+Read [Google’s Gemini API terms](https://ai.google.dev/gemini-api/terms), [Cloudflare’s privacy information](https://www.cloudflare.com/privacypolicy/), and [Groq’s privacy information](https://groq.com/privacy-policy). We do not promise that third-party providers retain no data or never use content for model improvement.
 
 ## 4. Who receives data
 
-We share relevant data with service providers needed to operate UNYON, including Google for sign-in and AI responses, AssemblyAI, Cloudflare Workers AI, or Groq for transcription, Razorpay for payment processing, and hosting and database providers for account and session storage. Each receives data relevant to its role. Their own privacy notices and contractual terms may also apply.
+We share relevant data with service providers needed to operate UNYON, including Google for sign-in and AI responses, Cloudflare Workers AI or Groq for transcription, Razorpay for payment processing, and hosting and database providers for account and session storage. Each receives data relevant to its role. Their own privacy notices and contractual terms may also apply.
 
 We may disclose data where legally required, to respond to valid legal requests, or where reasonably necessary to investigate fraud and protect users and the Service. If the business is transferred or reorganised, relevant data may be transferred subject to applicable privacy requirements and notice where required.
 

@@ -9,7 +9,6 @@ const { hashToken, isLoopbackRedirect, randomToken } = require('../auth-crypto')
 const { createPaymentService } = require('./payments');
 const { createUsageService } = require('./usage-meter');
 const { createSessionHistoryService } = require('./session-history');
-const { attachStreamingTranscription, ASSEMBLYAI_MODEL } = require('./streaming-transcription');
 
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -113,8 +112,7 @@ async function createAuthServer(config) {
       if (request.method === 'GET' && url.pathname === '/ai/status') return sendJson(response, 200, {
         hasGeminiKey: Boolean(config.geminiApiKey), hasGroqKey: Boolean(config.groqApiKey),
         transcriptionProvider: transcriptionProvider(config), hasTranscriptionKey: transcriptionConfigured(config),
-        transcriptionModel: transcriptionProvider(config) === 'assemblyai' ? ASSEMBLYAI_MODEL : transcriptionProvider(config) === 'cloudflare' ? CLOUDFLARE_MODEL : 'whisper-large-v3-turbo',
-        streamingTranscription: transcriptionProvider(config) === 'assemblyai'
+        transcriptionModel: transcriptionProvider(config) === 'cloudflare' ? CLOUDFLARE_MODEL : 'whisper-large-v3-turbo'
       });
       if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, originalResumeStorage: true });
       if (request.method === 'GET' && url.pathname === '/payments/plans') {
@@ -367,8 +365,7 @@ async function createAuthServer(config) {
     }
   });
 
-  const streaming = attachStreamingTranscription({ server, config, authenticate: currentUser, authorize: usageService.authorizeAI, observer: admin.observe });
-  return { server, close: async () => { streaming.close(); await new Promise((resolve) => server.close(resolve)); await admin.close(); await client.close(); } };
+  return { server, close: async () => { await new Promise((resolve) => server.close(resolve)); await admin.close(); await client.close(); } };
 }
 
 module.exports = { createAuthServer, publicUser, feedbackFields };

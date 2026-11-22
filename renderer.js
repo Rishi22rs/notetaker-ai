@@ -108,10 +108,6 @@ const systemTranscriptTicker = createLiveTranscriptTicker({
 });
 function scrollSystemTranscript() { systemTranscriptTicker.refresh(); }
 function updateSystemTranscript(event) {
-  if (event.type === 'partial-transcript' && event.speaker === 'computer') {
-    systemTranscriptTicker.setText(mergeCaptionText(liveSystemText, event.text).slice(-300));
-    return;
-  }
   if (event.type !== 'transcript' || event.speaker !== 'computer' || !String(event.text || '').trim()) return;
   liveSystemText = mergeCaptionText(liveSystemText, event.text).slice(-300);
   systemTranscriptTicker.setText(liveSystemText);
@@ -2026,14 +2022,14 @@ function beginAudioCapture(stream, speaker) {
     const copy = new Float32Array(input);
     chunks.push(copy);
     sampleCount += copy.length;
-    // Live streaming sends short, non-overlapping frames; chunk providers
-    // retain a half-second overlap to preserve boundary words.
+    // Local 1.5-second windows with overlap preserve words that straddle
+    // chunk boundaries; the backend's VAD removes non-speech inside them.
     if (sampleCount < context.sampleRate * audioWindowSeconds) return;
     const merged = new Float32Array(sampleCount);
     let offset = 0;
     for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length; }
     chunks.length = 0;
-    const overlap = audioWindowSeconds < 0.5 ? new Float32Array(0) : merged.slice(Math.max(0, merged.length - Math.round(context.sampleRate * 0.5)));
+    const overlap = merged.slice(Math.max(0, merged.length - Math.round(context.sampleRate * 0.5)));
     chunks.push(overlap);
     sampleCount = overlap.length;
     let output = merged;
@@ -2235,7 +2231,7 @@ async function startLiveTranscription() {
   }
   const results = await Promise.allSettled(requested.map(([, capture]) => capture));
   const audioSettings = await window.overlay.getCloudSettings().catch(() => null);
-  audioWindowSeconds = audioSettings?.streamingTranscription ? 0.25 : audioSettings?.transcription === 'groq' ? 2 : 1.5;
+  audioWindowSeconds = audioSettings?.transcription === 'groq' ? 2 : 1.5;
   transcriptionRunning = true;
   updateAudioSourceButtons();
   const errors = [];
@@ -2390,28 +2386,8 @@ function isRelevantInterviewerContinuation(question, incoming) {
   return words.length >= 6 || overlap >= 2;
 }
 
-let partialCaption = null;
 window.overlay.onTranscription((event) => {
   updateSystemTranscript(event);
-  if (event.type === 'partial-transcript') {
-    if (event.speaker !== 'computer') return;
-    if (!event.text) { partialCaption?.remove(); partialCaption = null; return; }
-    if (!partialCaption?.isConnected) {
-      transcriptFeed.querySelector('.transcript-empty')?.remove();
-      partialCaption = document.createElement('div');
-      partialCaption.className = 'caption computer partial-caption';
-      partialCaption.setAttribute('aria-label', 'Interviewer speaking');
-      transcriptFeed.append(partialCaption);
-    }
-    partialCaption.textContent = event.text;
-    return;
-  }
-  if ((event.type === 'transcript' && event.speaker === 'computer') || event.type === 'status' || event.type === 'error') {
-    partialCaption?.remove(); partialCaption = null;
-  }
-  if (event.type === 'error' && event.streaming) {
-    stopLiveTranscription().catch(() => {});
-  }
   if (event.type === 'computer-speech-activity') {
     latestComputerSpeechAt = Date.now();
     return;

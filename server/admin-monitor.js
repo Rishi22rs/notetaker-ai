@@ -21,7 +21,7 @@ function createAdminMonitor({ db, config, fetchImpl = fetch }) {
   const loop = monitorEventLoopDelay({ resolution: 20 }); loop.enable();
   let pending = {}; let storageError = false; let flushing;
   function observe(event) {
-    const provider = event.kind === 'chat' ? 'gemini' : ['cloudflare', 'assemblyai'].includes(event.provider) ? event.provider : 'groq';
+    const provider = event.kind === 'chat' ? 'gemini' : event.provider === 'cloudflare' ? 'cloudflare' : 'groq';
     const key = `${new Date().toISOString().slice(0, 10)}:${provider}`;
     const values = pending[key] ||= {};
     const add = (name, n = 1) => { if (Number.isFinite(n)) values[name] = (values[name] || 0) + n; };
@@ -31,9 +31,6 @@ function createAdminMonitor({ db, config, fetchImpl = fetch }) {
     if (event.event === 'completed') {
       add('completed'); add('latencyMs', event.elapsedMs);
       if (event.tokens) { add('tokens', event.tokens.total); add('tokenReports'); }
-    }
-    if (provider === 'assemblyai' && ['completed', 'failed'].includes(event.event)) {
-      add('streamSessionSeconds', event.sessionSeconds); add('audioSecondsEstimate', event.audioSecondsEstimate);
     }
     if (event.event === 'failed') { add('errors'); recentFailures.set(provider, { at: Date.now(), status: event.status }); }
     if (event.event === 'cancelled_or_timed_out') add('cancelled');
@@ -113,16 +110,16 @@ function createAdminMonitor({ db, config, fetchImpl = fetch }) {
     if (request.method === 'GET' && url.pathname === '/admin/api/metrics') {
       await flush();
       const today = new Date().toISOString().slice(0, 10);
-      const [usage, activeSessions] = await Promise.all([records.find({ _id: { $in: ['gemini', 'groq', 'cloudflare', 'assemblyai'].map(name => `${today}:${name}`) } }).toArray(), db.collection('usage_sessions').countDocuments({ status: 'active', leaseExpiresAt: { $gt: new Date() } })]);
+      const [usage, activeSessions] = await Promise.all([records.find({ _id: { $in: [`${today}:gemini`, `${today}:groq`, `${today}:cloudflare`] } }).toArray(), db.collection('usage_sessions').countDocuments({ status: 'active', leaseExpiresAt: { $gt: new Date() } })]);
       const alerts = [];
       const activeRequests = live.size;
       if (activeRequests >= 80) alerts.push('AI request capacity is above 80% of the 100-request instance limit.');
       if (storageError) alerts.push('Usage storage failed; quota totals may be incomplete.');
       const selectedSpeechProvider = transcriptionProvider(config);
-      const providers = ['gemini', 'groq', 'cloudflare', 'assemblyai'].map(name => {
+      const providers = ['gemini', 'groq', 'cloudflare'].map(name => {
         const row = usage.find(v => v._id === `${today}:${name}`) || {};
         const budget = Number(config[`${name}DailyRequests`]) > 0 ? Number(config[`${name}DailyRequests`]) : null;
-        const configured = name === 'assemblyai' ? Boolean(config.assemblyaiApiKey) : name === 'gemini' ? Boolean(config.geminiApiKey) : name === 'cloudflare'
+        const configured = name === 'gemini' ? Boolean(config.geminiApiKey) : name === 'cloudflare'
           ? transcriptionConfigured({ ...config, transcriptionProvider: 'cloudflare' }) : Boolean(config.groqApiKey);
         const enabled = name === 'gemini' || name === selectedSpeechProvider;
         if (enabled && !configured) alerts.push(`${name}: backend credentials are missing or invalid.`);

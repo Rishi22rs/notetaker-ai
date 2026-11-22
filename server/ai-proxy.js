@@ -84,7 +84,6 @@ function createAIProxy({ config, authorize, fetchImpl = fetch, logger = console.
     const timeout = setTimeout(() => controller.abort(), 60000);
     let watchdog;
     try {
-      if (kind === 'transcribe' && speechProvider === 'assemblyai') throw failure('AssemblyAI uses the live streaming endpoint. Update the desktop app to enable it.', 409);
       const key = kind === 'chat' ? config.geminiApiKey : speechProvider === 'cloudflare' ? config.cloudflareApiToken : config.groqApiKey;
       if (!key) throw failure(`${kind === 'chat' ? 'GEMINI_API_KEY' : speechProvider === 'cloudflare' ? 'CLOUDFLARE_API_TOKEN' : 'GROQ_API_KEY'} is missing from the backend environment. Configure it and restart the backend.`, 503);
       const body = await readJson(request, 1500000);

@@ -34,7 +34,17 @@ live chats, uncommitted files, local configuration, or installed dependencies.
 When working simultaneously, use separate branches and reconcile changes through
 Git; avoid editing the same files on both machines at once.
 
-## Latest handoff — 2026-11-16
+## Latest handoff — 2026-11-22
+
+- User requested pushing pending code, rebuilding macOS ARM64/Windows x64 apps,
+  and publishing website downloads on the existing Netlify site myunyon.com.
+- Pending changes remove experimental streaming transcription; answer streaming
+  remains enabled. Cloudflare/Groq transcription configuration follows current code.
+- Validation: all 174 tests passed. Release packaging/deployment in progress;
+  use `npm run build:all`, `npm run release:stage`, then website build and Netlify deploy.
+- Keep generated media and credentials out of the release commit.
+
+## Previous handoff — 2026-11-16
 
 - User wants project context available to Codex on both Mac and Windows.
 - Added `AGENTS.md` and this file as the shared context mechanism.
