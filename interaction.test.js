@@ -419,7 +419,7 @@ test('visibility hotkey works in both modes while interaction hotkeys remain flo
   mode(event, 'floating');
   const shortcut = shortcuts.get('CommandOrControl+Shift+I'); assert.equal(typeof shortcut, 'function');
   const hideShortcut = shortcuts.get('CommandOrControl+Shift+H'); assert.equal(typeof hideShortcut, 'function');
-  assert.equal(shortcuts.size, 11);
+  assert.equal(shortcuts.size, 14);
   const pauseShortcut = shortcuts.get('CommandOrControl+Shift+P');
   pauseShortcut(); assert.equal(messages.filter(channel => channel === 'overlay:toggle-session').length, 1);
   const notepadShortcut = shortcuts.get('CommandOrControl+Shift+N');

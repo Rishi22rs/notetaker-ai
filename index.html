@@ -463,6 +463,10 @@
     #floating-question { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
     .floating-question-copy { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
     #floating-answer-now { flex: 0 0 auto; width: auto; margin: 0; padding: 6px 10px; white-space: nowrap; font-size: 11px; }
+    #floating-answer-now.needs-answer { border-color: var(--accent); background: #c9ff4526; color: var(--accent); box-shadow: 0 0 0 2px #c9ff4515; }
+    .answer-shortcut-hint { display: none; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border: 1px solid #c9ff4540; border-radius: 7px; background: var(--chrome); color: var(--text); font-size: 11px; }
+    .floating-mode.answer-shortcut-needed:not(.floating-chat-open):not(.floating-notepad-open) .answer-shortcut-hint { display: flex; }
+    .answer-shortcut-hint kbd { white-space: nowrap; color: var(--accent); font-family: inherit; }
     .session-dialog { width: min(440px, calc(100vw - 32px)); padding: 26px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--text); }
     .session-dialog::backdrop { background: #0009; }
     .session-dialog h2 { font-size: 20px; margin: 0 0 12px; }
@@ -607,6 +611,9 @@
             <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>C</kbd></dt><dd>Open or close Chat<span>Floating window only. Paste or type a question and get a general AI answer.</span></dd></div>
             <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>V</kbd></dt><dd>Ask from clipboard<span>Floating window only. Opens Chat, pastes copied text, and sends it automatically.</span></dd></div>
             <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>T</kbd></dt><dd>Open live transcription<span>Floating window only. Returns from Chat or Notepad to the transcription and answer screen.</span></dd></div>
+            <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>J</kbd></dt><dd>Answer now<span>Floating window only. Answers the latest interviewer speech even when question detection misses it.</span></dd></div>
+            <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>&lt;</kbd></dt><dd>Previous question<span>Floating window only. View the previous question and answer. Uses the comma key with Shift.</span></dd></div>
+            <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>&gt;</kbd></dt><dd>Next question<span>Floating window only. View the next question and answer. Uses the period key with Shift.</span></dd></div>
             <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>←</kbd></dt><dd>Snap left<span>Floating window only. Move from right to center to left. The other axis stays in place.</span></dd></div>
             <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>→</kbd></dt><dd>Snap right<span>Floating window only. Move from left to center to right. The other axis stays in place.</span></dd></div>
             <div><dt><kbd class="hotkey-modifier">⌘</kbd><kbd>Shift</kbd><kbd>↑</kbd></dt><dd>Snap up<span>Floating window only. Move from bottom to middle to top. The other axis stays in place.</span></dd></div>

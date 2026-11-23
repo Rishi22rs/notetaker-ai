@@ -23,11 +23,16 @@ function summarizeQuestionParts(value) {
   return (parts.length ? parts : [text]).filter(Boolean).slice(0, 5);
 }
 
-function selectLatestInterviewerQuestion(turns, liveText = '', liveCapturedAt = 0) {
+function selectLatestInterviewerQuestion(turns, liveText = '', liveCapturedAt = 0, force = false) {
   const computerTurns = (Array.isArray(turns) ? turns : []).filter((turn) => turn?.speaker === 'computer');
   const confirmed = [...computerTurns].reverse().find((turn) => turn.detection?.isQuestion);
   const latest = computerTurns.at(-1);
   const live = cleanQuestionText(liveText);
+  if (force) {
+    if (live && (!latest || Number(liveCapturedAt) > (Number(latest.endedAt) || Number(latest.startedAt) || 0) + 250)) return { turn: null, text: live };
+    if (latest && cleanQuestionText(latest.text)) return { turn: latest, text: cleanQuestionText(latest.text) };
+    return live ? { turn: null, text: live } : null;
+  }
   const confirmedIndex = confirmed ? computerTurns.indexOf(confirmed) : -1;
   if (looksLikeInterviewerQuestion(live) && Number(liveCapturedAt) > (Number(latest?.endedAt) || Number(latest?.startedAt) || 0) + 250 &&
     cleanQuestionText(latest?.text).toLowerCase() !== live.toLowerCase())

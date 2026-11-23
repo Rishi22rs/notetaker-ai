@@ -728,6 +728,12 @@ function updateAnswerNavigation() {
 
 document.getElementById('floating-answer-navigation').querySelector('.answer-previous').addEventListener('click', () => navigateAnswer(-1));
 document.getElementById('floating-answer-navigation').querySelector('.answer-next').addEventListener('click', () => navigateAnswer(1));
+const questionShortcutModifier = window.overlay.platform === 'darwin' ? '⌘' : 'Ctrl';
+document.getElementById('floating-answer-navigation').querySelector('.answer-previous').title = `Previous question (${questionShortcutModifier} Shift <)`;
+document.getElementById('floating-answer-navigation').querySelector('.answer-next').title = `Next question (${questionShortcutModifier} Shift >)`;
+window.overlay.onNavigateQuestion((direction) => {
+  if (floatingView && (direction === -1 || direction === 1)) navigateAnswer(direction);
+});
 
 function navigateAnswer(offset) {
   const cards = answerHistoryCards();
@@ -919,7 +925,7 @@ function generateInterviewAnswer(request, label, turnId, verbosity = floatingVie
 
 async function answerTranscriptTurnManually(bubble, textElement, button) {
   if (button.disabled) return;
-  const target = selectLatestInterviewerQuestion(transcriptContext, textElement.textContent, lastCaption?.bubble === bubble ? lastCaption.capturedAt : 0);
+  const target = selectLatestInterviewerQuestion(transcriptContext, textElement.textContent, lastCaption?.bubble === bubble ? lastCaption.capturedAt : 0, true);
   if (!target) {
     transcriptStatus.textContent = 'No interviewer question has been detected yet.';
     return;
@@ -2323,13 +2329,36 @@ function resetTranscriptHistory() {
 }
 
 const floatingAnswerNow = document.getElementById('floating-answer-now');
+const answerShortcutHint = document.createElement('div');
+answerShortcutHint.className = 'answer-shortcut-hint';
+answerShortcutHint.setAttribute('role', 'status');
+const answerShortcutLabel = document.createElement('span');
+answerShortcutLabel.textContent = 'You can still answer the latest speech';
+const answerShortcutKeys = document.createElement('kbd');
+answerShortcutKeys.textContent = window.overlay.platform === 'darwin' ? '⌘ Shift J' : 'Ctrl Shift J';
+answerShortcutHint.append(answerShortcutLabel, answerShortcutKeys);
+floatingQuestion.before(answerShortcutHint);
+floatingAnswerNow.setAttribute('aria-describedby', 'answer-shortcut-hint');
+answerShortcutHint.id = 'answer-shortcut-hint';
+function syncAnswerShortcutHint() {
+  const needed = /no question detected/i.test(transcriptStatus.textContent);
+  document.body.classList.toggle('answer-shortcut-needed', needed);
+  floatingAnswerNow.classList.toggle('needs-answer', needed);
+}
+new MutationObserver(syncAnswerShortcutHint).observe(transcriptStatus, { childList: true, characterData: true, subtree: true });
+syncAnswerShortcutHint();
 floatingAnswerNow.addEventListener('click', async () => {
   const live = lastCaption?.speaker === 'computer' && lastCaption.text ? lastCaption : null;
-  const target = selectLatestInterviewerQuestion(transcriptContext, live?.text.textContent || '', live?.capturedAt || 0);
+  const target = selectLatestInterviewerQuestion(transcriptContext, live?.text.textContent || '', live?.capturedAt || 0, true);
   if (!target) { transcriptStatus.textContent = 'Waiting for a spoken question…'; return; }
   const bubble = live?.bubble || { dataset: {} };
   await answerTranscriptTurnManually(bubble, live?.text || { textContent: target.text }, floatingAnswerNow);
   floatingAnswerNow.textContent = 'Answer now';
+  floatingAnswerNow.title = 'Answer now (Command/Ctrl Shift J)';
+});
+floatingAnswerNow.title = 'Answer now (Command/Ctrl Shift J)';
+window.overlay.onAnswerNow(() => {
+  if (floatingView && !floatingAnswerNow.disabled) floatingAnswerNow.click();
 });
 
 clearTranscript.addEventListener('click', resetTranscriptHistory);

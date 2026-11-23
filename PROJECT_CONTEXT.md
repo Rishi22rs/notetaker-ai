@@ -34,7 +34,25 @@ live chats, uncommitted files, local configuration, or installed dependencies.
 When working simultaneously, use separate branches and reconcile changes through
 Git; avoid editing the same files on both machines at once.
 
-## Latest handoff — 2026-11-22
+## Latest handoff — 2026-11-23
+
+- Manual Answer now bypasses question eligibility and selects latest system-audio
+  turn/live speech, including rejected detections, instead of older confirmed questions.
+- Added floating-only Command/Ctrl Shift J, tooltip and Home shortcut entry.
+- Added floating-only Command/Ctrl Shift comma/period (</>) for previous/next
+  question navigation, with platform-specific button tooltips and Home entries.
+- Whenever status says no question detected, highlight Answer now and show a
+  platform-specific shortcut hint above the question row; clear on status change.
+- Added mixed-language question rules for embedded English questions and Hindi follow-ups.
+- Release installers have not been rebuilt for these changes.
+- Download reliability: installer links already use direct native browser downloads;
+  Netlify Brotli responses omitted Content-Length. Added no-transform and explicit
+  Content-Encoding identity for downloads. Deployed 6b03faa322a5ac5755f5a8fd;
+  verified both live installers return identity and correct Content-Length even
+  with Accept-Encoding gzip/br. Windows byte-range GET returned 206 and total size.
+  Content-Length remains hosting-generated, never hardcoded.
+
+## Previous handoff — 2026-11-22
 
 - User requested pushing pending code, rebuilding macOS ARM64/Windows x64 apps,
   and publishing website downloads on the existing Netlify site myunyon.com.

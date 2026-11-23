@@ -184,6 +184,14 @@ function snapFloatingWindow(direction) {
   win.setBounds(snapFloatingBounds(bounds, area, direction));
 }
 const floatingHotkeys = [
+  ...[['.', 1], [',', -1]].map(([key, direction]) => [`CommandOrControl+Shift+${key}`, () => {
+    if (!floatingMode || !win || win.isDestroyed()) return;
+    win.webContents.send('overlay:navigate-question', direction);
+  }]),
+  ['CommandOrControl+Shift+J', () => {
+    if (!floatingMode || !win || win.isDestroyed()) return;
+    win.webContents.send('overlay:answer-now');
+  }],
   [interactionShortcut, toggleFloatingInteraction],
   ['CommandOrControl+Shift+P', toggleFloatingPlayback],
   ['CommandOrControl+Shift+N', toggleFloatingNotepad],

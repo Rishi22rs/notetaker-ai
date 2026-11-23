@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('overlay', {
   onToggleChat: (callback) => ipcRenderer.on('overlay:toggle-chat', callback),
   onChatPasteAndSend: (callback) => ipcRenderer.on('overlay:chat-paste-and-send', (_event, text) => callback(text)),
   onShowTranscription: (callback) => ipcRenderer.on('overlay:show-transcription', callback),
+  onAnswerNow: (callback) => ipcRenderer.on('overlay:answer-now', callback),
+  onNavigateQuestion: (callback) => ipcRenderer.on('overlay:navigate-question', (_event, direction) => callback(direction)),
   setWindowMode: (mode, answerHeight) => ipcRenderer.invoke('overlay:window-mode', mode, answerHeight),
   getUserName: () => ipcRenderer.invoke('profile:name'),
   getAuthStatus: () => ipcRenderer.invoke('auth:status'),

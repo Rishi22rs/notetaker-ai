@@ -48,6 +48,7 @@ function ruleDecision(value) {
   const text = normalizeRuleText(value);
   if (!text) return { decision: false, confidence: 1, type: 'general', reason: 'empty' };
   if (NON_QUESTION.test(text)) return { decision: false, confidence: 0.99, type: 'general', reason: 'acknowledgement' };
+  if (/\b(?:how|what|why)\s+(?:will|would|do|can|should)\s+you\b/i.test(text) || /(?:क्या|कैसे|क्यों|तब|तो).*(?:करोगे|करेंगे|करना|करते|करें)|(?:अगर|मान लो).*(?:बॉटलनेक|backlog|बढ़|लेट)/i.test(text)) return { decision: true, confidence: 0.94, type: inferType(text), reason: 'mixed-language-question' };
   if (/[?]\s*$/.test(text)) return { decision: true, confidence: 0.99, type: inferType(text), reason: 'question-mark' };
   if (hasCodingIntent(text)) return { decision: true, confidence: 0.99, type: 'coding', reason: 'coding-request' };
   if (QUESTION_START.test(text)) return { decision: true, confidence: 0.96, type: inferType(text), reason: 'question-form' };
