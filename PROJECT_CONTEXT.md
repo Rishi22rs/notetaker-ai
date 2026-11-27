@@ -34,6 +34,14 @@ live chats, uncommitted files, local configuration, or installed dependencies.
 When working simultaneously, use separate branches and reconcile changes through
 Git; avoid editing the same files on both machines at once.
 
+## Cloud Run build handoff — 2026-11-27
+
+- Regenerated the root npm lockfile with npm 11.19.1 to restore optional
+  Windows-signing peer dependencies missing from the Cloud Build lockfile.
+- A clean macOS production install with npm 11.19.1 and all 174 tests passed.
+  Verify the new Cloud Build run and configure Cloud Run runtime settings
+  before switching production traffic.
+
 ## Latest handoff — 2026-11-23
 
 - Manual Answer now bypasses question eligibility and selects latest system-audio
